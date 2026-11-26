@@ -1,0 +1,66 @@
+// Package game holds the pure game rules: stats, roles, actions and checks.
+// Nothing in here touches Discord or the database, so it is easy to test and
+// to change as the design evolves.
+package game
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// Stat is one of a character's five core skills.
+type Stat string
+
+const (
+	Diplomacy   Stat = "diplomacy"
+	Martial     Stat = "martial"
+	Stewardship Stat = "stewardship" // money
+	Intrigue    Stat = "intrigue"
+	Prowess     Stat = "prowess"
+)
+
+// AllStats is the display order for stats.
+var AllStats = []Stat{Diplomacy, Martial, Stewardship, Intrigue, Prowess}
+
+// Stats maps each stat to its value. Values are fractional so small gains
+// accumulate; missing stats count as 0.
+type Stats map[Stat]float64
+
+// Clone returns a copy so callers can mutate without aliasing.
+func (s Stats) Clone() Stats {
+	out := make(Stats, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
+}
+
+// Add applies a delta in place.
+func (s Stats) Add(delta Stats) {
+	for k, v := range delta {
+		s[k] += v
+	}
+}
+
+func (s Stats) String() string {
+	out := ""
+	for i, st := range AllStats {
+		if i > 0 {
+			out += "  "
+		}
+		out += fmt.Sprintf("%s %s", st, Num(s[st]))
+	}
+	return out
+}
+
+// Num formats a game number with at most one decimal.
+func Num(f float64) string {
+	return strconv.FormatFloat(float64(int64(f*10+sign(f)*0.5))/10, 'f', -1, 64)
+}
+
+func sign(f float64) float64 {
+	if f < 0 {
+		return -1
+	}
+	return 1
+}

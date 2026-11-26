@@ -1,0 +1,238 @@
+package main
+
+import (
+	"image"
+	"image/color"
+	"image/png"
+	"math"
+	"os"
+)
+
+const N = 32
+
+func hex(s string) color.RGBA {
+	var r, g, b uint8
+	for i, p := range []*uint8{&r, &g, &b} {
+		var v uint8
+		for _, c := range s[i*2 : i*2+2] {
+			v <<= 4
+			switch {
+			case c >= '0' && c <= '9':
+				v |= uint8(c - '0')
+			default:
+				v |= uint8(c-'a') + 10
+			}
+		}
+		*p = v
+	}
+	return color.RGBA{r, g, b, 255}
+}
+
+var (
+	K  = hex("140c22")
+	Y  = hex("f2c14e")
+	Yd = hex("c27f22")
+	Yh = hex("fff0a0")
+	R  = hex("e0344a")
+	Rd = hex("8e1a35")
+	Rh = hex("ff9aa4")
+	Bl = hex("3d7be0")
+	Bd = hex("1f3f8a")
+	Gr = hex("3fbf6a")
+	Gd = hex("1d6b3c")
+	P  = hex("7b3fa0")
+	Pd = hex("4e2370")
+	Pl = hex("a768cc")
+	Z  = hex("d8e0ff")
+	S  = hex("f5e6a8")
+)
+
+type grid [N][N]*color.RGBA
+
+func main() {
+	var bg [N][N]color.RGBA
+	for y := 0; y < N; y++ {
+		for x := 0; x < N; x++ {
+			d := math.Hypot(float64(x)-15.5, float64(y)-14) / 22
+			// banded radial gradient for a pixel look
+			band := math.Floor(d*5) / 5
+			c1, c2 := hex("3a2a6a"), hex("140f2a")
+			lerp := func(a, b uint8) uint8 { return uint8(float64(a) + (float64(b)-float64(a))*math.Min(band, 1)) }
+			bg[y][x] = color.RGBA{lerp(c1.R, c2.R), lerp(c1.G, c2.G), lerp(c1.B, c2.B), 255}
+		}
+	}
+	for _, s := range [][2]int{{6, 7}, {9, 3}, {4, 13}, {26, 12}, {27, 18}, {11, 6}} {
+		bg[s[1]][s[0]] = S
+	}
+	// a twinkle cross
+	for _, d := range [][2]int{{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+		bg[9+d[1]][6+d[0]] = S
+	}
+
+	var crown, cush [N][N]bool
+	var col [N][N]color.RGBA
+
+	// cushion ellipse
+	cx, cy, rx, ry := 15.5, 24.0, 12.5, 3.3
+	for y := 0; y < N; y++ {
+		for x := 0; x < N; x++ {
+			dx, dy := (float64(x)-cx)/rx, (float64(y)-cy)/ry
+			if dx*dx+dy*dy <= 1 {
+				cush[y][x] = true
+				switch {
+				case dy < -0.35:
+					col[y][x] = Pl
+				case dy > 0.45:
+					col[y][x] = Pd
+				default:
+					col[y][x] = P
+				}
+			}
+		}
+	}
+	// tassels
+	for _, tx := range []int{5, 26} {
+		for y := 24; y <= 27; y++ {
+			cush[y][tx] = true
+			col[y][tx] = Y
+		}
+		cush[27][tx] = true
+		col[27][tx] = Yd
+	}
+
+	// crown body
+	peaks := [][3]float64{{7.5, 12}, {15.5, 9}, {23.5, 12}}
+	top := func(x float64) float64 {
+		t := 99.0
+		for _, p := range peaks {
+			t = math.Min(t, p[1]+math.Abs(x-p[0])*1.1)
+		}
+		return math.Min(t, 16)
+	}
+	for x := 6; x <= 25; x++ {
+		for y := 0; y <= 22; y++ {
+			if float64(y) >= top(float64(x)) {
+				crown[y][x] = true
+				col[y][x] = Y
+			}
+		}
+	}
+	// balls on peaks
+	for _, p := range peaks {
+		bx, by := int(p[0]), int(p[1])-2
+		for _, d := range [][2]int{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
+			crown[by+d[1]][bx+d[0]] = true
+			col[by+d[1]][bx+d[0]] = Y
+		}
+		col[by][bx] = Yh
+		col[by+1][bx+1] = Yd
+	}
+	// shading body: left edges highlight, right edges shade
+	for y := 0; y <= 18; y++ {
+		for x := 6; x <= 25; x++ {
+			if !crown[y][x] || y < 9 {
+				continue
+			}
+			if !crown[y][x-1] || !crown[y-1][x] && x <= 15 {
+				col[y][x] = Yh
+			}
+			if !crown[y][x+1] || !crown[y-1][x] && x >= 16 {
+				col[y][x] = Yd
+			}
+		}
+	}
+	// band rows 19..22
+	for x := 6; x <= 25; x++ {
+		col[18][x] = Yh
+		col[19][x] = Y
+		col[20][x] = Y
+		col[21][x] = Yd
+		crown[18][x], crown[19][x], crown[20][x], crown[21][x] = true, true, true, true
+	}
+	col[19][6], col[20][6] = Yh, Yh
+	col[19][25], col[20][25] = Yd, Yd
+	gem := func(x, y int, l, m, d color.RGBA) {
+		col[y][x], col[y][x+1], col[y+1][x], col[y+1][x+1] = l, m, m, d
+	}
+	gem(9, 19, hex("9cc2ff"), Bl, Bd)
+	gem(15, 19, Rh, R, Rd)
+	gem(21, 19, hex("a6f0bf"), Gr, Gd)
+	// centre diamond on body
+	for _, d := range [][3]int{{15, 14, 0}, {16, 14, 1}, {14, 15, 0}, {15, 15, 0}, {16, 15, 1}, {17, 15, 2}, {15, 16, 1}, {16, 16, 2}} {
+		c := []color.RGBA{Rh, R, Rd}[d[2]]
+		col[d[1]-1][d[0]] = c
+	}
+	// side gems
+	col[15][8], col[15][23] = Bl, Gr
+	col[16][8], col[16][23] = Bd, Gd
+
+	out := image.NewRGBA(image.Rect(0, 0, N, N))
+	in := func(x, y int) bool { return x >= 0 && y >= 0 && x < N && y < N }
+	adj := func(m *[N][N]bool, x, y int) bool {
+		for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+			if in(x+d[0], y+d[1]) && m[y+d[1]][x+d[0]] {
+				return true
+			}
+		}
+		return false
+	}
+	for y := 0; y < N; y++ {
+		for x := 0; x < N; x++ {
+			c := bg[y][x]
+			switch {
+			case crown[y][x]:
+				c = col[y][x]
+			case adj(&crown, x, y):
+				c = K
+			case cush[y][x]:
+				c = col[y][x]
+			case adj(&cush, x, y):
+				c = K
+			}
+			out.Set(x, y, c)
+		}
+	}
+	// Zzz (drawn over background only)
+	zs := []struct {
+		x, y int
+		rows []string
+	}{
+		{20, 4, []string{"###", "..#", ".#.", "#..", "###"}[0:1]},
+	}
+	_ = zs
+	letters := []struct {
+		x, y int
+		rows []string
+	}{
+		{22, 5, []string{"####", "..#.", ".#..", "####"}},
+		{17, 1, []string{"#####", "...#.", "..#..", ".#...", "#####"}},
+	}
+	for _, l := range letters {
+		for dy, row := range l.rows {
+			for dx, ch := range row {
+				if ch == '#' {
+					// fix diagonal for the 3x3 z
+					out.Set(l.x+dx, l.y+dy, Z)
+				}
+			}
+		}
+	}
+
+	save := func(name string, scale int, circle bool) {
+		img := image.NewRGBA(image.Rect(0, 0, N*scale, N*scale))
+		for y := 0; y < N*scale; y++ {
+			for x := 0; x < N*scale; x++ {
+				c := out.RGBAAt(x/scale, y/scale)
+				if circle && math.Hypot(float64(x)-float64(N*scale)/2, float64(y)-float64(N*scale)/2) > float64(N*scale)/2 {
+					c = hex("313338")
+				}
+				img.Set(x, y, c)
+			}
+		}
+		f, _ := os.Create(name)
+		png.Encode(f, img)
+		f.Close()
+	}
+	save("idle-kings-icon-512.png", 16, false)
+	save("preview-circle.png", 8, true)
+}
