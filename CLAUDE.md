@@ -19,7 +19,7 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  matters.go + matters_more.go + matters_magic.go (Senate event catalogue), arcs.go + matters_arcs.go (story arcs, Chronicle), events_magic.go (mystical party/hunt events), catalogue.go (shop items, daily market),
                  opinion.go (senator opinion of players, Court a Senator),
                  sectors.go (the realm's industries, Invest in a Venture),
-                 duel.go, hunt.go (Martial actions), conditions.go (wounds), timings.go,
+                 duel.go, hunt.go, journey.go (Martial actions; journeys carry destinations, road events, bandit bands and ambushes), conditions.go (wounds), timings.go,
                  influence.go (ScaleInfluence, FreeKinds, Canvass, Bread and Circuses), speech.go,
                  works.go (public works and monuments),
                  spies.go (spy networks, Plant/Root Out Spies, Practice), secrets.go (what spies leak),
@@ -27,15 +27,15 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  laws.go (lasting laws, their motions and every rule they bend), petition.go (Petition the Senate)
 internal/store   SQLite: schema.sql (applied on open, no migrations), characters,
                  activities (parties, courting), senate (realm, matters, votes, bribes, vote deals),
-                 opinions, ventures (sector stakes, investments), duels (accept/decline, bets),
+                 opinions, ventures (sector stakes, investments), journeys (hiring bandits: a participant with goal `bandits:<band>`), duels (accept/decline, bets),
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
                  monuments (in activities.go), laws (ApplyOutcome, denunciations)
 internal/bot     Discord: commands.go (registration + dispatch), creator, menu, party, court,
-                 invest, duel, hunt, intrigue (spies), leak, senate, votetrade, estate, shop,
+                 invest, duel, hunt, journey (journeys, hiring bandits), intrigue (spies), leak, senate, votetrade, estate, shop,
                  estatetrade (player deals), influence (canvass, circus, announce helpers),
                  speech, works, petition, laws (denouncing, permits, laws field), info pages
 ```
-Custom IDs are `prefix:part:part` and dispatched on the prefix in `commands.go` (`cc`, `menu`, `party`, `court`, `invest`, `duel`, `hunt`, `spy`, `canvass`, `speech`, `circus`, `work`, `estate`, `shop`, `deal`, `senate`, `petition`, `law`, `info`). Each file documents its IDs at the top.
+Custom IDs are `prefix:part:part` and dispatched on the prefix in `commands.go` (`cc`, `menu`, `party`, `court`, `invest`, `duel`, `hunt`, `journey`, `spy`, `canvass`, `speech`, `circus`, `work`, `estate`, `shop`, `deal`, `senate`, `petition`, `law`, `info`). Each file documents its IDs at the top.
 
 ## Conventions
 - Content and numbers are Go data in `internal/game`; keep it data-driven.

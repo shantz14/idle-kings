@@ -80,6 +80,16 @@ func SecretBribe(actor, senator, matter, option string, gold int) Secret {
 	}
 }
 
+// SecretHiredBandits is paying bandits to rob a traveller.
+func SecretHiredBandits(actor, traveler, band string, gold int) Secret {
+	return Secret{
+		Kind:    "bandits",
+		Vague:   fmt.Sprintf("%s's men were seen drinking with rough company in a roadside tavern.", actor),
+		Partial: fmt.Sprintf("%s has paid bandits to waylay someone on the road.", actor),
+		Full:    fmt.Sprintf("%s paid %s %d gold to rob **%s** on the road home.", actor, band, gold, traveler),
+	}
+}
+
 func SecretSoldToSenator(actor, senator, matter, option string, gold int) Secret {
 	return Secret{
 		Kind:    "sold_vote",

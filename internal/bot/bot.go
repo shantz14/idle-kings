@@ -110,6 +110,8 @@ func (b *Bot) tick(ctx context.Context) {
 				b.resolveDuel(ctx, a, now)
 			case game.KindHunt:
 				b.resolveHunt(ctx, a, now)
+			case game.KindJourney:
+				b.resolveJourney(ctx, a, now)
 			case game.KindPlantSpies:
 				b.resolvePlant(ctx, a, now)
 			case game.KindRootOut:

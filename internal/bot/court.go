@@ -256,6 +256,12 @@ func (b *Bot) activityLine(ctx context.Context, a store.Activity) string {
 		return b.duelLine(ctx, a)
 	case game.KindHunt:
 		return fmt.Sprintf("You are leading a hunt. It ends <t:%d:R>.", a.EndsAt.Unix())
+	case game.KindJourney:
+		place := "the road"
+		if d, ok := game.JourneyDestByKey(a.Goal); ok {
+			place = d.Place
+		}
+		return fmt.Sprintf("You are travelling to %s. You'll be home <t:%d:R>.", place, a.EndsAt.Unix())
 	case game.KindInvest:
 		name := "a venture"
 		if d, ok := game.SectorByKey(game.SectorKey(a.Goal)); ok {

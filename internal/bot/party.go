@@ -303,6 +303,8 @@ func (b *Bot) eventWhere(ctx context.Context, activityID int64) string {
 	switch a.Kind {
 	case game.KindHunt:
 		return "On your hunt"
+	case game.KindJourney:
+		return "On the road"
 	case game.KindDuel:
 		return "On the dueling ground"
 	}

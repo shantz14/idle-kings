@@ -297,7 +297,7 @@ func PartyEventByKey(key string) (PartyEvent, bool) {
 // EventByKey finds an event in any activity's catalogue: parties, hunts
 // and duels share the same DM event machinery.
 func EventByKey(key string) (PartyEvent, bool) {
-	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents} {
+	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents, JourneyEvents, JourneyAbroadEvents} {
 		for _, e := range list {
 			if e.Key == key {
 				return e, true

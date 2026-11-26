@@ -45,6 +45,10 @@ var Actions = []ActionDef{
 		Description: fmt.Sprintf("Ride out with hounds and horses. Takes 2 hours and costs %d gold; others may join.", HuntCost),
 	},
 	{
+		Key: KindJourney, Name: "Undertake a Journey", Category: CatMartial, Public: true,
+		Description: "Travel the provinces or go abroad for gold, influence, renown or learning. Takes 3 hours, 6 abroad. The court will know you're on the road, and the roads are not safe.",
+	},
+	{
 		Key: KindParty, Name: "Throw a Party", Category: CatDiplomacy, Public: true,
 		Description: "Host the court at your estate for an evening. Takes 2 hours; others may attend.",
 	},

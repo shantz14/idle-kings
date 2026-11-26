@@ -235,8 +235,14 @@ func TestMartialViewsFitDiscord(t *testing.T) {
 	checkLimits(t, "hunt join", huntJoinView(a, c))
 	checkLimits(t, "accident", accidentPicker(a.ID, ""))
 
+	for _, jt := range []game.PartyTiming{game.DefaultJourneyTiming, game.FastJourneyTiming} {
+		checkLimits(t, "journey", journeyView(jt, 10000, "", "a note"))
+		checkLimits(t, "journey busy", journeyView(jt, 0, busy, ""))
+	}
+	checkLimits(t, "hire bandits", hireView(a, c, d))
+
 	// Event DMs: one button per choice, all in one row.
-	for _, list := range [][]game.PartyEvent{game.PartyEvents, game.HuntEvents, game.DuelEvents} {
+	for _, list := range [][]game.PartyEvent{game.PartyEvents, game.HuntEvents, game.DuelEvents, game.JourneyEvents, game.JourneyAbroadEvents} {
 		for _, ev := range list {
 			var btns []discordgo.MessageComponent
 			for _, ch := range ev.Choices {

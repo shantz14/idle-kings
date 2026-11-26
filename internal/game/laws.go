@@ -601,7 +601,7 @@ func DeclineCost(ls Laws) Delta {
 // so an informer can denounce it (Informers' Law).
 func IsCrime(kind string, ls Laws) bool {
 	switch kind {
-	case "embezzle":
+	case "embezzle", "bandits":
 		return true
 	case "bribe", "sold_vote":
 		return ls.Has(LawBribery)

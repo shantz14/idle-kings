@@ -129,6 +129,8 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onDuel(ctx, i, parts[1:])
 		case "hunt":
 			b.onHunt(ctx, i, parts[1:])
+		case "journey":
+			b.onJourney(ctx, i, parts[1:])
 		case "invest":
 			b.onInvest(ctx, i, parts[1:])
 		case "canvass":

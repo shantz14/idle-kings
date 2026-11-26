@@ -52,6 +52,8 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			b.update(i, b.duelPanel(ctx, c, ""))
 		case game.KindHunt:
 			b.update(i, b.huntPanel(ctx, c, ""))
+		case game.KindJourney:
+			b.update(i, b.journeyPanel(ctx, c, ""))
 		case game.KindInvest:
 			b.update(i, b.investPanel(ctx, c, ""))
 		case game.KindPlantSpies:

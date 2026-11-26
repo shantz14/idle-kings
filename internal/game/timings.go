@@ -20,6 +20,7 @@ type Timings struct {
 	Circus   time.Duration // Bread and Circuses
 	Embezzle time.Duration // Embezzle from the Treasury
 	Petition time.Duration // Petition the Senate
+	Journey  PartyTiming   // Undertake a Journey (abroad takes twice as long)
 }
 
 var (
@@ -32,6 +33,7 @@ var (
 		Canvass: DefaultCanvassDuration, Speech: DefaultSpeechDuration, Circus: DefaultCircusDuration,
 		Embezzle: DefaultEmbezzleDuration,
 		Petition: DefaultPetitionDuration,
+		Journey:  DefaultJourneyTiming,
 	}
 	FastTimings = Timings{
 		Party: FastPartyTiming, Senate: FastSenateTiming,
@@ -42,5 +44,6 @@ var (
 		Canvass: FastCanvassDuration, Speech: FastSpeechDuration, Circus: FastCircusDuration,
 		Embezzle: FastEmbezzleDuration,
 		Petition: FastPetitionDuration,
+		Journey:  FastJourneyTiming,
 	}
 )
