@@ -57,6 +57,10 @@ var Actions = []ActionDef{
 		Description: "Shake hands across the city. Takes 3 hours. Free, and always worth a little influence.",
 	},
 	{
+		Key: KindPetition, Name: "Petition the Senate", Category: CatDiplomacy, Public: true,
+		Description: fmt.Sprintf("Lobby to put a matter before the Senate: pass a lasting law, or repeal one. Takes 2 hours and costs %d gold. It always reaches the floor, as an extra vote alongside the day's matter. Your name goes on it, win or lose.", PetitionCost),
+	},
+	{
 		Key: KindCourt, Name: "Court a Senator", Category: CatDiplomacy,
 		Description: "Call on a senator and try to win them over. Takes an hour; their opinion of you may rise, or fall.",
 	},

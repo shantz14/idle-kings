@@ -22,6 +22,10 @@ type MatterEvent struct {
 	// Arc and Chapter place the event in a story arc (see arcs.go).
 	Arc     string
 	Chapter int
+	// Motion is the law a motion is about (laws.go); Repeal is true for a
+	// motion to repeal it. Motions only come up when MotionAllowed.
+	Motion LawKey
+	Repeal bool
 }
 
 // MatterOption is one choice. Hint is all players see before the vote;
@@ -46,6 +50,9 @@ type MatterOutcome struct {
 	Roles      map[string]Delta // players with this role, however they voted
 	Sectors    map[SectorKey]SectorChange
 	FollowUps  []FollowUp
+	// Enact and Repeal change the laws in force (laws.go).
+	Enact  []LawKey
+	Repeal []LawKey
 }
 
 // FollowUp may queue another event Days later.
@@ -371,10 +378,10 @@ var MatterEvents = []MatterEvent{
 				Leans: L{LeanPopular: 2},
 				Success: MatterOutcome{Text: "The crowds go home with full bellies.",
 					Realm: R{AttrTreasury: -15, AttrPopularity: 10, AttrStability: 4}}},
-			{Key: "guard", Label: "Send in the city guard", Hint: "Restore order by force. It could go badly.",
+			{Key: "guard", Label: "Send in the city guard", Hint: "Restore order by force. It could go badly. If it works, Martial Law, a lasting law, follows.",
 				Leans: L{LeanMilitary: 1, LeanTradition: 1, LeanPopular: -1.5}, Check: chk(30, AttrMilitary, 0.6),
-				Success: MatterOutcome{Text: "The crowds are dispersed. Few are hurt.", Sectors: SC{SectorBlackMarket: {Health: -0.1}},
-					Realm: R{AttrStability: 5, AttrPopularity: -6}},
+				Success: MatterOutcome{Text: "The crowds are dispersed. Few are hurt. The soldiers stay on the streets under martial law.", Sectors: SC{SectorBlackMarket: {Health: -0.1}},
+					Realm: R{AttrStability: 5, AttrPopularity: -6}, Enact: []LawKey{LawMartial}},
 				Failure: MatterOutcome{Text: "The guard panics. There is a massacre in the Forum.", Sectors: SC{SectorBlackMarket: {Health: -0.1}, SectorAlchemy: {Health: -0.05}},
 					Realm: R{AttrStability: -12, AttrPopularity: -15}}},
 			{Key: "wait", Label: "Wait for it to burn out", Hint: "Riots always end eventually. Shops and workshops will be looted.",
@@ -578,10 +585,11 @@ var MatterEvents = []MatterEvent{
 		Prompt:  "A treasury clerk has been caught moving state silver into private accounts. He claims he was following orders.",
 		Default: "ignore",
 		Options: []MatterOption{
-			{Key: "trial", Label: "Hold a public trial", Hint: "Justice, in front of everyone.",
+			{Key: "trial", Label: "Hold a public trial", Hint: "Justice, in front of everyone. Passes the Law Against Bribery, a lasting law.",
 				Leans: L{LeanTradition: 1, LeanPopular: 1},
-				Success: MatterOutcome{Text: "The clerk names names. The people enjoy it.",
-					Realm: R{AttrTreasury: 5, AttrPopularity: 6, AttrStability: -3}, Roles: roles("scribe", D{Influence: 1})}},
+				Success: MatterOutcome{Text: "The clerk names names, the people enjoy it, and the Senate makes bribery a crime.",
+					Realm: R{AttrTreasury: 5, AttrPopularity: 6, AttrStability: -3}, Roles: roles("scribe", D{Influence: 1}),
+					Enact: []LawKey{LawBribery}}},
 			{Key: "quiet", Label: "Settle it quietly", Hint: "Get the silver back with no fuss. If it stays quiet.",
 				Leans: L{LeanScheme: 2}, Check: flat(60),
 				Success: MatterOutcome{Text: "The silver is returned and nobody hears a word.",

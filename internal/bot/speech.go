@@ -39,7 +39,7 @@ func (b *Bot) onSpeech(ctx context.Context, i *discordgo.InteractionCreate, part
 // ---- speaking ----
 
 func (b *Bot) speechPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
-	return speechView(b.t.Speech, b.busyLine(ctx, c, "The realm has fallen. The Forum is rubble."), note)
+	return speechView(b.t.Speech, b.busyLine(ctx, c, "The realm has fallen. The Forum is rubble."), joinNotes(permitNote(c.Laws), note))
 }
 
 func speechView(dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
@@ -78,6 +78,10 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 		b.update(i, b.speechPanel(ctx, c, ""))
 		return
 	}
+	if short := permitShort(c, 0); short != "" {
+		b.update(i, b.speechPanel(ctx, c, short))
+		return
+	}
 	now := time.Now()
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindSpeech, Goal: cause.Key, Public: true,
@@ -87,6 +91,7 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 		b.update(i, b.speechPanel(ctx, c, err.Error()))
 		return
 	}
+	permit := b.payPermit(ctx, c)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s speaks in the Forum", c.FullName()),
 		Description: fmt.Sprintf("Cause: **%s**. The speech ends <t:%d:R>. Come to cheer, or to heckle.", cause.Name, a.EndsAt.Unix()),
@@ -94,7 +99,7 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 	}, []discordgo.MessageComponent{row(button("Attend the speech", fmt.Sprintf("speech:attend:%d", a.ID), discordgo.SuccessButton, false))})
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "You take the stand",
-			Description: fmt.Sprintf("Cause: **%s**. You'll hear how it went <t:%d:R>.%s", cause.Name, a.EndsAt.Unix(), where),
+			Description: fmt.Sprintf("Cause: **%s**. You'll hear how it went <t:%d:R>.%s%s", cause.Name, a.EndsAt.Unix(), where, permit),
 			Color:       colorGreen}},
 		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
 	})

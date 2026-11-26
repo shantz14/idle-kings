@@ -278,6 +278,8 @@ func (b *Bot) activityLine(ctx context.Context, a store.Activity) string {
 		return fmt.Sprintf("You are speaking in the Forum. You'll finish <t:%d:R>.", a.EndsAt.Unix())
 	case game.KindCircus:
 		return fmt.Sprintf("The city is feasting at your expense. It ends <t:%d:R>.", a.EndsAt.Unix())
+	case game.KindPetition:
+		return fmt.Sprintf("You are lobbying the Senate's clerks. You'll know <t:%d:R>.", a.EndsAt.Unix())
 	case game.KindWork:
 		name := "a public work"
 		if w, ok := game.WorkByKey(a.Goal); ok {

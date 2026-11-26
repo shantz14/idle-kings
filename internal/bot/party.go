@@ -127,6 +127,10 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 		b.update(i, b.partyPanel(ctx, c, "The realm has fallen. There is nothing left to celebrate."))
 		return
 	}
+	if short := permitShort(c, spend); short != "" {
+		b.update(i, b.partyPanel(ctx, c, short))
+		return
+	}
 	now := time.Now()
 	t := b.timing
 	ends := now.Add(t.Duration)
@@ -152,6 +156,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 		b.update(i, b.partyPanel(ctx, c, err.Error()))
 		return
 	}
+	permit := b.payPermit(ctx, c)
 	budget := strings.ToLower(game.PartyBudgetName(spend))
 
 	where := ""
@@ -174,8 +179,8 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "Your party has begun",
-			Description: fmt.Sprintf("Goal: **%s**. You spent **%d gold**. It ends <t:%d:R>.%s\nWatch your DMs: I'll message you if anything happens during the evening.",
-				game.GoalName(goal), spend, ends.Unix(), where),
+			Description: fmt.Sprintf("Goal: **%s**. You spent **%d gold**. It ends <t:%d:R>.%s\nWatch your DMs: I'll message you if anything happens during the evening.%s",
+				game.GoalName(goal), spend, ends.Unix(), where, permit),
 			Color: colorGreen,
 		}},
 		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
@@ -451,7 +456,7 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 		slog.Error("party host", "err", err)
 		return
 	}
-	in := game.PartyInput{Host: host.Person(), Goal: game.Goal(a.Goal), Spend: a.Spend}
+	in := game.PartyInput{Host: host.Person(), Goal: game.Goal(a.Goal), Spend: a.Spend, Laws: host.Laws}
 	ev, err := b.eventTotals(ctx, a.ID)
 	if err != nil {
 		slog.Error("event results", "err", err)

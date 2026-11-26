@@ -349,6 +349,7 @@ type PartyInput struct {
 	Spend     int     // gold the host put into the party
 	Quality   float64 // sum of event outcomes
 	Attendees []Attendee
+	Laws      Laws
 }
 
 type PartyResult struct {
@@ -436,23 +437,35 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 			}
 		case GoalSpreadRumors:
 			if a.Target != nil {
-				resolveRumor(r, &res, host, a)
+				resolveRumor(r, &res, host, a, in.Laws)
 			}
 		}
 	}
 	return res
 }
 
-func resolveRumor(r Roller, res *PartyResult, host Person, a Attendee) {
+func resolveRumor(r Roller, res *PartyResult, host Person, a Attendee, ls Laws) {
 	t := *a.Target
 	landed, _ := rumorCheck.Roll(r, a.Sheet, 0, Normal)
 
 	// Target's own (disadvantaged) chance to notice, then the host's harder
-	// one. If the target is the host, their own roll covers it.
-	tSaw, tm := targetNotice.Roll(r, t.Sheet, t.Effects.RumorNotice, Disadvantage)
+	// one. If the target is the host, their own roll covers it. The Law of
+	// Slander makes everyone readier to notice.
+	slander := 0.0
+	if ls.Has(LawSlander) {
+		slander = LawSlanderNotice
+	}
+	tSaw, tm := targetNotice.Roll(r, t.Sheet, t.Effects.RumorNotice+slander, Disadvantage)
 	hSaw, hm := false, 0
 	if t.ID != host.ID {
-		hSaw, hm = hostNotice.Roll(r, host.Sheet, host.Effects.RumorNotice, Disadvantage)
+		hSaw, hm = hostNotice.Roll(r, host.Sheet, host.Effects.RumorNotice+slander, Disadvantage)
+	}
+	// Under the Law of Slander, a rumor-monger who is named pays their victim.
+	if ls.Has(LawSlander) && ((tSaw && tm >= noticeNamed) || (hSaw && hm >= noticeNamed)) {
+		res.delta(a.ID, Delta{Wealth: -LawSlanderFine})
+		res.delta(t.ID, Delta{Wealth: LawSlanderFine})
+		res.notice(a.ID, "You were named as a slanderer at %s's party, and the law makes you pay %s. (-%d gold)", host.Name, t.Name, LawSlanderFine)
+		res.notice(t.ID, "Under the Law of Slander, %s must pay you for their lies. (+%d gold)", a.Name, LawSlanderFine)
 	}
 	cancelled := (tSaw && tm >= noticeCancel) || (hSaw && hm >= noticeCancel)
 	stuck := landed && !cancelled

@@ -201,6 +201,7 @@ type Network struct {
 type RootInput struct {
 	Player   Person
 	Networks []Network
+	Laws     Laws
 }
 
 // RootHit is a network the player damaged.
@@ -227,7 +228,11 @@ func ResolveRootOut(r Roller, in RootInput) RootResult {
 		if n.Level <= 0 {
 			continue
 		}
-		ok, margin := rootOutCheck.Roll(r, in.Player.Sheet, RootMod(in.Player, n), Normal)
+		mod := RootMod(in.Player, n)
+		if in.Laws.Has(LawInformers) {
+			mod += LawInformerRoot
+		}
+		ok, margin := rootOutCheck.Roll(r, in.Player.Sheet, mod, Normal)
 		if !ok {
 			continue
 		}

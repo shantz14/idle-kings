@@ -139,7 +139,7 @@ func (b *Bot) onCircusModal(ctx context.Context, i *discordgo.InteractionCreate,
 }
 
 func (b *Bot) circusPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
-	return circusView(c, b.t.Circus, b.busyLine(ctx, c, "The realm has fallen. There is no city left to feed."), note)
+	return circusView(c, b.t.Circus, b.busyLine(ctx, c, "The realm has fallen. There is no city left to feed."), joinNotes(permitNote(c.Laws), note))
 }
 
 func circusView(c store.Character, dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
@@ -176,6 +176,10 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 		b.update(i, b.circusPanel(ctx, c, ""))
 		return
 	}
+	if short := permitShort(c, gold); short != "" {
+		b.update(i, b.circusPanel(ctx, c, short))
+		return
+	}
 	now := time.Now()
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindCircus, Public: true, StartedAt: now, EndsAt: now.Add(b.t.Circus),
@@ -184,6 +188,7 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 		b.update(i, b.circusPanel(ctx, c, err.Error()))
 		return
 	}
+	permit := b.payPermit(ctx, c)
 	name := game.CircusName(gold)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s pays for a %s", c.FullName(), lowerName(name)),
@@ -192,8 +197,8 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 	}, nil)
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and circuses",
-			Description: fmt.Sprintf("You spent **%d gold** on a %s. It ends <t:%d:R>, and I'll DM you how the city took it.%s",
-				gold, lowerName(name), a.EndsAt.Unix(), where),
+			Description: fmt.Sprintf("You spent **%d gold** on a %s. It ends <t:%d:R>, and I'll DM you how the city took it.%s%s",
+				gold, lowerName(name), a.EndsAt.Unix(), where, permit),
 			Color: colorGreen}},
 		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
 	})

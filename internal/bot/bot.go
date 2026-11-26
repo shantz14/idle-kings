@@ -124,6 +124,8 @@ func (b *Bot) tick(ctx context.Context) {
 				b.resolveCircus(ctx, a, now)
 			case game.KindWork:
 				b.resolveWork(ctx, a, now)
+			case game.KindPetition:
+				b.resolvePetition(ctx, a, now)
 			default:
 				slog.Error("unknown activity kind", "kind", a.Kind, "id", a.ID)
 			}

@@ -127,6 +127,7 @@ type DuelInput struct {
 	Wager                int // each duelist's stake
 	Bets                 []Bet
 	Senators             []Senator
+	Laws                 Laws
 }
 
 type DuelResult struct {
@@ -138,6 +139,7 @@ type DuelResult struct {
 	Conditions    []ConditionChange
 	Notices       map[int64][]string
 	Public        string
+	Realm         Realm // the court's cut of the bets, under the Code of Honor
 }
 
 // ResolveDuel fights the bout. All rolls are hidden.
@@ -177,6 +179,9 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 	if !res.Yielded && w.Sheet[AttrProwess] < l.Sheet[AttrProwess] {
 		gain += duelUpsetRenown
 	}
+	if in.Laws.Has(LawHonor) {
+		gain *= LawHonorRenown
+	}
 	add(w.ID, Delta{Renown: gain, Wealth: 2 * in.Wager})
 	add(l.ID, Delta{Renown: -loss})
 	add(w.ID, Practice(Prowess, true))
@@ -214,8 +219,18 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 
 	// Bets.
 	payouts := BetPayouts(in.Bets, w.ID)
+	cut := 0.0
+	if in.Laws.Has(LawHonor) {
+		cut = LawHonorBetCut
+	}
+	kept := 0
 	for _, b := range in.Bets {
 		got := payouts[b.CharacterID]
+		if b.SideID == w.ID && cut > 0 {
+			c := int(float64(got) * cut)
+			got -= c
+			kept += c
+		}
 		if got > 0 {
 			add(b.CharacterID, Delta{Wealth: got})
 		}
@@ -230,6 +245,10 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 			res.Notices[b.CharacterID] = append(res.Notices[b.CharacterID],
 				fmt.Sprintf("You bet %d gold on %s, and lost it.", b.Amount, l.Name))
 		}
+	}
+
+	if kept > 0 {
+		res.Realm = Realm{AttrTreasury: float64(kept) / GoldPerTreasury}
 	}
 
 	// Words.
@@ -314,12 +333,24 @@ func BetPayouts(bets []Bet, winnerID int64) map[int64]int {
 	return out
 }
 
-// DeclineOpinions is how senators react to a refused challenge.
-func DeclineOpinions(senators []Senator, defenderID int64) []OpinionChange {
+// DeclineOpinions is how senators react to a refused challenge. Under the
+// Ban on Dueling nobody minds; under the Code of Honor the Stern and the
+// Conservative join the Hawks.
+func DeclineOpinions(senators []Senator, defenderID int64, ls Laws) []OpinionChange {
+	if ls.Has(LawDuelBan) {
+		return nil
+	}
 	var out []OpinionChange
 	for _, s := range senators {
+		d := 0.0
 		if s.Has(TraitHawk) {
-			out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: defenderID, Delta: duelHawkDecline})
+			d += duelHawkDecline
+		}
+		if ls.Has(LawHonor) && (s.Has(TraitHawk) || s.Has(TraitStern) || s.Has(TraitConservative)) {
+			d += LawHonorDeclineOpinion
+		}
+		if d != 0 {
+			out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: defenderID, Delta: d})
 		}
 	}
 	return out

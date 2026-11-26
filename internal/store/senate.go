@@ -21,7 +21,8 @@ type RealmState struct {
 	GuildID      string
 	Trackers     game.Realm
 	Sectors      game.SectorState
-	Status       string // alive | fallen
+	Laws         game.Laws // in force, oldest first
+	Status       string    // alive | fallen
 	FallenReason string
 	NextMatterAt time.Time
 }
@@ -37,6 +38,8 @@ type Matter struct {
 	Resolved  bool
 	ChannelID string
 	MessageID string
+	// PetitionerID is the character who petitioned for the matter, 0 if none.
+	PetitionerID int64
 }
 
 type Bribe struct {
@@ -96,12 +99,12 @@ func (s *Store) CreateRealm(ctx context.Context, guildID string, realm game.Real
 
 func (s *Store) GetRealm(ctx context.Context, guildID string) (RealmState, error) {
 	var r RealmState
-	var tr, sec string
+	var tr, sec, laws string
 	var reason sql.NullString
 	var next int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT guild_id, trackers, sectors, status, fallen_reason, next_matter_at FROM realms WHERE guild_id = ?`, guildID).
-		Scan(&r.GuildID, &tr, &sec, &r.Status, &reason, &next)
+		`SELECT guild_id, trackers, sectors, laws, status, fallen_reason, next_matter_at FROM realms WHERE guild_id = ?`, guildID).
+		Scan(&r.GuildID, &tr, &sec, &laws, &r.Status, &reason, &next)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	} else if err != nil {
@@ -113,6 +116,9 @@ func (s *Store) GetRealm(ctx context.Context, guildID string) (RealmState, error
 		return r, err
 	}
 	if err := json.Unmarshal([]byte(sec), &r.Sectors); err != nil {
+		return r, err
+	}
+	if err := json.Unmarshal([]byte(laws), &r.Laws); err != nil {
 		return r, err
 	}
 	r.Sectors = r.Sectors.Fill()
@@ -143,14 +149,15 @@ func (s *Store) Senators(ctx context.Context, guildID string) ([]game.Senator, e
 
 // ---- matters ----
 
-const matterCols = `id, guild_id, event_key, opened_at, closes_at, resolved_at, channel_id, message_id`
+const matterCols = `id, guild_id, event_key, opened_at, closes_at, resolved_at, channel_id, message_id, petitioner_id`
 
 func scanMatter(row scanner) (Matter, error) {
 	var m Matter
 	var opened, closes int64
-	var resolved sql.NullInt64
+	var resolved, pet sql.NullInt64
 	var ch, msg sql.NullString
-	err := row.Scan(&m.ID, &m.GuildID, &m.EventKey, &opened, &closes, &resolved, &ch, &msg)
+	err := row.Scan(&m.ID, &m.GuildID, &m.EventKey, &opened, &closes, &resolved, &ch, &msg, &pet)
+	m.PetitionerID = pet.Int64
 	if errors.Is(err, sql.ErrNoRows) {
 		return m, ErrNotFound
 	}
@@ -169,10 +176,14 @@ func (s *Store) OpenMatter(ctx context.Context, guildID string) (Matter, error) 
 		`SELECT `+matterCols+` FROM matters WHERE guild_id = ? AND resolved_at IS NULL ORDER BY id DESC LIMIT 1`, guildID))
 }
 
-// ClosedMatters lists matters whose voting has ended but aren't resolved.
-func (s *Store) ClosedMatters(ctx context.Context, now time.Time) ([]Matter, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+matterCols+` FROM matters WHERE resolved_at IS NULL AND closes_at <= ?`, now.Unix())
+// OpenMatters lists every matter being voted on, oldest first: the day's
+// matter and any petition alongside it.
+func (s *Store) OpenMatters(ctx context.Context, guildID string) ([]Matter, error) {
+	return s.matters(ctx, `SELECT `+matterCols+` FROM matters WHERE guild_id = ? AND resolved_at IS NULL ORDER BY id`, guildID)
+}
+
+func (s *Store) matters(ctx context.Context, query string, args ...any) ([]Matter, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -188,10 +199,25 @@ func (s *Store) ClosedMatters(ctx context.Context, now time.Time) ([]Matter, err
 	return out, rows.Err()
 }
 
-// NextQueued returns the earliest follow-up event that is due.
+// ClosedMatters lists matters whose voting has ended but aren't resolved.
+func (s *Store) ClosedMatters(ctx context.Context, now time.Time) ([]Matter, error) {
+	return s.matters(ctx, `SELECT `+matterCols+` FROM matters WHERE resolved_at IS NULL AND closes_at <= ?`, now.Unix())
+}
+
+// NextQueued returns the earliest follow-up event that is due. Petitions
+// aren't follow-ups: they open on their own (NextPetition).
 func (s *Store) NextQueued(ctx context.Context, guildID string, now time.Time) (id int64, key string, err error) {
+	return s.nextQueued(ctx, guildID, now, `petitioner_id IS NULL`)
+}
+
+// NextPetition returns the earliest petitioned matter waiting for the floor.
+func (s *Store) NextPetition(ctx context.Context, guildID string, now time.Time) (id int64, key string, err error) {
+	return s.nextQueued(ctx, guildID, now, `petitioner_id IS NOT NULL`)
+}
+
+func (s *Store) nextQueued(ctx context.Context, guildID string, now time.Time, cond string) (id int64, key string, err error) {
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, event_key FROM realm_queue WHERE guild_id = ? AND due_at <= ? ORDER BY due_at, id LIMIT 1`,
+		`SELECT id, event_key FROM realm_queue WHERE guild_id = ? AND due_at <= ? AND `+cond+` ORDER BY due_at, id LIMIT 1`,
 		guildID, now.Unix()).Scan(&id, &key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, "", ErrNotFound
@@ -235,9 +261,16 @@ func (s *Store) CreateMatter(ctx context.Context, guildID, eventKey string, queu
 		return Matter{}, err
 	}
 	defer tx.Rollback()
+	var pet sql.NullInt64
+	if queueID != 0 {
+		if err := tx.QueryRowContext(ctx, `SELECT petitioner_id FROM realm_queue WHERE id = ?`, queueID).Scan(&pet); err != nil &&
+			!errors.Is(err, sql.ErrNoRows) {
+			return Matter{}, err
+		}
+	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO matters (guild_id, event_key, opened_at, closes_at) VALUES (?, ?, ?, ?)`,
-		guildID, eventKey, opened.Unix(), closes.Unix())
+		`INSERT INTO matters (guild_id, event_key, opened_at, closes_at, petitioner_id) VALUES (?, ?, ?, ?, ?)`,
+		guildID, eventKey, opened.Unix(), closes.Unix(), pet)
 	if err != nil {
 		return Matter{}, err
 	}
@@ -254,7 +287,15 @@ func (s *Store) CreateMatter(ctx context.Context, guildID, eventKey string, queu
 	if err := tx.Commit(); err != nil {
 		return Matter{}, err
 	}
-	return Matter{ID: id, GuildID: guildID, EventKey: eventKey, OpenedAt: opened, ClosesAt: closes}, nil
+	return Matter{ID: id, GuildID: guildID, EventKey: eventKey, OpenedAt: opened, ClosesAt: closes, PetitionerID: pet.Int64}, nil
+}
+
+// QueuePetition puts a petitioned matter on the agenda: it is due now, and
+// opens alongside the day's matter (NextPetition).
+func (s *Store) QueuePetition(ctx context.Context, guildID, eventKey string, petitionerID int64, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO realm_queue (guild_id, event_key, due_at, petitioner_id) VALUES (?, ?, ?, ?)`,
+		guildID, eventKey, now.Unix(), petitionerID)
+	return err
 }
 
 func (s *Store) SetMatterMessage(ctx context.Context, id int64, channelID, messageID string) error {
@@ -293,11 +334,20 @@ func (s *Store) CastVote(ctx context.Context, matterID, charID int64, option str
 	return tx.Commit()
 }
 
-// setVote records a vote unless it has been sold. soldTo != "" sells it.
+// setVote records a vote unless it has been sold. soldTo != "" sells it,
+// which locks the vote, except under the Secret Ballot, where nobody can
+// check it and the seller may still vote as they like.
 func setVote(ctx context.Context, tx *sql.Tx, matterID, charID int64, option, soldTo string, now time.Time) error {
 	locked, sold := 0, any(nil)
 	if soldTo != "" {
 		locked, sold = 1, soldTo
+		secret, err := secretBallotTx(ctx, tx, matterID)
+		if err != nil {
+			return err
+		}
+		if secret {
+			locked = 0
+		}
 	}
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO votes (matter_id, character_id, option, voted_at, locked, sold_to) VALUES (?, ?, ?, ?, ?, ?)
@@ -314,6 +364,23 @@ func setVote(ctx context.Context, tx *sql.Tx, matterID, charID int64, option, so
 	return nil
 }
 
+// secretBallotTx reports whether the Secret Ballot stands in a matter's court.
+func secretBallotTx(ctx context.Context, tx *sql.Tx, matterID int64) (bool, error) {
+	var raw string
+	err := tx.QueryRowContext(ctx,
+		`SELECT r.laws FROM realms r JOIN matters m ON m.guild_id = r.guild_id WHERE m.id = ?`, matterID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	var ls game.Laws
+	if err := json.Unmarshal([]byte(raw), &ls); err != nil {
+		return false, err
+	}
+	return ls.Has(game.LawSecretBallot), nil
+}
+
 // SoldVote reports whether a character's vote on a matter is sold, and to whom.
 func (s *Store) SoldVote(ctx context.Context, matterID, charID int64) (option, soldTo string, sold bool) {
 	var to sql.NullString
@@ -321,6 +388,16 @@ func (s *Store) SoldVote(ctx context.Context, matterID, charID int64) (option, s
 		`SELECT option, sold_to FROM votes WHERE matter_id = ? AND character_id = ? AND locked = 1`, matterID, charID).
 		Scan(&option, &to)
 	return option, to.String, err == nil
+}
+
+// RecentSenatorSales counts the votes a character has sold to senators
+// since a time, for the habit that makes a scandal likelier.
+func (s *Store) RecentSenatorSales(ctx context.Context, charID int64, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM votes WHERE character_id = ? AND sold_to LIKE 'senator:%' AND voted_at >= ?`,
+		charID, since.Unix()).Scan(&n)
+	return n, err
 }
 
 // SellVoteToSenator locks the vote, pays the player, and warms the senator
@@ -546,6 +623,7 @@ type MatterResolution struct {
 	// built from a fresh GetRealm: investments resolve in the same tick,
 	// before matters, so nothing else writes sectors in between.
 	Sectors      game.SectorState
+	Laws         game.Laws // replaces the laws in force
 	Fallen       bool
 	FallenReason string
 	Deltas       map[int64]game.Delta
@@ -578,6 +656,13 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE realms SET trackers = ?, status = ?, fallen_reason = ? WHERE guild_id = ?`,
 		string(tr), status, reason, m.GuildID); err != nil {
+		return err
+	}
+	laws, _ := json.Marshal(r.Laws)
+	if r.Laws == nil {
+		laws = []byte("[]")
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE realms SET laws = ? WHERE guild_id = ?`, string(laws), m.GuildID); err != nil {
 		return err
 	}
 	if r.Sectors != nil {

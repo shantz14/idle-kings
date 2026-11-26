@@ -11,9 +11,19 @@ import (
 // a new player earns about 10–15 gold a day, so the next house up is about
 // a week away and a castle is a long-term goal.
 
+// magicItems are the enchanted and uncanny things in the shop (see the
+// Witchcraft Act).
+var magicItems = map[string]bool{
+	"leaky_cauldron": true, "excalibur": true, "dragon_eggs": true, "marauders_map": true,
+	"lyre_orpheus": true, "palantir": true, "bag_of_holding": true, "deck_of_many_things": true,
+	"one_ring": true, "vorpal_sword": true, "poseidons_trident": true, "sting": true,
+	"plate_plus_one": true, "hippogriff": true, "flying_carpet": true, "castle_ravenloft": true,
+}
+
 func init() {
 	for i := range shopItems {
 		shopItems[i].Price = discount(shopItems[i].Price)
+		shopItems[i].Magic = magicItems[shopItems[i].Key]
 	}
 	Items = append(Items, shopItems...)
 }
@@ -87,10 +97,10 @@ var shopItems = []Item{
 		"A stern bronze face for the entrance hall. Guests feel watched, in a good way."),
 	good("gladius", "Legionary's Gladius", KindWeapon, 3, 300, ShelfFixed, false, Effects{Stats: pro(1)},
 		"A short, well-balanced sword from the legion armories."),
+	good("damascus_blade", "A Damascus Steel Blade", KindWeapon, 5, 650, ShelfFixed, false, Effects{Stats: Stats{Prowess: 1, Martial: 1}},
+		"Watered steel from the eastern forges, patterned like smoke. It holds an edge through a whole campaign."),
 	good("mail_shirt", "Mail Shirt", KindArmor, 3, 350, ShelfFixed, false, Effects{Stats: pro(1)},
 		"Heavy, hot and worth every link when someone swings at you."),
-	good("excalibur", "Excalibur", KindWeapon, 8, 1200, ShelfFixed, true, Effects{Stats: Stats{Prowess: 2, Martial: 1}},
-		"Drawn from a stone by the rightful ruler, then thrown into a lake. Now it's in the shop."),
 	good("magna_carta", "The Magna Carta", KindArtifact, 10, 1500, ShelfFixed, true, Effects{VoteWeight: 3},
 		"The great charter that told a king he wasn't above the law. Senators lower their voices near it."),
 
@@ -144,6 +154,8 @@ var shopItems = []Item{
 		"Worn by the king who conquered the known world before he was thirty."),
 
 	// ---------- the market: weapons ----------
+	good("excalibur", "Excalibur", KindWeapon, 8, 1200, ShelfMarket, true, Effects{Stats: Stats{Prowess: 2, Martial: 1}},
+		"Drawn from a stone by the rightful ruler, then thrown into a lake. Now it's in the shop."),
 	good("longclaw", "Longclaw", KindWeapon, 7, 900, ShelfMarket, true, Effects{Stats: pro(2)},
 		"A bastard sword of rippling dark steel with a wolf's-head pommel."),
 	good("vorpal_sword", "A Vorpal Sword", KindWeapon, 6, 700, ShelfMarket, true, Effects{Stats: pro(2)},

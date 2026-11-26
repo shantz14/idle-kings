@@ -101,11 +101,11 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 			continue
 		}
 		o := st.ownerNote(it, c.ID)
-		line := shopLine(it, o)
+		line := shopLine(it, o, c.Laws)
 		if o == "" && len(opts) < 25 {
 			opts = append(opts, discordgo.SelectMenuOption{
 				Label: truncate(it.Name, 100), Value: it.Key, Emoji: &discordgo.ComponentEmoji{Name: game.KindByKey(it.Kind).Emoji},
-				Description: truncate(fmt.Sprintf("%d gold · value %s · %s", it.Price, game.Num(it.Value), kindOrTier(it)), 100),
+				Description: truncate(fmt.Sprintf("%d gold · value %s · %s", it.PriceUnder(c.Laws), game.Num(it.Value), kindOrTier(it)), 100),
 			})
 		}
 		if st.market[it.Key] {
@@ -177,7 +177,16 @@ func itemView(c store.Character, st shopState, key, note string) *discordgo.Inte
 	}
 	var desc string
 	desc = fmt.Sprintf("*%s*\n\n%s", kindOrTier(it), it.Description)
-	desc += fmt.Sprintf("\n\n**Price** %d gold · **Value** %s · **Sells back for** %d gold", it.Price, game.Num(it.Value), it.SellBack())
+	desc += fmt.Sprintf("\n\n**Price** %d gold · **Value** %s · **Sells back for** %d gold", it.PriceUnder(c.Laws), game.Num(it.Value), it.SellBackUnder(c.Laws))
+	if c.Laws.Has(game.LawDebasement) {
+		desc += "\n*Prices are up: the coinage is debased.*"
+	}
+	if it.Magic {
+		desc += "\n*Enchanted.*"
+		if c.Laws.Has(game.LawWitchcraftAct) {
+			desc += " *Under the Witchcraft Act, owning it may cost you fines.*"
+		}
+	}
 	if fx := it.Effects.Describe(); fx != "" {
 		desc += "\n**Effects** " + fx
 		if it.IsProperty() {
@@ -197,11 +206,12 @@ func itemView(c store.Character, st shopState, key, note string) *discordgo.Inte
 	if note != "" {
 		desc += "\n\n" + note
 	}
-	buyable := owner == "" && inStock && c.Wealth >= it.Price
+	price := it.PriceUnder(c.Laws)
+	buyable := owner == "" && inStock && c.Wealth >= price
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: desc, Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(
-			button(fmt.Sprintf("Buy for %d gold", it.Price), "shop:buy:"+it.Key, discordgo.SuccessButton, !buyable),
+			button(fmt.Sprintf("Buy for %d gold", price), "shop:buy:"+it.Key, discordgo.SuccessButton, !buyable),
 			back,
 		)},
 	}
@@ -214,17 +224,21 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 		b.update(i, b.itemPanel(ctx, c, key, "That's no longer for sale."))
 		return
 	}
-	hid, err := b.store.BuyItem(ctx, c.ID, c.GuildID, key, it.Price, time.Now())
+	price := it.PriceUnder(c.Laws)
+	hid, err := b.store.BuyItem(ctx, c.ID, c.GuildID, key, price, time.Now())
 	if err != nil {
 		note := estateErr(err)
 		if !errors.Is(err, store.ErrOwned) {
-			note = fmt.Sprintf("You need %d gold for that.", it.Price)
+			note = fmt.Sprintf("You need %d gold for that.", price)
 		}
 		b.update(i, b.itemPanel(ctx, c, key, note))
 		return
 	}
 	if fresh, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 		c = fresh
+	}
+	if it.Magic && c.Laws.Has(game.LawWitchcraftAct) { // a crime, and spies may hear of it
+		defer b.leak(ctx, c, game.SecretMagic(c.FullName(), it.Name))
 	}
 	text := fmt.Sprintf("**%s** is yours.", it.Name)
 	tab := shopGoods

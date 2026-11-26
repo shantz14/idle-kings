@@ -217,6 +217,7 @@ func (s Senator) Score(opt MatterOption, realm Realm, matterID int64) float64 {
 		need := (TrackerMax - realm[a]) / 50
 		score += 0.06 * d * need
 	}
+	score += lawScore(s, opt)
 	danger, _ := s.danger(opt, realm)
 	return score - danger + noise(matterID, s.ID, opt.Key)
 }
@@ -387,17 +388,20 @@ func PickMatter(r Roller, realm Realm, recent []string) MatterEvent {
 	if len(recent) > MatterCooldown {
 		recent = recent[len(recent)-MatterCooldown:]
 	}
-	if e, ok := pickMatter(r, realm, recent, lastTheme(recent)); ok {
+	if e, ok := pickMatter(r, realm, recent, lastTheme(recent), nil); ok {
 		return e
 	}
-	if e, ok := pickMatter(r, realm, recent, ""); ok {
+	if e, ok := pickMatter(r, realm, recent, "", nil); ok {
 		return e
 	}
-	e, _ := pickMatter(r, realm, nil, "")
+	e, _ := pickMatter(r, realm, nil, "", nil)
 	return e
 }
 
-func pickMatter(r Roller, realm Realm, recent []string, avoid Theme) (MatterEvent, bool) {
+// pickMatter draws from the catalogue. laws nil leaves motions out;
+// otherwise motions come up when MotionAllowed, and motions to pass a law
+// only while there is room for one.
+func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws) (MatterEvent, bool) {
 	skip := map[string]bool{}
 	for _, k := range recent {
 		skip[k] = true
@@ -410,6 +414,12 @@ func pickMatter(r Roller, realm Realm, recent []string, avoid Theme) (MatterEven
 			continue
 		}
 		w := 1.0
+		if e.Motion != "" {
+			if laws == nil || !MotionAllowed(e, *laws) || (!e.Repeal && laws.Full()) {
+				continue
+			}
+			w = motionWeight
+		}
 		for a, b := range e.Bias {
 			w += b * (50 - realm[a]) / 50
 		}
@@ -439,6 +449,7 @@ type Player struct {
 	Role   string
 	Vote   string // option key, "" if they didn't vote
 	Weight float64
+	Items  []string // estate item keys, for the Witchcraft Act
 }
 
 type MatterInput struct {
@@ -450,6 +461,11 @@ type MatterInput struct {
 	Bribes   map[int64]string // senator ID -> option they were paid to vote for
 	Players  []Player
 	Opinions CourtOpinions // senators' opinions of players; nil = all neutral
+	Laws     Laws          // in force when the vote closes
+	Now      time.Time     // when it closes, for the laws it passes
+	// Petitioner is the player who petitioned for this matter (petition.go),
+	// 0 if nobody did.
+	Petitioner int64
 }
 
 type CastVote struct {
@@ -472,12 +488,22 @@ type MatterResult struct {
 	Outcome      MatterOutcome
 	Realm        Realm       // after
 	Sectors      SectorState // after
+	Laws         Laws        // after
+	LawChanges   LawChanges
 	Fallen       bool
 	FallenReason string
 	Deltas       map[int64]Delta
 	Notices      map[int64][]string
 	FollowUps    []QueuedEvent
 	Opinions     []OpinionChange // how each senator now feels about each voter
+	// Secret is true if the votes must not be shown (the Secret Ballot).
+	Secret bool
+}
+
+func (res *MatterResult) delta(id int64, d Delta) {
+	cur := res.Deltas[id]
+	cur.Merge(d)
+	res.Deltas[id] = cur
 }
 
 // ResolveMatter counts the votes, picks the winner, rolls its outcome and
@@ -488,6 +514,8 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	if ev.Auto {
 		return resolveAuto(r, in, res)
 	}
+	secret := in.Laws.Has(LawSecretBallot)
+	res.Secret = secret
 
 	senVotes := map[int64]string{}
 	for _, s := range in.Senators {
@@ -520,7 +548,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 
 	res.Outcome, res.Succeeded = winner.Success, true
 	if winner.Check != nil {
-		if ok, _ := winner.Check.Roll(r, in.Realm.Sheet(), 0, Normal); !ok {
+		if ok, _ := winner.Check.Roll(r, in.Realm.Sheet(), LawCheckMod(in.Laws, ev), Normal); !ok {
 			res.Outcome, res.Succeeded = winner.Failure, false
 		}
 	}
@@ -530,10 +558,16 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	res.Realm.Apply(out.Realm)
 	res.Sectors = in.Sectors.Fill().Clone()
 	res.Sectors.Apply(out.Sectors)
+	res.Laws, res.LawChanges = in.Laws.Apply(out.Enact, out.Repeal, in.Now)
 	res.Fallen, res.FallenReason = res.Realm.Fallen()
-	if !res.Fallen {
+	// A petition is extra business, not a Senate day: no drift, no daily laws.
+	if !res.Fallen && in.Petitioner == 0 {
 		res.Realm.Apply(res.Realm.Drift())
 		res.Sectors.Drift()
+		// The laws' daily costs come after the day's recovery, and can be
+		// what finally sinks the realm.
+		ApplyDailyLaws(res.Realm, res.Sectors, res.Laws)
+		res.Fallen, res.FallenReason = res.Realm.Fallen()
 	}
 
 	for _, p := range in.Players {
@@ -547,30 +581,26 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 			d.Merge(out.Supporters)
 		}
 		if desc := d.Describe(); desc != "" {
-			res.Deltas[p.ID] = d
+			res.delta(p.ID, d)
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("The Senate voted to **%s**. For you: %s", strings.ToLower(winner.Label), desc))
 		}
-		if _, voted := ev.Option(p.Vote); !voted {
+		_, voted := ev.Option(p.Vote)
+		if !voted && res.Laws.Has(LawAbstainers) {
+			g := Delta{Influence: ScaleInfluence(LawAbstainInfluence, p.Sheet[AttrInfluence])}
+			res.delta(p.ID, g)
+			res.Notices[p.ID] = append(res.Notices[p.ID], "You kept out of the vote, and the court respects your restraint. ("+g.Describe()+")")
+		}
+		if !voted || secret { // under the Secret Ballot, no senator knows how you voted
 			continue
 		}
-		var warmer, cooler []OpinionChange
+		// Opinions move quietly; players see them on the senators' screens.
 		for _, s := range in.Senators {
-			ch := OpinionChange{SenatorID: s.ID, CharacterID: p.ID,
-				Delta: voteOpinion(s, ev, in.Realm, in.MatterID, senVotes[s.ID], p.Vote)}
-			res.Opinions = append(res.Opinions, ch)
-			if ch.Delta > 0 {
-				warmer = append(warmer, ch)
-			} else {
-				cooler = append(cooler, ch)
-			}
-		}
-		if len(warmer) > 0 {
-			res.Notices[p.ID] = append(res.Notices[p.ID], "Senators who voted with you think better of you: "+describeOpinionChanges(warmer, in.Senators))
-		}
-		if len(cooler) > 0 {
-			res.Notices[p.ID] = append(res.Notices[p.ID], "Senators you voted against think less of you: "+describeOpinionChanges(cooler, in.Senators))
+			res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: p.ID,
+				Delta: voteOpinion(s, ev, in.Realm, in.MatterID, senVotes[s.ID], p.Vote)})
 		}
 	}
+	petitionerResult(&res, in)
+	witchHunt(r, &res, in.Players, res.Laws)
 
 	if !res.Fallen {
 		for _, f := range out.FollowUps {
@@ -582,10 +612,32 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	return res
 }
 
+// witchHunt fines owners of magic items under the Witchcraft Act, once per
+// Senate day.
+func witchHunt(r Roller, res *MatterResult, players []Player, ls Laws) {
+	if !ls.Has(LawWitchcraftAct) {
+		return
+	}
+	for _, p := range players {
+		for _, k := range p.Items {
+			it, ok := ItemByKey(k)
+			if !ok || !it.Magic || r.IntN(100) >= LawWitchFineChance {
+				continue
+			}
+			fine := max(1, int(float64(it.Price)*LawWitchFineRate))
+			res.delta(p.ID, Delta{Wealth: -fine})
+			res.Notices[p.ID] = append(res.Notices[p.ID],
+				fmt.Sprintf("🔥 The witch-finders came for your %s. You paid them to go away. (-%d gold)", it.Name, fine))
+		}
+	}
+}
+
 // resolveAuto applies an Auto event's one option: no vote, no opinions, and
-// no day passes (no drift), since it isn't the Senate's daily matter.
+// no day passes (no drift, no daily laws), since it isn't the Senate's daily
+// matter.
 func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
 	ev := in.Event
+	res.Laws = in.Laws.Clone()
 	if len(ev.Options) == 0 {
 		res.Realm, res.Sectors = in.Realm.Clone(), in.Sectors.Fill().Clone()
 		return res
@@ -593,7 +645,7 @@ func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
 	res.Winner = ev.Options[0]
 	res.Outcome, res.Succeeded = res.Winner.Success, true
 	if res.Winner.Check != nil {
-		if ok, _ := res.Winner.Check.Roll(r, in.Realm.Sheet(), 0, Normal); !ok {
+		if ok, _ := res.Winner.Check.Roll(r, in.Realm.Sheet(), LawCheckMod(in.Laws, ev), Normal); !ok {
 			res.Outcome, res.Succeeded = res.Winner.Failure, false
 		}
 	}
@@ -602,6 +654,7 @@ func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
 	res.Realm.Apply(out.Realm)
 	res.Sectors = in.Sectors.Fill().Clone()
 	res.Sectors.Apply(out.Sectors)
+	res.Laws, res.LawChanges = in.Laws.Apply(out.Enact, out.Repeal, in.Now)
 	res.Fallen, res.FallenReason = res.Realm.Fallen()
 	for _, p := range in.Players {
 		var d Delta

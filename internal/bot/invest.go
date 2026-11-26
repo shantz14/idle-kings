@@ -133,7 +133,7 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 
 	var opts []discordgo.SelectMenuOption
 	for _, d := range game.SectorDefs {
-		desc := fmt.Sprintf("%s gold/day · %s", game.Num(st.Sectors.Revenue(d, st.Trackers)), st.Sectors.Condition(d, st.Trackers))
+		desc := fmt.Sprintf("%s gold/day · %s", game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws)), st.Sectors.Condition(d, st.Trackers, st.Laws))
 		if v, ok := c.Ventures[d.Key]; ok {
 			desc += " · you own " + pct(v.Share)
 		}
@@ -152,7 +152,7 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 	}
 	var desc strings.Builder
 	fmt.Fprintf(&desc, "%s\n\nIt earns **%s gold/day** and is **%s**.", d.Description,
-		game.Num(st.Sectors.Revenue(d, st.Trackers)), st.Sectors.Condition(d, st.Trackers))
+		game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws)), st.Sectors.Condition(d, st.Trackers, st.Laws))
 	if v, ok := c.Ventures[d.Key]; ok {
 		fmt.Fprintf(&desc, "\nYou own **%s** of it, worth **%s gold/day** to you.", pct(v.Share), game.Num(v.Income))
 	}

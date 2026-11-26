@@ -70,6 +70,8 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			b.update(i, b.circusPanel(ctx, c, ""))
 		case game.KindWork:
 			b.update(i, b.worksPanel(ctx, c, ""))
+		case game.KindPetition:
+			b.update(i, b.petitionPanel(ctx, c, "", ""))
 		}
 	}
 }
@@ -122,8 +124,19 @@ func categoryPanel(cat game.Category, role string) *discordgo.InteractionRespons
 	btns = append(btns, button("Back", "menu:home", discordgo.SecondaryButton, false))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: name, Description: sb.String(), Color: colorGold}},
-		Components: []discordgo.MessageComponent{row(btns...)},
+		Components: rows(btns),
 	}
+}
+
+// rows lays buttons out five to a row, as Discord allows.
+func rows(btns []discordgo.MessageComponent) []discordgo.MessageComponent {
+	var out []discordgo.MessageComponent
+	for len(btns) > 0 {
+		n := min(5, len(btns))
+		out = append(out, row(btns[:n]...))
+		btns = btns[n:]
+	}
+	return out
 }
 
 func publicTag(public bool) string {
@@ -153,6 +166,7 @@ func (b *Bot) partyPanel(ctx context.Context, c store.Character, note string) *d
 		busy = true
 		fmt.Fprintf(&sb, "\nYou only have %d gold.", c.Wealth)
 	}
+	note = joinNotes(permitNote(c.Laws), note)
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}

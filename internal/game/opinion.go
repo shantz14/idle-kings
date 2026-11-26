@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"math"
-	"strings"
 	"time"
 )
 
@@ -169,19 +168,6 @@ func voteOpinion(s Senator, ev MatterEvent, realm Realm, matterID int64, senVote
 	}
 	care := math.Max(0, math.Min(score(senVote)-score(playerVote), opinionCareMax))
 	return opinionVoteAgainst - care
-}
-
-// describeOpinionChanges renders "Aurelia Vance +4, Varro Kell -2".
-func describeOpinionChanges(changes []OpinionChange, senators []Senator) string {
-	var parts []string
-	for _, c := range changes {
-		for _, s := range senators {
-			if s.ID == c.SenatorID {
-				parts = append(parts, s.Name+" "+OpinionNum(c.Delta))
-			}
-		}
-	}
-	return strings.Join(parts, ", ")
 }
 
 // ---- Court a Senator ----

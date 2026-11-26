@@ -20,6 +20,8 @@ func TestBalance(t *testing.T) {
 	wins := map[string]int{}
 	end := map[Attr]float64{}
 	sectorEnd := map[SectorKey]float64{}
+	lawDays := map[LawKey]int{}   // days each law stood
+	fellUnder := map[LawKey]int{} // falls with each law in force
 	survivors := 0
 	const games, days = 300, 90
 	for g := 0; g < games; g++ {
@@ -35,11 +37,17 @@ func TestBalance(t *testing.T) {
 		}
 		var queue []queued
 		var recent []string
+		var laws Laws
 		fell := false
 		resolve := func(d int, ev MatterEvent) bool {
-			res := ResolveMatter(r, MatterInput{MatterID: int64(g*1000 + d), Event: ev, Realm: realm, Sectors: sectors, Senators: sen})
+			res := ResolveMatter(r, MatterInput{MatterID: int64(g*1000 + d), Event: ev, Realm: realm, Sectors: sectors, Senators: sen, Laws: laws})
 			wins[ev.Key+"/"+res.Winner.Key]++
-			realm, sectors = res.Realm, res.Sectors
+			realm, sectors, laws = res.Realm, res.Sectors, res.Laws
+			if res.Fallen {
+				for _, l := range laws {
+					fellUnder[l.Key]++
+				}
+			}
 			for _, f := range res.FollowUps {
 				queue = append(queue, queued{f.Event, d + max(f.Days, 1)})
 			}
@@ -74,7 +82,10 @@ func TestBalance(t *testing.T) {
 				}
 			}
 			if ev.Key == "" {
-				ev = PickMatter(r, realm, recent)
+				ev = PickMatterAvoiding(r, realm, recent, nil, laws)
+			}
+			for _, l := range laws {
+				lawDays[l.Key]++
 			}
 			recent = append(recent, ev.Key)
 			if len(recent) > MatterCooldown {
@@ -88,7 +99,7 @@ func TestBalance(t *testing.T) {
 			}
 			survivors++
 			for _, d := range SectorDefs {
-				sectorEnd[d.Key] += sectors.Revenue(d, realm) / d.BaseRevenue
+				sectorEnd[d.Key] += sectors.Revenue(d, realm, nil) / d.BaseRevenue
 			}
 		}
 	}
@@ -98,6 +109,10 @@ func TestBalance(t *testing.T) {
 	fmt.Println("sector revenue at the end vs. the start (survivors, no investment):")
 	for _, d := range SectorDefs {
 		fmt.Printf("  %-24s %.2fx\n", d.Name, sectorEnd[d.Key]/float64(max(survivors, 1)))
+	}
+	fmt.Println("laws: days in force (all games), falls with it in force:")
+	for _, d := range LawDefs {
+		fmt.Printf("  %-24s %6d days  %3d falls\n", d.Name, lawDays[d.Key], fellUnder[d.Key])
 	}
 	var keys []string
 	for k := range wins {

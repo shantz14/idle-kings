@@ -65,8 +65,9 @@ func ActiveArcs(queued []string) map[string]bool {
 }
 
 // PickMatterAvoiding is PickMatter, but never opens an arc that is already
-// under way (one of active).
-func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[string]bool) MatterEvent {
+// under way (one of active), and may bring up motions to pass or repeal a
+// law (see MotionAllowed).
+func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[string]bool, laws Laws) MatterEvent {
 	if len(recent) > MatterCooldown {
 		recent = recent[len(recent)-MatterCooldown:]
 	}
@@ -77,10 +78,10 @@ func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[strin
 		}
 	}
 	all := append(skip, recent...)
-	if e, ok := pickMatter(r, realm, all, lastTheme(recent)); ok {
+	if e, ok := pickMatter(r, realm, all, lastTheme(recent), &laws); ok {
 		return e
 	}
-	if e, ok := pickMatter(r, realm, all, ""); ok {
+	if e, ok := pickMatter(r, realm, all, "", &laws); ok {
 		return e
 	}
 	return PickMatter(r, realm, recent)

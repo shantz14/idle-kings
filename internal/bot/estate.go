@@ -67,14 +67,14 @@ func (b *Bot) sellToShop(ctx context.Context, i *discordgo.InteractionCreate, c 
 		b.update(i, b.estatePageNote(c, "You don't own that any more."))
 		return
 	}
-	if err := b.store.SellToShop(ctx, c.ID, holdingID, it.SellBack()); err != nil {
+	if err := b.store.SellToShop(ctx, c.ID, holdingID, it.SellBackUnder(c.Laws)); err != nil {
 		b.update(i, b.estatePageNote(c, estateErr(err)))
 		return
 	}
 	if fresh, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 		c = fresh
 	}
-	b.update(i, b.estatePageNote(c, fmt.Sprintf("You sold **%s** to the shop for **%d gold**.", it.Name, it.SellBack())))
+	b.update(i, b.estatePageNote(c, fmt.Sprintf("You sold **%s** to the shop for **%d gold**.", it.Name, it.SellBackUnder(c.Laws))))
 }
 
 // estateErr turns store errors into something to tell the player.
@@ -99,8 +99,11 @@ func sellConfirm(c store.Character, holdingID int64) *discordgo.InteractionRespo
 		return &discordgo.InteractionResponseData{Content: "You don't own that any more.",
 			Components: []discordgo.MessageComponent{row(button("Back", "estate:view", discordgo.SecondaryButton, false))}}
 	}
-	desc := fmt.Sprintf("The shop will give you **%d gold** for **%s** (%d%% of its %d gold price).",
-		it.SellBack(), it.Name, int(game.SellBackRate*100), it.Price)
+	desc := fmt.Sprintf("The shop will give you **%d gold** for **%s** (of its %d gold price).",
+		it.SellBackUnder(c.Laws), it.Name, it.Price)
+	if it.Magic && c.Laws.Has(game.LawWitchcraftAct) {
+		desc += "\nUnder the Witchcraft Act, the shop pays more for enchanted things: people are eager to be rid of them."
+	}
 	if it.Unique {
 		desc += "\nIt goes back on the market, where anyone can buy it."
 	}
@@ -108,7 +111,7 @@ func sellConfirm(c store.Character, holdingID int64) *discordgo.InteractionRespo
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Sell " + it.Name + "?", Description: desc, Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(
-			button(fmt.Sprintf("Sell for %d gold", it.SellBack()), fmt.Sprintf("estate:sellok:%d", h.ID), discordgo.DangerButton, false),
+			button(fmt.Sprintf("Sell for %d gold", it.SellBackUnder(c.Laws)), fmt.Sprintf("estate:sellok:%d", h.ID), discordgo.DangerButton, false),
 			button("Cancel", "estate:view", discordgo.SecondaryButton, false),
 		)},
 	}
@@ -149,12 +152,12 @@ func joinSep(lines []string, sep string, max int) string {
 
 // shopLine is an item as the shop lists it: name and price, then what it
 // does on a second line.
-func shopLine(it game.Item, note string) string {
+func shopLine(it game.Item, note string, laws game.Laws) string {
 	s := fmt.Sprintf("%s **%s**", game.KindByKey(it.Kind).Emoji, it.Name)
 	if it.IsProperty() && it.Tier != 0 {
 		s += fmt.Sprintf(" (%s)", it.Tier)
 	}
-	s += fmt.Sprintf(" — **%d gold**", it.Price)
+	s += fmt.Sprintf(" — **%d gold**", it.PriceUnder(laws))
 	if note != "" {
 		s += " · *" + note + "*"
 	}
@@ -209,7 +212,7 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 			continue
 		}
 		opt := discordgo.SelectMenuOption{Label: truncate(it.Name, 100), Value: fmt.Sprint(h.ID),
-			Description: truncate(fmt.Sprintf("%s · value %s · sells for %d", game.KindByKey(it.Kind).Name, game.Num(it.Value), it.SellBack()), 100)}
+			Description: truncate(fmt.Sprintf("%s · value %s · sells for %d", game.KindByKey(it.Kind).Name, game.Num(it.Value), it.SellBackUnder(c.Laws)), 100)}
 		if it.IsProperty() && len(moveOpts) < 25 {
 			moveOpts = append(moveOpts, opt)
 		}

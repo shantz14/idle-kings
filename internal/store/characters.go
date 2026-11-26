@@ -39,6 +39,8 @@ type Character struct {
 	Conditions []game.Condition
 	// Monuments are finished public works (game.WorkDefs keys); see fillMonuments.
 	Monuments []string
+	// Laws are the court's laws in force, loaded with the realm in fillVentures.
+	Laws game.Laws
 }
 
 // Holding is one estate item a character owns.
@@ -113,11 +115,28 @@ func (c Character) EstateValue() float64 {
 }
 
 // VoteWeight is how much this character's vote counts in the Senate.
-func (c Character) VoteWeight() float64 { return c.Influence + c.Effects().VoteWeight }
+func (c Character) VoteWeight() float64 {
+	return c.Influence + c.Effects().VoteWeight + game.FranchiseWeight(c.EstateValue(), c.Laws)
+}
 
-// TotalIncome is gold per day: base income, estate items and ventures.
+// TotalIncome is gold per day: base income, estate items and ventures,
+// under the laws (Property Tax, Debased Coinage).
 func (c Character) TotalIncome() int {
-	return c.DailyIncome + c.Effects().DailyIncome + int(math.Round(c.VentureIncome))
+	gross := c.DailyIncome + c.Effects().DailyIncome + int(math.Round(c.VentureIncome))
+	return game.IncomeUnder(gross, c.TaxedProperties(), c.Laws)
+}
+
+// TaxedProperties are the shop prices of every property but the residence,
+// for the Property Tax.
+func (c Character) TaxedProperties() []int {
+	res, _ := c.Residence()
+	var out []int
+	for _, h := range c.Holdings {
+		if it, ok := h.Item(); ok && it.IsProperty() && h.ID != res.ID {
+			out = append(out, it.Price)
+		}
+	}
+	return out
 }
 
 func (c Character) Sheet() game.Sheet {

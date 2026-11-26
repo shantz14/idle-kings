@@ -327,7 +327,7 @@ func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Tim
 		return
 	}
 	owners := map[int64]store.Character{}
-	in := game.RootInput{Player: c.Person()}
+	in := game.RootInput{Player: c.Person(), Laws: c.Laws}
 	for _, n := range nets {
 		o, err := b.store.GetCharacterByID(ctx, n.OwnerID)
 		if err != nil {

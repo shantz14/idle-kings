@@ -22,18 +22,20 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  duel.go, hunt.go (Martial actions), conditions.go (wounds), timings.go,
                  influence.go (ScaleInfluence, FreeKinds, Canvass, Bread and Circuses), speech.go,
                  works.go (public works and monuments),
-                 spies.go (spy networks, Plant/Root Out Spies, Practice), secrets.go (what spies leak)
+                 spies.go (spy networks, Plant/Root Out Spies, Practice), secrets.go (what spies leak),
+                 votesale.go (the scandal risk of selling your vote to a senator),
+                 laws.go (lasting laws, their motions and every rule they bend), petition.go (Petition the Senate)
 internal/store   SQLite: schema.sql (applied on open, no migrations), characters,
                  activities (parties, courting), senate (realm, matters, votes, bribes, vote deals),
                  opinions, ventures (sector stakes, investments), duels (accept/decline, bets),
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
-                 monuments (in activities.go)
+                 monuments (in activities.go), laws (ApplyOutcome, denunciations)
 internal/bot     Discord: commands.go (registration + dispatch), creator, menu, party, court,
                  invest, duel, hunt, intrigue (spies), leak, senate, votetrade, estate, shop,
                  estatetrade (player deals), influence (canvass, circus, announce helpers),
-                 speech, works, info pages
+                 speech, works, petition, laws (denouncing, permits, laws field), info pages
 ```
-Custom IDs are `prefix:part:part` and dispatched on the prefix in `commands.go` (`cc`, `menu`, `party`, `court`, `invest`, `duel`, `hunt`, `spy`, `canvass`, `speech`, `circus`, `work`, `estate`, `shop`, `deal`, `senate`, `info`). Each file documents its IDs at the top.
+Custom IDs are `prefix:part:part` and dispatched on the prefix in `commands.go` (`cc`, `menu`, `party`, `court`, `invest`, `duel`, `hunt`, `spy`, `canvass`, `speech`, `circus`, `work`, `estate`, `shop`, `deal`, `senate`, `petition`, `law`, `info`). Each file documents its IDs at the top.
 
 ## Conventions
 - Content and numbers are Go data in `internal/game`; keep it data-driven.
@@ -46,6 +48,8 @@ Custom IDs are `prefix:part:part` and dispatched on the prefix in `commands.go` 
 - Actions give a little practice in the stat they use: merge `game.Practice(stat, success)` into the actor's delta.
 - Story arcs (`arcs.go`, `matters_arcs.go`): a matter's `Arc`/`Chapter` place it in a story; only chapter 1 opens on its own, later chapters are `FollowUpOnly`. In **strict** arcs every outcome of every chapter before the last must queue a later chapter with chance 1 (`TestArcsAreWellFormed` enforces it). The bot picks with `PickMatterAvoiding` (never reopens a running arc, from `store.QueuedEvents`), and `/realm` shows `game.Chronicle`. Sectors: Alchemy replaced Manufacturing; the secret sector is the Black Market (`SectorBlackMarket`).
 - Losing the realm: senators refuse options whose worst case ends the realm (`MatterOption.RealmDanger`; Reckless senators use the expected case). Danger comes from what they can't see: **Auto** events (`MatterEvent.Auto`, one option, no vote, no drift) are bills queued as follow-ups by cheap-now options. Anything that changes trackers outside a matter goes through `Outcome.Realm`/`applyRealm` (which marks the realm fallen at 0); snapshot with `b.realmBefore` and call `b.afterRealmChange` to post `game.RealmWarnings` and announce a fall.
+- Petitions (`petition.go`) always reach the floor. A petitioned matter is queued with `petitioner_id` and opened by `NextPetition` as an extra vote alongside the day's matter (one petition at a time); it isn't a Senate day (no drift, daily laws or opinion decay) and doesn't move `next_matter_at`. So a court can have two open matters: use `OpenMatters` (`OpenMatter` returns only the newest). `NextQueued` returns follow-ups only.
+- Laws (`laws.go`): a court's `game.Laws` live in `realms.laws` (`RealmState.Laws`), and every loaded `Character.Laws` carries them (filled in `fillVentures`). Rules read laws where they apply, so **pass `laws` along**: `Revenue`/`Condition`/`VentureIncome` (with `EffectiveStakes`), `RollLeak`, `BribePriceUnder`, `DeclineOpinions`, `Item.PriceUnder`/`SellBackUnder`, and the `Laws` field of `MatterInput`, `PartyInput`, `DuelInput`, `RootInput`. `VoteWeight()`/`TotalIncome()` already apply them. A matter passes or repeals laws through `MatterOutcome.Enact`/`Repeal` (say so in the hint); motions to pass/repeal each law are generated from `LawDefs` and only picked by `PickMatterAvoiding` when `MotionAllowed`. Daily law costs (`LawDef.Daily`) apply after the drift on Senate days, and senators never see them. Law descriptions are words only (`TestLawsAreWellFormed`). Changes outside an activity go through `store.ApplyOutcome`.
 - All real-time durations live in `game.Timings` (`DefaultTimings`/`FastTimings`).
 - Senator opinion (-100..100) is shown to players; its effects are described in words, never with the numbers behind them. Change it through `game.OpinionChange` (SenatorID 0 = every senator); use `BribePriceFor`/`VoteOfferFor`, not the raw versions, anywhere a player is involved.
 - Sectors: the realm's state is `realms.sectors` (JSON `game.SectorState`), stakes are `sector_stakes`. `TotalIncome()` includes venture income, which the store fills in on every character load (`fillVentures`). Senate outcomes change sectors through `MatterOutcome.Sectors` (Health is a temporary shock, Capacity is permanent). Sector revenue and shares are shown to players; the investment deal roll is not.

@@ -105,19 +105,19 @@ func TestLeaks(t *testing.T) {
 		}
 		prev = c
 	}
-	if _, ok := RollLeak(&seq{t: t}, 0); ok { // no network: no roll at all
+	if _, ok := RollLeak(&seq{t: t}, 0, nil); ok { // no network: no roll at all
 		t.Error("leaked with no network")
 	}
-	if _, ok := RollLeak(&seq{t: t, vals: []int{99}}, 100); ok {
+	if _, ok := RollLeak(&seq{t: t, vals: []int{99}}, 100, nil); ok {
 		t.Error("leaked on a miss")
 	}
-	if d, ok := RollLeak(&seq{t: t, vals: []int{10, 30}}, 100); !ok || d != Full {
+	if d, ok := RollLeak(&seq{t: t, vals: []int{10, 30}}, 100, nil); !ok || d != Full {
 		t.Errorf("deep network: %v %v, want full", d, ok)
 	}
-	if d, ok := RollLeak(&seq{t: t, vals: []int{10, 90}}, 100); !ok || d != Partial {
+	if d, ok := RollLeak(&seq{t: t, vals: []int{10, 90}}, 100, nil); !ok || d != Partial {
 		t.Errorf("deep network: %v %v, want partial", d, ok)
 	}
-	if d, ok := RollLeak(&seq{t: t, vals: []int{5, 30}}, 20); !ok || d != Vague {
+	if d, ok := RollLeak(&seq{t: t, vals: []int{5, 30}}, 20, nil); !ok || d != Vague {
 		t.Errorf("shallow network: %v %v, want vague", d, ok)
 	}
 	s := SecretBribe("Marcus Vane", "Corvus", "A Poor Harvest", "Open the granaries", 40)

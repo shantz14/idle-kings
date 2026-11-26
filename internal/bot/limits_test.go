@@ -20,6 +20,7 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 	if len(d.Components) > 5 {
 		t.Errorf("%s: %d rows", where, len(d.Components))
 	}
+	ids := map[string]bool{}
 	for _, c := range d.Components {
 		r, ok := c.(discordgo.ActionsRow)
 		if !ok {
@@ -32,6 +33,10 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 		for _, x := range r.Components {
 			switch v := x.(type) {
 			case discordgo.Button:
+				if v.CustomID != "" && ids[v.CustomID] {
+					t.Errorf("%s: duplicate custom ID %q", where, v.CustomID)
+				}
+				ids[v.CustomID] = true
 				if n(v.Label) > 80 || n(v.CustomID) > 100 || v.Label == "" {
 					t.Errorf("%s: button %q / %q", where, v.Label, v.CustomID)
 				}
@@ -53,8 +58,12 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 	if len(d.Embeds) > 10 {
 		t.Errorf("%s: %d embeds", where, len(d.Embeds))
 	}
+	total := 0 // Discord's 6000 counts every embed in the message
 	for _, e := range d.Embeds {
-		total := n(e.Title) + n(e.Description)
+		total += n(e.Title) + n(e.Description)
+		if e.Footer != nil {
+			total += n(e.Footer.Text)
+		}
 		if n(e.Title) > 256 || n(e.Description) > 4096 || len(e.Fields) > 25 {
 			t.Errorf("%s: embed too big", where)
 		}
@@ -64,9 +73,9 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 				t.Errorf("%s: field %q (%d chars)", where, f.Name, n(f.Value))
 			}
 		}
-		if total > 6000 {
-			t.Errorf("%s: embed totals %d chars", where, total)
-		}
+	}
+	if total > 6000 {
+		t.Errorf("%s: embeds total %d chars", where, total)
 	}
 }
 
@@ -110,7 +119,31 @@ func TestPagesFitDiscord(t *testing.T) {
 		m := store.Matter{ID: 999999}
 		checkLimits(t, "matter "+ev.Key, &discordgo.InteractionResponseData{
 			Embeds:     []*discordgo.MessageEmbed{matterEmbed(m, ev, game.StartingRealm())},
-			Components: matterButtons(m, ev, true),
+			Components: matterButtons(m, ev, true, true),
+		})
+	}
+	// The Senate panel with a petition alongside the day's matter, for the
+	// longest day's matter and every petition.
+	longest, size := game.MatterEvents[0], 0
+	for _, ev := range game.MatterEvents {
+		e := matterEmbed(store.Matter{ID: 999999}, ev, game.StartingRealm())
+		if l := len(e.Description); l > size {
+			longest, size = ev, l
+		}
+	}
+	day := store.Matter{ID: 999998}
+	for _, p := range game.Petitions(nil) {
+		ev, ok := game.MatterByKey(p.Event)
+		if !ok {
+			t.Fatalf("petition %s has no matter", p.Key)
+		}
+		pet := store.Matter{ID: 999999, PetitionerID: 1}
+		petEmbed := matterEmbed(pet, ev, game.StartingRealm())
+		petEmbed.Footer = &discordgo.MessageEmbedFooter{Text: "Brought before the Senate by the petition of Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww, House Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"}
+		realm := &discordgo.MessageEmbed{Title: "The realm", Description: trackersLine(game.StartingRealm()), Fields: []*discordgo.MessageEmbedField{lawsField(nil)}}
+		checkLimits(t, "senate panel with "+p.Key, &discordgo.InteractionResponseData{
+			Embeds:     []*discordgo.MessageEmbed{realm, matterEmbed(day, longest, game.StartingRealm()), petEmbed},
+			Components: append(matterButtons(day, longest, false, false), matterButtons(pet, ev, true, true)...),
 		})
 	}
 	for _, it := range game.Items {
@@ -351,6 +384,54 @@ func TestPerilViewsFitDiscord(t *testing.T) {
 		if ev.Auto {
 			res := game.ResolveMatter(rand.New(rand.NewPCG(1, 1)), game.MatterInput{Event: ev, Realm: game.StartingRealm()})
 			checkLimits(t, "bill "+ev.Key, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{billEmbed(ev, res)}})
+		}
+	}
+}
+
+// longestLaws is the MaxLaws laws with the longest descriptions.
+func longestLaws() game.Laws {
+	defs := append([]game.LawDef(nil), game.LawDefs...)
+	for i := range defs { // simple selection by description length
+		for j := i + 1; j < len(defs); j++ {
+			if len(defs[j].Desc)+len(defs[j].Name) > len(defs[i].Desc)+len(defs[i].Name) {
+				defs[i], defs[j] = defs[j], defs[i]
+			}
+		}
+	}
+	var ls game.Laws
+	for _, d := range defs[:game.MaxLaws] {
+		ls = append(ls, game.Law{Key: d.Key})
+	}
+	return ls
+}
+
+func TestLawViewsFitDiscord(t *testing.T) {
+	full, none := longestLaws(), game.Laws{}
+	c := store.Character{Name: "A", FamilyName: "B", Wealth: 1000}
+	busy := "You are lobbying the Senate's clerks. You'll know <t:9999999999:R>."
+	for _, ls := range []game.Laws{full, none} {
+		for _, key := range []string{"", game.Petitions(ls)[0].Key} {
+			checkLimits(t, "petition "+key, petitionView(c, ls, nil, 2*time.Hour, "", key, "a note"))
+			checkLimits(t, "petition busy "+key, petitionView(c, ls, []string{game.Petitions(ls)[0].Event}, 2*time.Hour, busy, key, ""))
+		}
+		checkLimits(t, "laws field", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x",
+			Fields: []*discordgo.MessageEmbedField{lawsField(ls)}}}})
+	}
+	// Every motion, decided both ways, under the Secret Ballot and not, with
+	// the most laws changing at once.
+	r := rand.New(rand.NewPCG(1, 1))
+	for _, ev := range game.MatterEvents {
+		if ev.Motion == "" {
+			continue
+		}
+		for _, secret := range []bool{false, true} {
+			ls := full.Clone()
+			if secret {
+				ls = append(ls[:game.MaxLaws-1], game.Law{Key: game.LawSecretBallot})
+			}
+			res := game.ResolveMatter(r, game.MatterInput{Event: ev, Realm: game.StartingRealm(), Laws: ls})
+			res.LawChanges = game.LawChanges{Enacted: []game.LawKey{full[0].Key}, Repealed: full.Keys()[1:3], Lapsed: full.Keys()[3:]}
+			checkLimits(t, "decision "+ev.Key, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{decisionEmbed(ev, res)}})
 		}
 	}
 }

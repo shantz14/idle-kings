@@ -129,9 +129,15 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 	color := colorGold
 	if !st.Alive() {
 		status, color = "**The realm has fallen.** "+st.FallenReason, colorRed
-	} else if m, err := b.store.OpenMatter(ctx, guildID); err == nil {
-		if ev, ok := game.MatterByKey(m.EventKey); ok {
-			status += fmt.Sprintf(" The Senate is voting on **%s**; voting closes <t:%d:R>.", ev.Title, m.ClosesAt.Unix())
+	} else if open, _ := b.store.OpenMatters(ctx, guildID); len(open) > 0 {
+		for _, m := range open {
+			if ev, ok := game.MatterByKey(m.EventKey); ok {
+				what := "The Senate is voting on"
+				if m.PetitionerID != 0 {
+					what = "By petition, the Senate is also voting on"
+				}
+				status += fmt.Sprintf(" %s **%s**; voting closes <t:%d:R>.", what, ev.Title, m.ClosesAt.Unix())
+			}
 		}
 	} else {
 		status += fmt.Sprintf(" The Senate next meets <t:%d:R>.", st.NextMatterAt.Unix())
@@ -171,6 +177,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Recent decisions", Value: history.String()},
 			{Name: "📜 Chronicle", Value: chronicle},
+			lawsField(st.Laws),
 			{Name: "Industries", Value: industriesBlock(st)},
 			{Name: "The court", Value: fmt.Sprintf("%d players · %d senators", len(chars), len(sen)), Inline: true},
 			{Name: "If any of these reach 0, everyone loses", Value: strings.Join(fall, ", "), Inline: true},
@@ -422,6 +429,9 @@ var helpPages = []struct{ title, body string }{
 		"Your vote counts in proportion to your influence, against 8 AI senators whose traits decide how they vote. " +
 		"You can **bribe** a senator, **sell** your vote to a senator or a player, or offer to **buy** another player's vote. Player deals are accepted in DMs.\n\n" +
 		"Decisions change the realm's trackers and can help or hurt players depending on how they voted and their role. Some decisions lead to new matters later, and some matters are chapters in a longer story: what the Senate decides changes what happens next. `/realm` keeps a **Chronicle** of the stories under way.\n\n" +
+		"**Laws**: some decisions pass a **lasting law**, which changes the rules until it is repealed: how votes, bribes, duels, rumors, spies, the shop and your income work. " +
+		fmt.Sprintf("At most %d stand at once; `/realm` lists them. Some laws quietly cost the realm every day. ", game.MaxLaws) +
+		"**Petition the Senate** to put a law, or its repeal, before the Senate yourself. It always reaches the floor, as an extra vote alongside the day's matter.\n\n" +
 		"**Opinion**: every senator has an opinion of you, from -100 to +100. Voting with them, paying them, selling them your vote, good parties and courting raise it; " +
 		"voting against them, dull parties and rumors lower it, and it fades a little each day. Senators who like you take smaller bribes, pay more for your vote, " +
 		"and may follow your lead on a close vote. Those who hate you won't deal with you at all, and may vote against you out of spite."},
@@ -458,7 +468,7 @@ func industriesBlock(st store.RealmState) string {
 	var lines []string
 	for _, d := range game.SectorDefs {
 		lines = append(lines, fmt.Sprintf("%s %s · %s gold/day · %s", d.Emoji, d.Name,
-			game.Num(st.Sectors.Revenue(d, st.Trackers)), st.Sectors.Condition(d, st.Trackers)))
+			game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws)), st.Sectors.Condition(d, st.Trackers, st.Laws)))
 	}
 	return strings.Join(lines, "\n")
 }

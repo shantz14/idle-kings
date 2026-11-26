@@ -154,6 +154,16 @@ func TestVoteSelling(t *testing.T) {
 	if v, _ := s.Votes(ctx, m.ID); v[third.ID] != "modest" || v[seller.ID] != "lavish" {
 		t.Fatalf("votes: %v", v)
 	}
+	// Only sales to senators count toward the selling habit, and only lately.
+	if n, err := s.RecentSenatorSales(ctx, third.ID, now.Add(-time.Hour)); err != nil || n != 1 {
+		t.Fatalf("recent senator sales: %d %v", n, err)
+	}
+	if n, _ := s.RecentSenatorSales(ctx, seller.ID, now.Add(-time.Hour)); n != 0 {
+		t.Fatalf("a sale to a player counted: %d", n)
+	}
+	if n, _ := s.RecentSenatorSales(ctx, third.ID, now.Add(time.Hour)); n != 0 {
+		t.Fatalf("an old sale counted: %d", n)
+	}
 	// Declining.
 	o3, _ := s.CreateOffer(ctx, VoteOffer{MatterID: m.ID, Kind: OfferBuy, FromID: buyer.ID, ToID: third.ID, Option: "none", Price: 5}, now)
 	if _, err := s.DeclineOffer(ctx, o3.ID); err != nil {

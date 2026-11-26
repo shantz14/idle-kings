@@ -192,15 +192,15 @@ func (d SectorDef) Modifier(realm Realm) float64 {
 }
 
 // Revenue is the sector's gold per day, before it is split between owners.
-func (s SectorState) Revenue(d SectorDef, realm Realm) float64 {
+func (s SectorState) Revenue(d SectorDef, realm Realm, laws Laws) float64 {
 	sec := s[d.Key]
-	return sec.Capacity * sec.Health * d.Modifier(realm)
+	return sec.Capacity * sec.Health * d.Modifier(realm) * LawRevenue(laws, d.Key)
 }
 
 // Condition is a sector's fortunes in a word, relative to its capacity.
-func (s SectorState) Condition(d SectorDef, realm Realm) string {
+func (s SectorState) Condition(d SectorDef, realm Realm, laws Laws) string {
 	sec := s[d.Key]
-	switch f := sec.Health * d.Modifier(realm); {
+	switch f := sec.Health * d.Modifier(realm) * LawRevenue(laws, d.Key); {
 	case f >= 1.2:
 		return "booming"
 	case f >= 1.05:
@@ -226,15 +226,52 @@ func Share(d SectorDef, stake, playerTotal float64) float64 {
 	return stake / (d.HouseStake + playerTotal)
 }
 
-// VentureIncome is a player's gold per day from their stakes.
-func VentureIncome(s SectorState, realm Realm, mine, totals Stakes) float64 {
+// VentureIncome is a player's gold per day from their stakes. mine and
+// totals are effective stakes (see EffectiveStakes).
+func VentureIncome(s SectorState, realm Realm, laws Laws, mine, totals Stakes) float64 {
 	var sum float64
 	for _, d := range SectorDefs {
 		if st := mine[d.Key]; st > 0 {
-			sum += Share(d, st, totals[d.Key]) * s.Revenue(d, realm)
+			sum += Share(d, st, totals[d.Key]) * s.Revenue(d, realm, laws)
 		}
 	}
 	return sum
+}
+
+// EffectiveStakes is every player's stakes as the laws count them, and the
+// players' combined effective stake per sector. Under the Charter of
+// Monopolies the biggest player stake in each sector counts for more and
+// every other for less; otherwise stakes count as they are.
+func EffectiveStakes(laws Laws, by map[int64]Stakes) (map[int64]Stakes, Stakes) {
+	out, totals := map[int64]Stakes{}, Stakes{}
+	leader := map[SectorKey]int64{}
+	if laws.Has(LawMonopolies) {
+		best := map[SectorKey]float64{}
+		for id, st := range by {
+			for k, v := range st {
+				// Ties go to the lower id, so the leader doesn't depend on map order.
+				if v > best[k] || (v == best[k] && v > 0 && id < leader[k]) {
+					best[k], leader[k] = v, id
+				}
+			}
+		}
+	}
+	for id, st := range by {
+		eff := Stakes{}
+		for k, v := range st {
+			switch {
+			case !laws.Has(LawMonopolies):
+			case leader[k] == id:
+				v *= LawMonopolyLeader
+			default:
+				v *= LawMonopolyRest
+			}
+			eff[k] = v
+			totals[k] += v
+		}
+		out[id] = eff
+	}
+	return out, totals
 }
 
 // ---- investing ----

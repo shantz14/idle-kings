@@ -45,18 +45,27 @@ func LeakChance(level float64) int {
 }
 
 // RollLeak decides whether a network reports a secret, and how much of it.
-func RollLeak(r Roller, level float64) (Detail, bool) {
-	if level <= 0 || r.IntN(100) >= LeakChance(level) {
+// Under the Informers' Law spies report more often, and tell more.
+func RollLeak(r Roller, level float64, ls Laws) (Detail, bool) {
+	chance := LeakChance(level)
+	if ls.Has(LawInformers) {
+		chance = int(float64(chance) * LawInformerLeak)
+	}
+	if level <= 0 || r.IntN(100) >= chance {
 		return Vague, false
 	}
 	n := float64(r.IntN(100))
+	d := Vague
 	switch {
 	case n < level*0.5:
-		return Full, true
+		d = Full
 	case n < level*1.2:
-		return Partial, true
+		d = Partial
 	}
-	return Vague, true
+	if ls.Has(LawInformers) && d < Full {
+		d++
+	}
+	return d, true
 }
 
 // ---- the catalogue ----
@@ -218,5 +227,15 @@ func SecretEmbezzle(actor string, gold int) Secret {
 		Vague:   fmt.Sprintf("%s has been spending more freely than their income explains.", actor),
 		Partial: fmt.Sprintf("%s has had their hand in the treasury.", actor),
 		Full:    fmt.Sprintf("%s stole **%d gold** from the treasury.", actor, gold),
+	}
+}
+
+// SecretMagic is buying an enchanted item while the Witchcraft Act stands.
+func SecretMagic(actor, item string) Secret {
+	return Secret{
+		Kind:    "magic",
+		Vague:   fmt.Sprintf("Something heavy and carefully wrapped was carried into %s's house after dark.", actor),
+		Partial: fmt.Sprintf("%s has bought something enchanted, in spite of the Witchcraft Act.", actor),
+		Full:    fmt.Sprintf("%s bought **%s**, in spite of the Witchcraft Act.", actor, item),
 	}
 }

@@ -189,17 +189,34 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 		b.update(i, b.wagerPanel(ctx, c, t.ID, err.Error()))
 		return
 	}
+	// Under the Ban on Dueling, issuing a challenge is itself an offense.
+	lawNote := ""
+	if sen, err := b.store.Senators(ctx, c.GuildID); err == nil {
+		if d, ops := game.ChallengeCost(sen, c.ID, c.Laws); d.Describe() != "" {
+			if err := b.store.ApplyOutcome(ctx, c.GuildID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: d}, Opinions: ops}, now); err != nil {
+				slog.Error("duel ban", "err", err)
+			}
+			lawNote = fmt.Sprintf("\n\nDueling is banned. Calling someone out has cost you. (%s)", d.Describe())
+		}
+	}
 
 	// The defender is asked by DM.
 	purse := ""
 	if wager > 0 {
 		purse = fmt.Sprintf(" They have put **%d gold** on it; you must match it to accept.", wager)
 	}
+	refusing := "Refusing, or not answering, costs you a little renown."
+	switch {
+	case c.Laws.Has(game.LawDuelBan):
+		refusing = "Dueling is banned: there is no shame in refusing."
+	case c.Laws.Has(game.LawHonor):
+		refusing = "Under the Code of Honor, refusing, or not answering, is a disgrace."
+	}
 	_, dmErr := b.dm(t.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "You have been challenged to a duel",
-			Description: fmt.Sprintf("**%s** (%s) demands satisfaction.%s\n\nAnswer <t:%d:R>. Refusing, or not answering, costs you a little renown.",
-				c.FullName(), c.House(), purse, a.EndsAt.Unix()),
+			Description: fmt.Sprintf("**%s** (%s) demands satisfaction.%s\n\nAnswer <t:%d:R>. %s",
+				c.FullName(), c.House(), purse, a.EndsAt.Unix(), refusing),
 			Color: colorRed,
 		}},
 		Components: []discordgo.MessageComponent{row(
@@ -227,6 +244,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	if dmErr != nil {
 		text += "\n\nI couldn't DM them, so they may not see it. They can't answer until they open their DMs."
 	}
+	text += lawNote
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "The gauntlet is thrown", Description: text, Color: colorGreen}},
 		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
@@ -348,9 +366,15 @@ func (b *Bot) onDuelAccept(ctx context.Context, i *discordgo.InteractionCreate, 
 // declineOutcome is what refusing a challenge costs the defender.
 func (b *Bot) declineOutcome(ctx context.Context, guildID string, defenderID int64) store.Outcome {
 	sen, _ := b.store.Senators(ctx, guildID)
+	st, _ := b.store.GetRealm(ctx, guildID)
+	d := game.Delta{Renown: -game.DuelDeclineRenown}
+	if st.Laws.Has(game.LawDuelBan) { // no shame in obeying the law
+		d = game.Delta{}
+	}
+	d.Merge(game.DeclineCost(st.Laws))
 	return store.Outcome{
-		Deltas:   map[int64]game.Delta{defenderID: {Renown: -game.DuelDeclineRenown}},
-		Opinions: game.DeclineOpinions(sen, defenderID),
+		Deltas:   map[int64]game.Delta{defenderID: d},
+		Opinions: game.DeclineOpinions(sen, defenderID, st.Laws),
 	}
 }
 
@@ -508,9 +532,9 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 	res := game.ResolveDuel(b.rng, game.DuelInput{
 		Challenger: c.Person(), Defender: t.Person(), ChallengerRenown: c.Renown, DefenderRenown: t.Renown,
 		ChallengerStance: ev.choices[c.ID], DefenderStance: ev.choices[t.ID],
-		Wager: a.Spend, Bets: bets, Senators: sen,
+		Wager: a.Spend, Bets: bets, Senators: sen, Laws: c.Laws,
 	})
-	out := store.Outcome{Deltas: res.Deltas, Opinions: res.Opinions, Conditions: b.newConditions(res.Conditions, now)}
+	out := store.Outcome{Deltas: res.Deltas, Opinions: res.Opinions, Conditions: b.newConditions(res.Conditions, now), Realm: res.Realm}
 	if err := b.store.ApplyResult(ctx, a.ID, out, now); err != nil {
 		if !errors.Is(err, store.ErrEnded) {
 			slog.Error("apply duel", "err", err)

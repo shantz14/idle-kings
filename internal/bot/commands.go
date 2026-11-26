@@ -153,6 +153,10 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onDeal(ctx, i, parts[1:])
 		case "senate":
 			b.onSenate(ctx, i, parts[1:])
+		case "petition":
+			b.onPetition(ctx, i, parts[1:])
+		case "law":
+			b.onLaw(ctx, i, parts[1:])
 		}
 	case discordgo.InteractionModalSubmit:
 		parts := strings.Split(i.ModalSubmitData().CustomID, ":")

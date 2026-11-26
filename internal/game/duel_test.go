@@ -112,7 +112,7 @@ func TestBetPayoutsConserveGold(t *testing.T) {
 
 func TestDeclineOpinions(t *testing.T) {
 	sen := []Senator{{ID: 1, Traits: []Trait{TraitHawk}}, {ID: 2, Traits: []Trait{TraitDove}}}
-	if ops := DeclineOpinions(sen, 5); len(ops) != 1 || ops[0].SenatorID != 1 || ops[0].Delta >= 0 {
+	if ops := DeclineOpinions(sen, 5, nil); len(ops) != 1 || ops[0].SenatorID != 1 || ops[0].Delta >= 0 {
 		t.Fatalf("decline opinions: %+v", ops)
 	}
 }

@@ -131,6 +131,7 @@ type Item struct {
 	Unique      bool
 	Shelf       Shelf
 	Effects     Effects
+	Magic       bool // enchanted or uncanny; see the Witchcraft Act
 }
 
 func (it Item) IsProperty() bool { return it.Kind == KindProperty }
@@ -139,6 +140,24 @@ func (it Item) IsProperty() bool { return it.Kind == KindProperty }
 const SellBackRate = 0.6
 
 func (it Item) SellBack() int { return int(float64(it.Price) * SellBackRate) }
+
+// SellBackUnder is SellBack under the laws: under the Witchcraft Act,
+// nervous owners get more for magic items.
+func (it Item) SellBackUnder(ls Laws) int {
+	if it.Magic && ls.Has(LawWitchcraftAct) {
+		return int(float64(it.Price) * LawWitchSellBack)
+	}
+	return it.SellBack()
+}
+
+// PriceUnder is what the shop charges under the laws (Debased Coinage
+// raises every price).
+func (it Item) PriceUnder(ls Laws) int {
+	if ls.Has(LawDebasement) {
+		return int(float64(it.Price)*LawDebasedPrices + 0.5)
+	}
+	return it.Price
+}
 
 // Items is the estate catalogue. Placeholder numbers.
 var Items = []Item{

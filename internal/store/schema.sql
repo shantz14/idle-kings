@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS realms (
     guild_id       TEXT PRIMARY KEY REFERENCES courts(guild_id),
     trackers       TEXT NOT NULL,                 -- JSON game.Realm
     sectors        TEXT NOT NULL DEFAULT '{}',    -- JSON game.SectorState
+    laws           TEXT NOT NULL DEFAULT '[]',    -- JSON game.Laws, the laws in force
     status         TEXT NOT NULL DEFAULT 'alive', -- alive | fallen
     fallen_reason  TEXT,
     next_matter_at INTEGER NOT NULL
@@ -142,7 +143,8 @@ CREATE TABLE IF NOT EXISTS matters (
     resolved_at INTEGER,
     channel_id  TEXT,
     message_id  TEXT,
-    result      TEXT   -- JSON summary once decided
+    result      TEXT,  -- JSON summary once decided
+    petitioner_id INTEGER  -- the character who petitioned for it, if anyone
 );
 CREATE INDEX IF NOT EXISTS matters_open ON matters (closes_at) WHERE resolved_at IS NULL;
 
@@ -187,7 +189,8 @@ CREATE TABLE IF NOT EXISTS realm_queue (
     id        INTEGER PRIMARY KEY,
     guild_id  TEXT NOT NULL REFERENCES courts(guild_id),
     event_key TEXT NOT NULL,
-    due_at    INTEGER NOT NULL
+    due_at    INTEGER NOT NULL,
+    petitioner_id INTEGER -- set for a petition (see game.Petitions)
 );
 
 -- What each senator thinks of each player, -100 to 100. Missing = 0.
@@ -242,4 +245,18 @@ CREATE TABLE IF NOT EXISTS monuments (
     work_key     TEXT NOT NULL,
     built_at     INTEGER NOT NULL,
     PRIMARY KEY (character_id, work_key)
+);
+
+-- Crimes a player's spies reported under the Informers' Law, which the
+-- owner may denounce once before they expire.
+CREATE TABLE IF NOT EXISTS denunciations (
+    id         INTEGER PRIMARY KEY,
+    guild_id   TEXT NOT NULL,
+    owner_id   INTEGER NOT NULL REFERENCES characters(id), -- who can denounce
+    actor_id   INTEGER NOT NULL REFERENCES characters(id), -- who committed it
+    crime      TEXT NOT NULL,   -- secret kind, e.g. 'bribe'
+    detail     TEXT NOT NULL,   -- what the spies said
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at    INTEGER
 );
