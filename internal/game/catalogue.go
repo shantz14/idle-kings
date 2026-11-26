@@ -18,6 +18,7 @@ var magicItems = map[string]bool{
 	"lyre_orpheus": true, "palantir": true, "bag_of_holding": true, "deck_of_many_things": true,
 	"one_ring": true, "vorpal_sword": true, "poseidons_trident": true, "sting": true,
 	"plate_plus_one": true, "hippogriff": true, "flying_carpet": true, "castle_ravenloft": true,
+	"the_burrow": true, "tome_leadership": true, "portable_hole": true, "mjolnir": true,
 }
 
 func init() {
@@ -71,6 +72,26 @@ var shopItems = []Item{
 		"The sweetest red in the realm comes from these slopes, and it sells by the barrel."),
 	prop("yawning_portal", "The Yawning Portal", TierFine, 15, 700, ShelfMarket, true, Effects{RumorNotice: 5},
 		"A famous tavern built around a well that drops into a dungeon. Adventurers talk, and you listen."),
+	// mid-tier: a goal a couple of weeks in (1,100–1,700 before the discount)
+	prop("green_dragon", "The Green Dragon Inn", TierFine, 19, 1300, ShelfMarket, true, Effects{DailyIncome: 5, PartyBonus: 1},
+		"The best beer in the Shire, a fire that never goes out, and farmers who drink until the rent is paid."),
+	prop("inn_last_home", "The Inn of the Last Home", TierFine, 18, 1100, ShelfMarket, true, Effects{DailyIncome: 3, PartyBonus: 1},
+		"An inn built high in the branches of a great vallenwood tree. Old friends meet here, and adventures begin."),
+	prop("the_burrow", "The Burrow", TierFine, 17, 1100, ShelfMarket, true, Effects{PartyBonus: 3},
+		"Crooked, cluttered and held up mostly by magic. Nobody leaves hungry, and everyone wants to come back."),
+	prop("house_vettii", "The House of the Vettii", TierFine, 20, 1200, ShelfMarket, true, Effects{DailyIncome: 9},
+		"Two freed slaves made a fortune in wine and built this house to prove it. The frescoes still smell of money."),
+	prop("villa_mysteries", "The Villa of the Mysteries", TierFine, 20, 1400, ShelfMarket, true, Effects{PartyBonus: 2, RumorNotice: 4},
+		"A red-walled villa where secret rites were painted on every wall. Guests whisper here, and you hear it."),
+	prop("villa_livia", "The Villa of Livia", TierGrand, 23, 1500, ShelfMarket, true, Effects{PartyBonus: 2, VoteWeight: 1},
+		"An empress's garden villa, painted floor to ceiling with birds and fruit trees. Senators' wives fight over invitations."),
+	prop("waterdeep_manor", "A Manor in Waterdeep's Sea Ward", TierGrand, 24, 1600, ShelfMarket, true, Effects{VoteWeight: 1, PartyBonus: 1, DailyIncome: 3},
+		"A walled mansion among the noble houses of the City of Splendors. The masked lords may be your neighbors."),
+	prop("villa_jovis", "The Villa Jovis", TierGrand, 25, 1700, ShelfMarket, true, Effects{Stats: Stats{Intrigue: 1}, RumorNotice: 4},
+		"An emperor's palace on a cliff above the sea, where he went to hide from Rome and plot against it."),
+	prop("candlekeep", "Candlekeep", TierGrand, 24, 1700, ShelfMarket, true, Effects{Stats: Stats{Stewardship: 1}, RumorNotice: 3},
+		"A fortress-library on a sea cliff. Visitors pay with a book it doesn't have, and the monks know every secret in them."),
+
 	prop("villa_papyri", "The Villa of the Papyri", TierGrand, 28, 1800, ShelfMarket, true, Effects{PartyBonus: 3},
 		"A seaside villa with a library of two thousand scrolls and a garden of bronze statues."),
 	prop("hadrians_villa", "Hadrian's Villa", TierGrand, 30, 2200, ShelfMarket, true, Effects{PartyBonus: 3, DailyIncome: 3},
@@ -138,6 +159,15 @@ var shopItems = []Item{
 	good("holy_grail", "The Holy Grail", KindArtifact, 9, 700, ShelfMarket, true, Effects{PartyBonus: 3},
 		"Knights searched for it all their lives. Pilgrims will queue at your door."),
 
+	good("rosetta_stone", "The Rosetta Stone", KindArtifact, 11, 1300, ShelfMarket, true, Effects{Stats: Stats{Diplomacy: 1}, VoteWeight: 1},
+		"One decree carved in three scripts. With it, no envoy's language is a mystery to you."),
+	good("codex_justinian", "The Codex of Justinian", KindArtifact, 12, 1500, ShelfMarket, true, Effects{VoteWeight: 2, Stats: Stats{Stewardship: 1}},
+		"Every law of the empire in one book. Quote it in the Senate and the room goes quiet."),
+	good("tome_leadership", "A Tome of Leadership and Influence", KindArtifact, 10, 1400, ShelfMarket, true, Effects{Stats: Stats{Diplomacy: 2}},
+		"Read it cover to cover in a week and you'll never lose an argument again. The ink fades once it's done its work."),
+	good("portable_hole", "A Portable Hole", KindArtifact, 9, 1400, ShelfMarket, true, Effects{DailyIncome: 8},
+		"A black cloth circle that unfolds into a hole ten feet deep. The tax collectors never find what you keep in it."),
+
 	good("one_ring", "The One Ring", KindArtifact, 15, 2000, ShelfMarket, true, Effects{Stats: Stats{Intrigue: 2}},
 		"Plain gold, warm to the touch, and very hard to take off. Nobody notices you when you wear it."),
 
@@ -156,6 +186,8 @@ var shopItems = []Item{
 	// ---------- the market: weapons ----------
 	good("excalibur", "Excalibur", KindWeapon, 8, 1200, ShelfMarket, true, Effects{Stats: Stats{Prowess: 2, Martial: 1}},
 		"Drawn from a stone by the rightful ruler, then thrown into a lake. Now it's in the shop."),
+	good("mjolnir", "Mjölnir", KindWeapon, 9, 1500, ShelfMarket, true, Effects{Stats: Stats{Prowess: 2, Martial: 1}},
+		"A short-handled hammer that always comes back. Only the worthy can lift it, and you can, mostly."),
 	good("longclaw", "Longclaw", KindWeapon, 7, 900, ShelfMarket, true, Effects{Stats: pro(2)},
 		"A bastard sword of rippling dark steel with a wolf's-head pommel."),
 	good("vorpal_sword", "A Vorpal Sword", KindWeapon, 6, 700, ShelfMarket, true, Effects{Stats: pro(2)},
