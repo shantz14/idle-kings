@@ -40,12 +40,7 @@ var WorkDefs = []WorkDef{
 }
 
 func WorkByKey(k string) (WorkDef, bool) {
-	for _, w := range WorkDefs {
-		if w.Key == k {
-			return w, true
-		}
-	}
-	return WorkDef{}, false
+	return workIndex.get(k)
 }
 
 // WorkTitle is the monument's name: "The Vane Aqueduct".

@@ -254,12 +254,7 @@ var LawDefs = []LawDef{
 }
 
 func LawByKey(k LawKey) (LawDef, bool) {
-	for _, d := range LawDefs {
-		if d.Key == k {
-			return d, true
-		}
-	}
-	return LawDef{}, false
+	return lawIndex.get(k)
 }
 
 // LawName is a law's name, or its key if it isn't in the catalogue.

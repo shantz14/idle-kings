@@ -35,12 +35,7 @@ var Arcs = []ArcDef{
 }
 
 func ArcByKey(k string) (ArcDef, bool) {
-	for _, a := range Arcs {
-		if a.Key == k {
-			return a, true
-		}
-	}
-	return ArcDef{}, false
+	return arcIndex.get(k)
 }
 
 // ArcLabel is the line shown above an arc's matter: "💀 The Barrow King ·

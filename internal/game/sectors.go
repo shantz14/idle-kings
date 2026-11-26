@@ -87,12 +87,7 @@ var SectorDefs = []SectorDef{
 }
 
 func SectorByKey(k SectorKey) (SectorDef, bool) {
-	for _, d := range SectorDefs {
-		if d.Key == k {
-			return d, true
-		}
-	}
-	return SectorDef{}, false
+	return sectorIndex.get(k)
 }
 
 // Investment limits and the preset amounts offered as buttons.

@@ -115,12 +115,7 @@ var TraitList = []TraitInfo{
 }
 
 func TraitByKey(t Trait) (TraitInfo, bool) {
-	for _, ti := range TraitList {
-		if ti.Key == t {
-			return ti, true
-		}
-	}
-	return TraitInfo{}, false
+	return traitIndex.get(t)
 }
 
 // ---- senators ----

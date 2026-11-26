@@ -216,12 +216,7 @@ var Items = []Item{
 }
 
 func ItemByKey(key string) (Item, bool) {
-	for _, it := range Items {
-		if it.Key == key {
-			return it, true
-		}
-	}
-	return Item{}, false
+	return itemIndex.get(key)
 }
 
 // OtherPropertyShare is how much a property you don't live in counts

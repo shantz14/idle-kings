@@ -21,12 +21,7 @@ var ConditionDefs = []ConditionDef{
 }
 
 func ConditionByKey(k string) (ConditionDef, bool) {
-	for _, c := range ConditionDefs {
-		if c.Key == k {
-			return c, true
-		}
-	}
-	return ConditionDef{}, false
+	return conditionIndex.get(k)
 }
 
 // Condition is one a character has, until EndsAt.

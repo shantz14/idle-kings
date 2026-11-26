@@ -72,12 +72,7 @@ func (e MatterEvent) Option(key string) (MatterOption, bool) {
 }
 
 func MatterByKey(key string) (MatterEvent, bool) {
-	for _, e := range MatterEvents {
-		if e.Key == key {
-			return e, true
-		}
-	}
-	return MatterEvent{}, false
+	return matterIndex.get(key)
 }
 
 // SuccessChance is the option's odds against the realm (100 if no roll).
