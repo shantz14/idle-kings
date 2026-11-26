@@ -222,7 +222,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 func trackersLine(r game.Realm) string {
 	var parts []string
 	for _, t := range game.Trackers {
-		parts = append(parts, fmt.Sprintf("%s **%s**", t.Name, game.Num(r[t.Key])))
+		parts = append(parts, fmt.Sprintf("%s %s **%s**", t.Emoji, t.Name, game.Num(r[t.Key])))
 	}
 	return strings.Join(parts, " · ")
 }

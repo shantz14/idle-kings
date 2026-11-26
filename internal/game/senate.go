@@ -41,6 +41,10 @@ const (
 	LeanForeign   Lean = "foreign"   // friendly to outsiders
 	LeanPopular   Lean = "popular"   // good for the common people
 	LeanScheme    Lean = "scheme"    // underhanded
+	LeanFaith     Lean = "faith"     // honors the gods and the temples
+	LeanLand      Lean = "land"      // good for the farms (derived from Agriculture)
+	LeanCommerce  Lean = "commerce"  // good for trade (derived from Trade and Luxury Goods)
+	LeanOrder     Lean = "order"     // good for law and order (derived from Stability)
 )
 
 type Trait string
@@ -58,6 +62,10 @@ const (
 	TraitCosmopolitan  Trait = "cosmopolitan"
 	TraitGreedy        Trait = "greedy"
 	TraitIncorruptible Trait = "incorruptible"
+	TraitLandowner     Trait = "landowner"
+	TraitMerchant      Trait = "merchant_prince"
+	TraitStern         Trait = "stern"
+	TraitPious         Trait = "pious"
 )
 
 type TraitInfo struct {
@@ -93,6 +101,14 @@ var TraitList = []TraitInfo{
 		map[Lean]float64{LeanProfit: 1.5}, []Trait{TraitIncorruptible}},
 	{TraitIncorruptible, "Incorruptible", "Cannot be bribed and despises scheming.",
 		map[Lean]float64{LeanScheme: -1.5}, []Trait{TraitGreedy, TraitScheming}},
+	{TraitLandowner, "Landowner", "Owns half the countryside, and votes for the farms.",
+		map[Lean]float64{LeanLand: 2}, nil},
+	{TraitMerchant, "Merchant prince", "Made a fortune in trade, and votes for the markets.",
+		map[Lean]float64{LeanCommerce: 2, LeanProfit: 0.5}, nil},
+	{TraitStern, "Stern", "Stands for law and order above all.",
+		map[Lean]float64{LeanOrder: 2, LeanScheme: -0.5}, []Trait{TraitScheming}},
+	{TraitPious, "Pious", "Honors the gods and the old rites.",
+		map[Lean]float64{LeanFaith: 2.5, LeanTradition: 0.5}, nil},
 }
 
 func TraitByKey(t Trait) (TraitInfo, bool) {
@@ -133,31 +149,19 @@ func (s Senator) TraitNames() string {
 	return strings.Join(names, ", ")
 }
 
-var senatorNames = []string{
-	"Aurelia Vance", "Cassian Morrow", "Dorian Halbrecht", "Elara Quint", "Fenwick Ashdown",
-	"Galen Strake", "Helena Corvaine", "Isidore Pell", "Junia Marlowe", "Lucan Thorne",
-	"Maren Ostric", "Octavian Reyes", "Petronella Vask", "Quintus Harrow", "Rosalind Crane",
-	"Severin Dusk", "Tullia Brand", "Varro Kell",
-}
-
-// GenerateSenate makes n senators with distinct names and 2 compatible traits each.
+// GenerateSenate draws n distinct personas (see personas.go), each with
+// their own fixed traits, and gives them random influence and bribe prices.
 func GenerateSenate(r Roller, n int) []Senator {
-	perm := shuffle(r, len(senatorNames))
+	perm := shuffle(r, len(Personas))
 	out := make([]Senator, 0, n)
 	for i := 0; i < n && i < len(perm); i++ {
-		s := Senator{
-			Name:      senatorNames[perm[i]],
+		p := Personas[perm[i]]
+		out = append(out, Senator{
+			Name:      p.Name,
+			Traits:    append([]Trait(nil), p.Traits...),
 			Influence: float64(8 + r.IntN(9)), // 8–16
 			BasePrice: 15 + r.IntN(21),        // 15–35
-		}
-		for len(s.Traits) < 2 {
-			t := TraitList[r.IntN(len(TraitList))]
-			if s.Has(t.Key) || conflicts(s.Traits, t) {
-				continue
-			}
-			s.Traits = append(s.Traits, t.Key)
-		}
-		out = append(out, s)
+		})
 	}
 	return out
 }

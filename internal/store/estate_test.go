@@ -47,14 +47,14 @@ func TestBuySellMove(t *testing.T) {
 		t.Fatalf("starting residence: %+v %v", a.Holdings, a.ResidenceID)
 	}
 
-	villa, err := s.BuyItem(ctx, a.ID, "g", "riverside_villa", 800, now)
+	villa, err := s.BuyItem(ctx, a.ID, "g", "bag_end", 800, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BuyItem(ctx, b.ID, "g", "riverside_villa", 800, now); !errors.Is(err, ErrOwned) {
+	if _, err := s.BuyItem(ctx, b.ID, "g", "bag_end", 800, now); !errors.Is(err, ErrOwned) {
 		t.Fatalf("second buyer of a unique piece: %v", err)
 	}
-	if _, err := s.BuyItem(ctx, b.ID, "g", "hillfort_castle", 5000, now); err == nil {
+	if _, err := s.BuyItem(ctx, b.ID, "g", "winterfell", 5000, now); err == nil {
 		t.Fatal("bought a castle without the gold")
 	}
 	if _, err := s.BuyItem(ctx, b.ID, "g", "gladius", 300, now); err == nil {
@@ -69,7 +69,7 @@ func TestBuySellMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	owners, _ := s.ItemOwners(ctx, "g")
-	if owners["riverside_villa"] != a.ID || owners["gladius"] != 0 {
+	if owners["bag_end"] != a.ID || owners["gladius"] != 0 {
 		t.Fatalf("owners %v", owners)
 	}
 
@@ -79,7 +79,7 @@ func TestBuySellMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := reload(t, s, a)
-	if after.Items[0] != "riverside_villa" || after.EstateValue() <= before.EstateValue() {
+	if after.Items[0] != "bag_end" || after.EstateValue() <= before.EstateValue() {
 		t.Fatalf("after moving: %v, value %v → %v", after.Items, before.EstateValue(), after.EstateValue())
 	}
 	ledger := after.Holdings[len(after.Holdings)-1]
@@ -106,7 +106,7 @@ func TestBuySellMove(t *testing.T) {
 	if got := reload(t, s, a); got.Wealth != w+72 || len(got.Holdings) != len(after.Holdings)-1 {
 		t.Fatalf("after selling: %+v", got)
 	}
-	if owners, _ := s.ItemOwners(ctx, "g"); owners["riverside_villa"] != a.ID {
+	if owners, _ := s.ItemOwners(ctx, "g"); owners["bag_end"] != a.ID {
 		t.Fatal("villa should still be a's")
 	}
 }
@@ -117,7 +117,7 @@ func TestEstateOffers(t *testing.T) {
 	a := newChar(t, s, "a", "merchant")
 	b := newChar(t, s, "b", "officer")
 	give(t, s, a, 2000)
-	villa, _ := s.BuyItem(ctx, a.ID, "g", "riverside_villa", 800, now)
+	villa, _ := s.BuyItem(ctx, a.ID, "g", "bag_end", 800, now)
 	aHome, _ := a.Residence()
 	bHome, _ := b.Residence()
 	offer := func(o EstateOffer) EstateOffer {

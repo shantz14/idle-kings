@@ -91,6 +91,33 @@ func (o MatterOption) ExpectedRealm(realm Realm) Realm {
 	return out
 }
 
+// ExpectedSectors is the average sector change, weighing success and failure.
+func (o MatterOption) ExpectedSectors(realm Realm) map[SectorKey]SectorChange {
+	p := o.SuccessChance(realm) / 100
+	out := map[SectorKey]SectorChange{}
+	add := func(ch map[SectorKey]SectorChange, w float64) {
+		for k, c := range ch {
+			cur := out[k]
+			cur.Health += w * c.Health
+			cur.Capacity += w * c.Capacity
+			out[k] = cur
+		}
+	}
+	add(o.Success.Sectors, p)
+	add(o.Failure.Sectors, 1-p)
+	return out
+}
+
+// sectorLean turns sector changes into a lean: a 10% shock is about 1, and
+// 5 gold/day of permanent capacity about 1.
+func sectorLean(ch map[SectorKey]SectorChange, keys ...SectorKey) float64 {
+	v := 0.0
+	for _, k := range keys {
+		v += 10*ch[k].Health + ch[k].Capacity/5
+	}
+	return v / float64(len(keys))
+}
+
 // Realm danger: senators won't vote to end the realm, and shy away from
 // draining a tracker that is already low.
 const (
@@ -122,7 +149,9 @@ func (o MatterOption) RealmDanger(realm Realm) (penalty float64, fatal bool) {
 	return penalty, fatal
 }
 
-// AllLeans returns the authored leans plus cost, profit and risk.
+// AllLeans returns the authored leans plus the derived ones: cost, profit
+// and risk, and land, commerce and order from what the option does to the
+// sectors and to Stability.
 func (o MatterOption) AllLeans(realm Realm) map[Lean]float64 {
 	out := map[Lean]float64{}
 	for k, v := range o.Leans {
@@ -136,6 +165,10 @@ func (o MatterOption) AllLeans(realm Realm) map[Lean]float64 {
 	if o.Check != nil {
 		out[LeanRisk] += 1
 	}
+	sec := o.ExpectedSectors(realm)
+	out[LeanLand] += sectorLean(sec, SectorAgriculture)
+	out[LeanCommerce] += sectorLean(sec, SectorTrade, SectorLuxury)
+	out[LeanOrder] += o.ExpectedRealm(realm)[AttrStability] / 4
 	return out
 }
 
@@ -547,10 +580,10 @@ var MatterEvents = []MatterEvent{
 		Default: "ignore",
 		Options: []MatterOption{
 			{Key: "arrest", Label: "Arrest him", Hint: "Silence him. His followers won't like it.",
-				Leans:   L{LeanTradition: 1, LeanMilitary: 0.5, LeanPopular: -1},
+				Leans:   L{LeanFaith: 1, LeanTradition: 1, LeanMilitary: 0.5, LeanPopular: -1},
 				Success: MatterOutcome{Text: "The prophet is dragged off in chains.", Realm: R{AttrStability: 3, AttrPopularity: -5}}},
 			{Key: "buy", Label: "Pay him to preach for us", Hint: "Cheap, if he stays bought.",
-				Leans: L{LeanScheme: 2}, Check: flat(50),
+				Leans: L{LeanScheme: 2, LeanFaith: -1}, Check: flat(50),
 				Success: MatterOutcome{Text: "His sermons now praise the Senate's wisdom.", Sectors: SC{SectorBlackMarket: {Health: 0.05}},
 					Realm: R{AttrTreasury: -6, AttrPopularity: 5, AttrStability: 2}},
 				Failure: MatterOutcome{Text: "He takes the money and tells the crowd who paid him.",
@@ -591,7 +624,7 @@ var MatterEvents = []MatterEvent{
 				Success: MatterOutcome{Text: "Keshi physicians break the fever within a month.",
 					Realm: R{AttrTreasury: -20, AttrForeign: 5, AttrPopularity: 3}, Roles: roles("emissary", D{Influence: 1})}},
 			{Key: "pray", Label: "Pray it passes", Hint: "The gods will decide.",
-				Leans: L{LeanTradition: 1.5},
+				Leans: L{LeanFaith: 2, LeanTradition: 1.5},
 				Success: MatterOutcome{Text: "It does not pass quickly.", Sectors: AllSectors(-0.15),
 					Realm: R{AttrPopularity: -12, AttrStability: -8, AttrMilitary: -10}}},
 		},
