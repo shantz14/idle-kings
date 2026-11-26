@@ -54,11 +54,10 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 	fmt.Fprintf(&sb, "Spend %s and **%d gold** on clerks, dinners and copies of your motion, to put a matter before the Senate. ", humanDuration(dur), game.PetitionCost)
 	sb.WriteString("Your petition always reaches the floor: the Senate takes it up at once, as a vote of its own alongside the day's business, with your name on it. ")
 	sb.WriteString("You gain standing if it passes, and look foolish if it fails.\n\n")
-	fmt.Fprintf(&sb, "Laws stand until they are repealed. At most %d can stand at once", game.MaxLaws)
+	fmt.Fprintf(&sb, "Laws stand until they are repealed. At most %d can stand at once; when another passes, the oldest lapses.", game.MaxLaws)
 	if laws.Full() {
-		sb.WriteString(", and that many do: petition to repeal one first")
+		fmt.Fprintf(&sb, " All %d stand: the next one to pass pushes out **%s**.", game.MaxLaws, lawName(laws[0].Key))
 	}
-	sb.WriteString(".")
 	if busy != "" {
 		sb.WriteString("\n\n" + busy)
 	}
@@ -71,6 +70,9 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 	var opts []discordgo.SelectMenuOption
 	for _, p := range game.Petitions(laws) {
 		desc := p.Desc
+		if len(p.Lapses) > 0 {
+			desc = "Pushes out " + lawNames(p.Lapses) + ". " + desc
+		}
 		if slices.Contains(agenda, p.Event) {
 			desc = "Already before the Senate. " + desc
 		}
@@ -86,6 +88,9 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 	}
 	queued := slices.Contains(agenda, p.Event)
 	desc := p.Desc
+	if len(p.Lapses) > 0 {
+		desc += "\n\n⚠️ If the Senate passes this, " + lapseList(laws, p.Lapses) + " lapses to make room."
+	}
 	if queued {
 		desc += "\n\nThe Senate already has this before it."
 	}
@@ -181,4 +186,28 @@ func withDelta(text string, d game.Delta) string {
 		return fmt.Sprintf("%s (%s)", text, s)
 	}
 	return text
+}
+
+// lawNames is "🪙 Debased Coinage and 🪖 Martial Law".
+func lawNames(ks []game.LawKey) string {
+	var names []string
+	for _, k := range ks {
+		names = append(names, lawName(k))
+	}
+	return strings.Join(names, " and ")
+}
+
+// lapseList names the laws that would lapse, in bold, with when each passed.
+func lapseList(laws game.Laws, ks []game.LawKey) string {
+	var names []string
+	for _, k := range ks {
+		n := "**" + lawName(k) + "**"
+		for _, l := range laws {
+			if l.Key == k && !l.Since.IsZero() {
+				n += fmt.Sprintf(" (law since <t:%d:D>)", l.Since.Unix())
+			}
+		}
+		names = append(names, n)
+	}
+	return strings.Join(names, " and ")
 }

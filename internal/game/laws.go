@@ -290,6 +290,14 @@ func (ls Laws) Full() bool { return len(ls) >= MaxLaws }
 
 func (ls Laws) Clone() Laws { return append(Laws(nil), ls...) }
 
+// WouldLapse lists the laws that would lapse if k passed: the oldest, when
+// every slot is taken and k doesn't replace its own rival. It is the warning
+// players see, and follows Apply exactly.
+func (ls Laws) WouldLapse(k LawKey) []LawKey {
+	_, ch := ls.Apply([]LawKey{k}, nil, time.Time{})
+	return ch.Lapsed
+}
+
 // LawChanges is what a decision did to the laws.
 type LawChanges struct {
 	Enacted  []LawKey

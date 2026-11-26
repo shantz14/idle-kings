@@ -169,7 +169,7 @@ func (b *Bot) announceMatter(ctx context.Context, court store.Court, m store.Mat
 		return
 	}
 	msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
-		Embeds:     []*discordgo.MessageEmbed{b.matterEmbedFor(ctx, m, ev, st.Trackers)},
+		Embeds:     []*discordgo.MessageEmbed{b.matterEmbedFor(ctx, m, ev, st.Trackers, st.Laws)},
 		Components: matterButtons(m, ev, true, false),
 	})
 	if err != nil {
@@ -253,7 +253,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, result)
 	if m.MessageID != "" {
-		closed := b.matterEmbedFor(ctx, m, ev, st.Trackers)
+		closed := b.matterEmbedFor(ctx, m, ev, st.Trackers, nil)
 		closed.Fields = []*discordgo.MessageEmbedField{{Name: "Decided", Value: res.Winner.Label}}
 		embeds := []*discordgo.MessageEmbed{closed}
 		empty := []discordgo.MessageComponent{}
@@ -296,15 +296,52 @@ func trackersLine(r game.Realm) string {
 	return strings.Join(parts, " · ")
 }
 
-// matterEmbedFor is matterEmbed with the petitioner's name on a petition.
-func (b *Bot) matterEmbedFor(ctx context.Context, m store.Matter, ev game.MatterEvent, r game.Realm) *discordgo.MessageEmbed {
+// matterEmbedFor is matterEmbed with the petitioner's name on a petition,
+// and a warning for any option that would make a law lapse under laws (nil
+// for a decided matter).
+func (b *Bot) matterEmbedFor(ctx context.Context, m store.Matter, ev game.MatterEvent, r game.Realm, laws game.Laws) *discordgo.MessageEmbed {
 	embed := matterEmbed(m, ev, r)
+	if f := lapseField(ev, laws); f != nil {
+		embed.Fields = append([]*discordgo.MessageEmbedField{f}, embed.Fields...)
+	}
 	if m.PetitionerID != 0 {
 		if p, err := b.store.GetCharacterByID(ctx, m.PetitionerID); err == nil {
 			embed.Footer = &discordgo.MessageEmbedFooter{Text: "Brought before the Senate by the petition of " + p.FullName() + ", House " + p.FamilyName}
 		}
 	}
 	return embed
+}
+
+// lapseField warns which law each option would push out when every law slot
+// is taken, or nil if none would.
+func lapseField(ev game.MatterEvent, laws game.Laws) *discordgo.MessageEmbedField {
+	var lines []string
+	for _, o := range ev.Options {
+		seen := map[game.LawKey]bool{}
+		var names []string
+		for _, out := range []game.MatterOutcome{o.Success, o.Failure} {
+			_, ch := laws.Apply(out.Enact, out.Repeal, time.Time{})
+			for _, k := range ch.Lapsed {
+				if !seen[k] {
+					seen[k] = true
+					names = append(names, "**"+lawName(k)+"**")
+				}
+			}
+		}
+		if len(names) > 0 {
+			lines = append(lines, fmt.Sprintf("If *%s* wins, %s lapses to make room.", o.Label, strings.Join(names, " and ")))
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return &discordgo.MessageEmbedField{Name: fmt.Sprintf("⚠️ All %d laws stand", game.MaxLaws), Value: strings.Join(lines, "\n")}
+}
+
+// lawName is "🪙 Debased Coinage".
+func lawName(k game.LawKey) string {
+	d, _ := game.LawByKey(k)
+	return d.Emoji + " " + d.Name
 }
 
 func matterEmbed(m store.Matter, ev game.MatterEvent, r game.Realm) *discordgo.MessageEmbed {
@@ -431,7 +468,7 @@ func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.Int
 	for i, m := range open {
 		ev, _ := game.MatterByKey(m.EventKey)
 		last := i == len(open)-1 // the shared buttons go on the last one only
-		embeds = append(embeds, b.matterEmbedFor(ctx, m, ev, st.Trackers))
+		embeds = append(embeds, b.matterEmbedFor(ctx, m, ev, st.Trackers, st.Laws))
 		comps = append(comps, matterButtons(m, ev, last, last)...)
 	}
 	if len(open) == 0 && st.Alive() {

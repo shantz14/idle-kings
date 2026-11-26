@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -415,13 +416,32 @@ func TestLawViewsFitDiscord(t *testing.T) {
 	full, none := longestLaws(), game.Laws{}
 	c := store.Character{Name: "A", FamilyName: "B", Wealth: 1000}
 	busy := "You are lobbying the Senate's clerks. You'll know <t:9999999999:R>."
+	for i := range full {
+		full[i].Since = time.Unix(9999999999, 0) // the lapse warning shows the date
+	}
 	for _, ls := range []game.Laws{full, none} {
-		for _, key := range []string{"", game.Petitions(ls)[0].Key} {
+		keys := []string{""}
+		for _, p := range game.Petitions(ls) { // with full laws, pass petitions carry a lapse warning
+			keys = append(keys, p.Key)
+		}
+		for _, key := range keys {
 			checkLimits(t, "petition "+key, petitionView(c, ls, nil, 2*time.Hour, "", key, "a note"))
 			checkLimits(t, "petition busy "+key, petitionView(c, ls, []string{game.Petitions(ls)[0].Event}, 2*time.Hour, busy, key, ""))
 		}
 		checkLimits(t, "laws field", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x",
 			Fields: []*discordgo.MessageEmbedField{lawsField(ls)}}}})
+	}
+	// Every matter announced under a full set of laws, with its lapse warning.
+	for _, ev := range game.MatterEvents {
+		e := (&Bot{}).matterEmbedFor(context.Background(), store.Matter{ID: 999999}, ev, game.StartingRealm(), full)
+		checkLimits(t, "matter under full laws "+ev.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{e}, Components: matterButtons(store.Matter{ID: 999999}, ev, true, true)})
+	}
+	if lapseField(mustMatter(t, game.MotionKey(game.LawSecretBallot)), full) == nil {
+		t.Fatal("a motion under full laws should warn which law lapses")
+	}
+	if lapseField(mustMatter(t, game.MotionKey(game.LawSecretBallot)), none) != nil {
+		t.Fatal("no warning with room to spare")
 	}
 	// Every motion, decided both ways, under the Secret Ballot and not, with
 	// the most laws changing at once.
@@ -440,4 +460,13 @@ func TestLawViewsFitDiscord(t *testing.T) {
 			checkLimits(t, "decision "+ev.Key, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{decisionEmbed(ev, res)}})
 		}
 	}
+}
+
+func mustMatter(t *testing.T, key string) game.MatterEvent {
+	t.Helper()
+	ev, ok := game.MatterByKey(key)
+	if !ok {
+		t.Fatalf("no matter %s", key)
+	}
+	return ev
 }

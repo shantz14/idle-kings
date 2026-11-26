@@ -2,6 +2,7 @@ package game
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -230,11 +231,36 @@ func TestPetitionerIsJudgedByTheVote(t *testing.T) {
 	if _, ok := PetitionByKey("repeal:"+string(LawGrainDole), lawsOf(LawGrainDole)); !ok {
 		t.Fatal("should be able to petition to repeal a law in force")
 	}
+	// The cap never blocks a petition: passing one pushes out the oldest law,
+	// unless it replaces its own rival.
 	full := lawsOf(LawGrainDole, LawSlander, LawInformers, LawMartial, LawSorcery)
+	passes := 0
 	for _, p := range Petitions(full) {
-		if strings.HasPrefix(p.Key, "pass:") {
-			t.Fatalf("no room for %s", p.Key)
+		if !strings.HasPrefix(p.Key, "pass:") {
+			if len(p.Lapses) != 0 {
+				t.Fatalf("a repeal pushes nothing out: %s %v", p.Key, p.Lapses)
+			}
+			continue
 		}
+		passes++
+		k := LawKey(strings.TrimPrefix(p.Key, "pass:"))
+		_, ch := full.Apply([]LawKey{k}, nil, time.Time{})
+		if !slices.Equal(p.Lapses, ch.Lapsed) {
+			t.Fatalf("%s: warns %v, but %v lapse", p.Key, p.Lapses, ch.Lapsed)
+		}
+		if d, _ := LawByKey(k); d.Rival == LawSorcery {
+			if len(p.Lapses) != 0 {
+				t.Fatalf("%s replaces its rival, nothing lapses: %v", p.Key, p.Lapses)
+			}
+		} else if len(p.Lapses) != 1 || p.Lapses[0] != LawGrainDole {
+			t.Fatalf("%s should push out the oldest law: %v", p.Key, p.Lapses)
+		}
+	}
+	if passes == 0 {
+		t.Fatal("a full set of laws should still allow pass petitions")
+	}
+	if p, _ := PetitionByKey("pass:"+string(LawSecretBallot), lawsOf(LawGrainDole)); len(p.Lapses) != 0 {
+		t.Fatalf("with room, nothing lapses: %v", p.Lapses)
 	}
 	if !ResolvePetition(zero{}, Person{}, Petitions(nil)[0]).Success || !ResolvePetition(top{}, Person{}, Petitions(nil)[0]).Success {
 		t.Fatal("a petition always reaches the floor")

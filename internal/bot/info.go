@@ -431,7 +431,7 @@ var helpPages = []struct{ title, body string }{
 		"Decisions change the realm's trackers and can help or hurt players depending on how they voted and their role. Some decisions lead to new matters later, and some matters are chapters in a longer story: what the Senate decides changes what happens next. `/realm` keeps a **Chronicle** of the stories under way.\n\n" +
 		"**Laws**: some decisions pass a **lasting law**, which changes the rules until it is repealed: how votes, bribes, duels, rumors, spies, the shop and your income work. " +
 		fmt.Sprintf("At most %d stand at once; `/realm` lists them. Some laws quietly cost the realm every day. ", game.MaxLaws) +
-		"**Petition the Senate** to put a law, or its repeal, before the Senate yourself. It always reaches the floor, as an extra vote alongside the day's matter.\n\n" +
+		"**Petition the Senate** to put a law, or its repeal, before the Senate yourself. It always reaches the floor, as an extra vote alongside the day's matter. At most 5 laws stand at once: when another passes, the oldest lapses, and you're warned which one before you petition or vote.\n\n" +
 		"**Opinion**: every senator has an opinion of you, from -100 to +100. Voting with them, paying them, selling them your vote, good parties and courting raise it; " +
 		"voting against them, dull parties and rumors lower it, and it fades a little each day. Senators who like you take smaller bribes, pay more for your vote, " +
 		"and may follow your lead on a close vote. Those who hate you won't deal with you at all, and may vote against you out of spite."},

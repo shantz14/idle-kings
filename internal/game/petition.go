@@ -31,20 +31,23 @@ type PetitionDef struct {
 	Name  string
 	Desc  string
 	Event string // the matter it puts on the agenda
+	// Lapses are the laws that would lapse if the Senate passed it (the
+	// oldest, when every slot is taken). Players are warned.
+	Lapses []LawKey
 }
 
 // Petitions are what a player can petition for under the laws in force: any
-// law not in force (while there's room for one), or the repeal of any law
-// that is.
+// law not in force, or the repeal of any law that is. The cap never blocks a
+// petition: passing one past MaxLaws makes the oldest lapse (Lapses).
 func Petitions(ls Laws) []PetitionDef {
 	var out []PetitionDef
 	for _, d := range LawDefs {
 		if ls.Has(d.Key) {
 			out = append(out, PetitionDef{Key: "repeal:" + string(d.Key), Name: "Repeal " + d.Title(),
 				Desc: d.Emoji + " " + d.Desc, Event: RepealKey(d.Key)})
-		} else if !ls.Full() {
+		} else {
 			out = append(out, PetitionDef{Key: "pass:" + string(d.Key), Name: "Pass " + d.Title(),
-				Desc: d.Emoji + " " + d.Desc, Event: MotionKey(d.Key)})
+				Desc: d.Emoji + " " + d.Desc, Event: MotionKey(d.Key), Lapses: ls.WouldLapse(d.Key)})
 		}
 	}
 	return out
