@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -192,60 +193,109 @@ func shuffle(r Roller, n int) []int {
 // noise is a small, fixed per-senator-per-matter wobble so votes aren't
 // perfectly predictable but bribe prices stay stable while voting is open.
 func noise(matterID, senatorID int64, opt string) float64 {
+	// The bytes of "matterID:senatorID:opt", without fmt's allocations.
+	var buf [64]byte
+	b := strconv.AppendInt(buf[:0], matterID, 10)
+	b = append(b, ':')
+	b = strconv.AppendInt(b, senatorID, 10)
+	b = append(b, ':')
+	b = append(b, opt...)
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%d:%d:%s", matterID, senatorID, opt)
+	h.Write(b)
 	return float64(h.Sum64()%2001)/1000 - 1 // [-1, 1]
+}
+
+// optionView is what an option does to the realm as every senator sees it.
+// It doesn't depend on the senator, so a matter works it out once per
+// option instead of once per senator.
+type optionView struct {
+	opt                MatterOption
+	leans              map[Lean]float64
+	expected           Realm
+	danger, reckless   float64
+	fatal, recklessEnd bool
+}
+
+func viewOption(o MatterOption, realm Realm) optionView {
+	v := optionView{opt: o, leans: o.AllLeans(realm), expected: o.ExpectedRealm(realm)}
+	v.danger, v.fatal = o.RealmDanger(realm)
+	v.reckless, v.recklessEnd = danger(realm, v.expected)
+	return v
+}
+
+// viewOptions views every option of a matter, in order.
+func viewOptions(ev MatterEvent, realm Realm) []optionView {
+	out := make([]optionView, len(ev.Options))
+	for i, o := range ev.Options {
+		out[i] = viewOption(o, realm)
+	}
+	return out
 }
 
 // Score is how much a senator likes an option.
 func (s Senator) Score(opt MatterOption, realm Realm, matterID int64) float64 {
-	leans := opt.AllLeans(realm)
+	return s.score(viewOption(opt, realm), realm, matterID)
+}
+
+func (s Senator) score(v optionView, realm Realm, matterID int64) float64 {
 	score := 0.0
 	for _, t := range s.Traits {
 		ti, _ := TraitByKey(t)
 		for l, w := range ti.Likes {
-			score += w * leans[l]
+			score += w * v.leans[l]
 		}
 	}
 	// Every senator cares a little about the realm, most about whatever is low.
-	for a, d := range opt.ExpectedRealm(realm) {
+	for a, d := range v.expected {
 		need := (TrackerMax - realm[a]) / 50
 		score += 0.06 * d * need
 	}
-	score += lawScore(s, opt)
-	danger, _ := s.danger(opt, realm)
-	return score - danger + noise(matterID, s.ID, opt.Key)
+	score += lawScore(s, v.opt)
+	danger, _ := s.dangerOf(v)
+	return score - danger + noise(matterID, s.ID, v.opt.Key)
 }
 
-// danger is how much an option frightens this senator, and whether they
-// think it could end the realm.
-func (s Senator) danger(opt MatterOption, realm Realm) (float64, bool) {
-	if s.Has(TraitReckless) {
-		return opt.RecklessDanger(realm)
+// scores is how much a senator likes each option of a matter, by key.
+func (s Senator) scores(views []optionView, realm Realm, matterID int64) map[string]float64 {
+	out := make(map[string]float64, len(views))
+	for _, v := range views {
+		out[v.opt.Key] = s.score(v, realm, matterID)
 	}
-	return opt.RealmDanger(realm)
+	return out
 }
 
-// Preferred is the option the senator votes for unless bribed.
-func (s Senator) Preferred(ev MatterEvent, realm Realm, matterID int64) string {
+// preferredOf is the best-scoring option, the first one on ties.
+func preferredOf(ev MatterEvent, sc map[string]float64) string {
 	best, bestScore := "", math.Inf(-1)
 	for _, o := range ev.Options {
-		if sc := s.Score(o, realm, matterID); sc > bestScore {
-			best, bestScore = o.Key, sc
+		if v := sc[o.Key]; v > bestScore {
+			best, bestScore = o.Key, v
 		}
 	}
 	return best
 }
 
+// dangerOf is danger for an option already viewed.
+func (s Senator) dangerOf(v optionView) (float64, bool) {
+	if s.Has(TraitReckless) {
+		return v.reckless, v.recklessEnd
+	}
+	return v.danger, v.fatal
+}
+
+// Preferred is the option the senator votes for unless bribed.
+func (s Senator) Preferred(ev MatterEvent, realm Realm, matterID int64) string {
+	return preferredOf(ev, s.scores(viewOptions(ev, realm), realm, matterID))
+}
+
 // decide is how a senator actually votes when the matter closes: their own
 // preference, pulled toward players they like and away from players they
 // don't.
-func (s Senator) decide(ev MatterEvent, realm Realm, matterID int64, players []Player, ops CourtOpinions) string {
+func (s Senator) decide(ev MatterEvent, sc map[string]float64, players []Player, ops CourtOpinions) string {
 	best, bestScore := "", math.Inf(-1)
 	for _, o := range ev.Options {
-		sc := s.Score(o, realm, matterID) + followBonus(s, o.Key, players, ops)
-		if sc > bestScore {
-			best, bestScore = o.Key, sc
+		if v := sc[o.Key] + followBonus(s, o.Key, players, ops); v > bestScore {
+			best, bestScore = o.Key, v
 		}
 	}
 	return best
@@ -258,12 +308,14 @@ func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID
 	if s.Has(TraitIncorruptible) {
 		return 0, false
 	}
-	if o, ok := ev.Option(optKey); ok {
-		if _, fatal := s.danger(o, realm); fatal { // no price is worth the realm
+	views := viewOptions(ev, realm)
+	for _, v := range views {
+		if _, fatal := s.dangerOf(v); v.opt.Key == optKey && fatal { // no price is worth the realm
 			return 0, false
 		}
 	}
-	pref := s.Preferred(ev, realm, matterID)
+	sc := s.scores(views, realm, matterID)
+	pref := preferredOf(ev, sc)
 	base := float64(s.BasePrice)
 	if s.Has(TraitGreedy) {
 		base *= 0.5
@@ -271,17 +323,17 @@ func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID
 	if pref == optKey {
 		return int(math.Ceil(base / 2)), true
 	}
-	var prefOpt, want MatterOption
-	for _, o := range ev.Options {
-		if o.Key == pref {
-			prefOpt = o
-		}
-		if o.Key == optKey {
-			want = o
-		}
-	}
-	gap := s.Score(prefOpt, realm, matterID) - s.Score(want, realm, matterID)
+	gap := sc[pref] - s.wantScore(sc, optKey, realm, matterID)
 	return int(math.Ceil(base * (1 + gap))), true
+}
+
+// wantScore is the score of the option a briber wants. An unknown option
+// scores as the zero option did before (no leans, no effects).
+func (s Senator) wantScore(sc map[string]float64, optKey string, realm Realm, matterID int64) float64 {
+	if v, ok := sc[optKey]; ok {
+		return v
+	}
+	return s.Score(MatterOption{}, realm, matterID)
 }
 
 // VoteOffer is what this senator will pay a player for their vote. They
@@ -292,10 +344,11 @@ func (s Senator) VoteOffer(ev MatterEvent, voterInfluence float64, realm Realm, 
 	if s.Has(TraitIncorruptible) {
 		return "", 0, false
 	}
-	opt = s.Preferred(ev, realm, matterID)
+	scores := s.scores(viewOptions(ev, realm), realm, matterID)
+	opt = preferredOf(ev, scores)
 	best, second := math.Inf(-1), math.Inf(-1)
 	for _, o := range ev.Options {
-		sc := s.Score(o, realm, matterID)
+		sc := scores[o.Key]
 		if sc > best {
 			best, second = sc, best
 		} else if sc > second {
@@ -512,9 +565,16 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	secret := in.Laws.Rules().SecretBallot
 	res.Secret = secret
 
+	// Every senator's view of every option, worked out once for the vote
+	// and for how they take each player's vote afterwards.
+	views := viewOptions(ev, in.Realm)
+	senScores := make(map[int64]map[string]float64, len(in.Senators))
+	for _, s := range in.Senators {
+		senScores[s.ID] = s.scores(views, in.Realm, in.MatterID)
+	}
 	senVotes := map[int64]string{}
 	for _, s := range in.Senators {
-		opt := s.decide(ev, in.Realm, in.MatterID, in.Players, in.Opinions)
+		opt := s.decide(ev, senScores[s.ID], in.Players, in.Opinions)
 		if b, ok := in.Bribes[s.ID]; ok {
 			opt = b
 		}
@@ -591,7 +651,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		// Opinions move quietly; players see them on the senators' screens.
 		for _, s := range in.Senators {
 			res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: p.ID,
-				Delta: voteOpinion(s, ev, in.Realm, in.MatterID, senVotes[s.ID], p.Vote)})
+				Delta: voteOpinion(ev, senScores[s.ID], senVotes[s.ID], p.Vote)})
 		}
 	}
 	petitionerResult(&res, in)

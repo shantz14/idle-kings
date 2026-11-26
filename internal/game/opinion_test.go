@@ -72,15 +72,15 @@ func TestSenatorsFollowFriends(t *testing.T) {
 	}
 	friend := Player{Person: Person{ID: 7}, Vote: "spend", Weight: 0.1}
 	ops := CourtOpinions{1: {7: 100}}
-	if got := s.decide(testMatter, realm, matter, []Player{friend}, nil); got != "cheap" {
+	if got := s.decide(testMatter, s.scores(viewOptions(testMatter, realm), realm, matter), []Player{friend}, nil); got != "cheap" {
 		t.Fatalf("without opinion they vote %s", got)
 	}
-	if got := s.decide(testMatter, realm, matter, []Player{friend}, ops); got != "spend" {
+	if got := s.decide(testMatter, s.scores(viewOptions(testMatter, realm), realm, matter), []Player{friend}, ops); got != "spend" {
 		t.Fatal("a devoted senator should follow a friend on a close call")
 	}
 	enemy := Player{Person: Person{ID: 9}, Vote: "cheap", Weight: 0.1}
 	ops = CourtOpinions{1: {9: -100}}
-	if got := s.decide(testMatter, realm, matter, []Player{enemy}, ops); got != "spend" {
+	if got := s.decide(testMatter, s.scores(viewOptions(testMatter, realm), realm, matter), []Player{enemy}, ops); got != "spend" {
 		t.Fatal("a hostile senator should vote against an enemy on a close call")
 	}
 }

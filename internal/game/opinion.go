@@ -151,11 +151,8 @@ func BribeOpinion(s Senator) float64 {
 
 // voteOpinion is how a senator feels about a player's vote: warmer if they
 // voted together, cooler if not, more so the more the senator cared.
-func voteOpinion(s Senator, ev MatterEvent, realm Realm, matterID int64, senVote, playerVote string) float64 {
-	score := func(key string) float64 {
-		o, _ := ev.Option(key)
-		return s.Score(o, realm, matterID)
-	}
+func voteOpinion(ev MatterEvent, sc map[string]float64, senVote, playerVote string) float64 {
+	score := func(key string) float64 { return sc[key] }
 	if senVote == playerVote {
 		next := math.Inf(-1)
 		for _, o := range ev.Options {
