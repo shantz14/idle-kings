@@ -29,12 +29,13 @@ const (
 // Sheet is a flat view of a character for checks.
 type Sheet map[Attr]float64
 
-// NewSheet builds a Sheet from a character's parts.
+// NewSheet builds a Sheet from a character's parts. estate is the estate
+// value; checks see its EstateScore.
 func NewSheet(stats Stats, influence, renown, estate float64, wealth int) Sheet {
 	s := Sheet{
 		AttrInfluence: influence,
 		AttrRenown:    renown,
-		AttrEstate:    estate,
+		AttrEstate:    EstateScore(estate),
 		AttrWealth:    float64(wealth),
 	}
 	for st, v := range stats {

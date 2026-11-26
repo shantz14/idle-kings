@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shantz14/idle-kings/internal/game"
 )
 
 var (
-	ErrBusy     = errors.New("you are already hosting something")
+	ErrBusy     = errors.New("you are already busy with something")
 	ErrEnded    = errors.New("that has already ended")
 	ErrOwnEvent = errors.New("you can't attend your own event")
 )
@@ -23,7 +24,8 @@ type Activity struct {
 	HostID            int64
 	Kind              string
 	Goal              string
-	Spend             int // gold the host paid up front
+	Spend             int   // gold the host paid up front
+	TargetID          int64 // kind-specific, e.g. the senator being courted
 	Public            bool
 	AnnounceChannelID string
 	AnnounceMessageID string
@@ -33,9 +35,10 @@ type Activity struct {
 }
 
 type NewEvent struct {
-	Key      string
-	FiresAt  time.Time
-	Deadline time.Time
+	CharacterID int64 // who gets it; 0 = the host
+	Key         string
+	FiresAt     time.Time
+	Deadline    time.Time
 }
 
 type Participant struct {
@@ -54,7 +57,41 @@ type Event struct {
 	Deadline    time.Time
 	DMChannelID string
 	DMMessageID string
+	Choice      string // the chosen option, once answered
 	Result      *game.EventOutcome
+}
+
+// Outcome is everything an activity changes when it resolves.
+type Outcome struct {
+	Deltas     map[int64]game.Delta
+	Opinions   []game.OpinionChange
+	Conditions []NewCondition
+	Spies      []game.SpyChange
+	Realm      game.Realm    // change to the court's trackers
+	Monuments  []NewMonument // finished public works
+}
+
+// NewMonument records a finished public work.
+type NewMonument struct {
+	CharacterID int64
+	Key         string
+}
+
+// ErrBuilt means the character already has that public work.
+var (
+	ErrBuilt    = errors.New("you have already built one of those")
+	ErrBuilding = errors.New("you are already building something")
+)
+
+// slotFilter is the SQL condition for activities that take up a
+// character's action (all but game.FreeKinds), with its args.
+func slotFilter() (string, []any) {
+	q, args := "1 = 1", []any{}
+	for _, k := range game.FreeKinds {
+		q += " AND kind != ?"
+		args = append(args, k)
+	}
+	return q, args
 }
 
 // StartActivity pays the cost (recorded as the activity's Spend) and creates the activity with its scheduled
@@ -66,13 +103,32 @@ func (s *Store) StartActivity(ctx context.Context, a Activity, cost int, events 
 	}
 	defer tx.Rollback()
 
+	// Slot kinds compete for the one action; a free kind only with itself.
 	var busy int
+	where, args := slotFilter()
+	if !game.UsesSlot(a.Kind) {
+		where, args = "kind = ?", []any{a.Kind}
+	}
 	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM activities WHERE host_id = ? AND resolved_at IS NULL`, a.HostID).Scan(&busy); err != nil {
+		`SELECT COUNT(*) FROM activities WHERE host_id = ? AND resolved_at IS NULL AND `+where,
+		append([]any{a.HostID}, args...)...).Scan(&busy); err != nil {
 		return a, err
 	}
 	if busy > 0 {
+		if !game.UsesSlot(a.Kind) {
+			return a, ErrBuilding
+		}
 		return a, ErrBusy
+	}
+	if a.Kind == game.KindWork {
+		var built int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM monuments WHERE character_id = ? AND work_key = ?`,
+			a.HostID, a.Goal).Scan(&built); err != nil {
+			return a, err
+		}
+		if built > 0 {
+			return a, ErrBuilt
+		}
 	}
 	if cost > 0 {
 		res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, cost, a.HostID, cost)
@@ -85,18 +141,14 @@ func (s *Store) StartActivity(ctx context.Context, a Activity, cost int, events 
 	}
 	a.Spend = cost
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO activities (guild_id, host_id, kind, goal, spend, public, started_at, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.GuildID, a.HostID, a.Kind, a.Goal, a.Spend, a.Public, a.StartedAt.Unix(), a.EndsAt.Unix())
+		`INSERT INTO activities (guild_id, host_id, kind, goal, spend, target_id, public, started_at, ends_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.GuildID, a.HostID, a.Kind, a.Goal, a.Spend, a.TargetID, a.Public, a.StartedAt.Unix(), a.EndsAt.Unix())
 	if err != nil {
 		return a, err
 	}
 	a.ID, _ = res.LastInsertId()
-	for _, e := range events {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO activity_events (activity_id, character_id, event_key, fires_at, deadline_at) VALUES (?, ?, ?, ?, ?)`,
-			a.ID, a.HostID, e.Key, e.FiresAt.Unix(), e.Deadline.Unix()); err != nil {
-			return a, err
-		}
+	if err := insertEvents(ctx, tx, a, events); err != nil {
+		return a, err
 	}
 	return a, tx.Commit()
 }
@@ -107,14 +159,14 @@ func (s *Store) SetAnnouncement(ctx context.Context, activityID int64, channelID
 	return err
 }
 
-const activityCols = `id, guild_id, host_id, kind, goal, spend, public, announce_channel_id, announce_message_id, started_at, ends_at, resolved_at`
+const activityCols = `id, guild_id, host_id, kind, goal, spend, target_id, public, announce_channel_id, announce_message_id, started_at, ends_at, resolved_at`
 
 func scanActivity(row scanner) (Activity, error) {
 	var a Activity
 	var ch, msg sql.NullString
 	var started, ends int64
 	var resolved sql.NullInt64
-	err := row.Scan(&a.ID, &a.GuildID, &a.HostID, &a.Kind, &a.Goal, &a.Spend, &a.Public, &ch, &msg, &started, &ends, &resolved)
+	err := row.Scan(&a.ID, &a.GuildID, &a.HostID, &a.Kind, &a.Goal, &a.Spend, &a.TargetID, &a.Public, &ch, &msg, &started, &ends, &resolved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -127,10 +179,20 @@ func (s *Store) GetActivity(ctx context.Context, id int64) (Activity, error) {
 	return scanActivity(s.db.QueryRowContext(ctx, `SELECT `+activityCols+` FROM activities WHERE id = ?`, id))
 }
 
-// HostedActivity returns the character's unresolved hosted activity.
+// HostedActivity returns the character's unresolved activity that takes up
+// their action. Public works being built don't count; see WorkInProgress.
 func (s *Store) HostedActivity(ctx context.Context, hostID int64) (Activity, error) {
+	where, args := slotFilter()
 	return scanActivity(s.db.QueryRowContext(ctx,
-		`SELECT `+activityCols+` FROM activities WHERE host_id = ? AND resolved_at IS NULL`, hostID))
+		`SELECT `+activityCols+` FROM activities WHERE host_id = ? AND resolved_at IS NULL AND `+where+` LIMIT 1`,
+		append([]any{hostID}, args...)...))
+}
+
+// WorkInProgress returns the public work the character is building.
+func (s *Store) WorkInProgress(ctx context.Context, hostID int64) (Activity, error) {
+	return scanActivity(s.db.QueryRowContext(ctx,
+		`SELECT `+activityCols+` FROM activities WHERE host_id = ? AND kind = ? AND resolved_at IS NULL LIMIT 1`,
+		hostID, game.KindWork))
 }
 
 // EndedActivities lists unresolved activities whose time is up.
@@ -208,13 +270,28 @@ func (s *Store) Participants(ctx context.Context, activityID int64) ([]Participa
 	for i := range out {
 		ptrs[i] = &out[i].Character
 	}
-	return out, s.fillItems(ctx, ptrs)
+	return out, s.fillAll(ctx, ptrs)
 }
 
 // ---- events ----
 
 const eventCols = `e.id, e.activity_id, e.character_id, c.user_id, e.event_key, e.fires_at, e.deadline_at,
-	e.dm_channel_id, e.dm_message_id, e.result`
+	e.dm_channel_id, e.dm_message_id, COALESCE(e.choice, ''), e.result`
+
+func insertEvents(ctx context.Context, tx *sql.Tx, a Activity, events []NewEvent) error {
+	for _, e := range events {
+		who := e.CharacterID
+		if who == 0 {
+			who = a.HostID
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO activity_events (activity_id, character_id, event_key, fires_at, deadline_at) VALUES (?, ?, ?, ?, ?)`,
+			a.ID, who, e.Key, e.FiresAt.Unix(), e.Deadline.Unix()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func (s *Store) queryEvents(ctx context.Context, where string, args ...any) ([]Event, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -228,7 +305,7 @@ func (s *Store) queryEvents(ctx context.Context, where string, args ...any) ([]E
 		var e Event
 		var fires, deadline int64
 		var ch, msg, result sql.NullString
-		if err := rows.Scan(&e.ID, &e.ActivityID, &e.CharacterID, &e.UserID, &e.Key, &fires, &deadline, &ch, &msg, &result); err != nil {
+		if err := rows.Scan(&e.ID, &e.ActivityID, &e.CharacterID, &e.UserID, &e.Key, &fires, &deadline, &ch, &msg, &e.Choice, &result); err != nil {
 			return nil, err
 		}
 		e.FiresAt, e.Deadline = time.Unix(fires, 0), time.Unix(deadline, 0)
@@ -298,8 +375,8 @@ func (s *Store) ResolveEvent(ctx context.Context, id int64, choice string, out g
 	return nil
 }
 
-// ApplyResult applies every delta and marks the activity resolved, once.
-func (s *Store) ApplyResult(ctx context.Context, activityID int64, deltas map[int64]game.Delta, now time.Time) error {
+// ApplyResult applies an activity's outcome and marks it resolved, once.
+func (s *Store) ApplyResult(ctx context.Context, activityID int64, out Outcome, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -312,10 +389,87 @@ func (s *Store) ApplyResult(ctx context.Context, activityID int64, deltas map[in
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrEnded
 	}
-	for id, d := range deltas {
+	var guildID string
+	if err := tx.QueryRowContext(ctx, `SELECT guild_id FROM activities WHERE id = ?`, activityID).Scan(&guildID); err != nil {
+		return err
+	}
+	if err := applyOutcome(ctx, tx, guildID, out, now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, now time.Time) error {
+	if len(out.Realm) > 0 {
+		if err := applyRealm(ctx, tx, guildID, out.Realm); err != nil {
+			return err
+		}
+	}
+	for _, m := range out.Monuments {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO monuments (character_id, work_key, built_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
+			m.CharacterID, m.Key, now.Unix()); err != nil {
+			return err
+		}
+	}
+	for id, d := range out.Deltas {
 		if err := applyDelta(ctx, tx, id, d); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := changeOpinions(ctx, tx, out.Opinions); err != nil {
+		return err
+	}
+	if err := changeSpies(ctx, tx, out.Spies); err != nil {
+		return err
+	}
+	return addConditions(ctx, tx, out.Conditions)
+}
+
+// applyRealm adds a change to a court's trackers, clamped to their range.
+func applyRealm(ctx context.Context, tx *sql.Tx, guildID string, d game.Realm) error {
+	var raw string
+	err := tx.QueryRowContext(ctx, `SELECT trackers FROM realms WHERE guild_id = ?`, guildID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // no realm yet: nothing to change
+	} else if err != nil {
+		return err
+	}
+	r := game.Realm{}
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		return err
+	}
+	r.Apply(d)
+	b, _ := json.Marshal(r)
+	_, err = tx.ExecContext(ctx, `UPDATE realms SET trackers = ? WHERE guild_id = ?`, string(b), guildID)
+	return err
+}
+
+// fillMonuments loads each character's finished public works.
+func (s *Store) fillMonuments(ctx context.Context, chars []*Character) error {
+	if len(chars) == 0 {
+		return nil
+	}
+	byID := map[int64]*Character{}
+	args := make([]any, 0, len(chars))
+	for _, c := range chars {
+		byID[c.ID] = c
+		c.Monuments = nil
+		args = append(args, c.ID)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT character_id, work_key FROM monuments WHERE character_id IN (?`+
+		strings.Repeat(",?", len(args)-1)+`) ORDER BY built_at, work_key`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var key string
+		if err := rows.Scan(&id, &key); err != nil {
+			return err
+		}
+		byID[id].Monuments = append(byID[id].Monuments, key)
+	}
+	return rows.Err()
 }

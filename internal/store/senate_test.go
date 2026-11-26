@@ -39,7 +39,7 @@ func TestSenateLifecycle(t *testing.T) {
 		t.Fatalf("running courts: %v", courts)
 	}
 
-	m, err := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now.Add(2*time.Hour), []string{"grand_games"})
+	m, err := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now.Add(2*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +55,13 @@ func TestSenateLifecycle(t *testing.T) {
 	if v, _ := s.Votes(ctx, m.ID); v[c.ID] != "none" {
 		t.Fatalf("votes: %v", v)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "none", 30, now); err != nil {
+	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "none", 30, 3, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "lavish", 30, now); !errors.Is(err, ErrBought) {
+	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "lavish", 30, 3, now); !errors.Is(err, ErrBought) {
 		t.Fatalf("double bribe: %v", err)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[1].ID, c.ID, "none", 100000, now); err == nil {
+	if err := s.PayBribe(ctx, m.ID, got[1].ID, c.ID, "none", 100000, 3, now); err == nil {
 		t.Fatal("bribe beyond means should fail")
 	}
 	if b, _ := s.Bribes(ctx, m.ID); len(b) != 1 {
@@ -87,7 +87,7 @@ func TestSenateLifecycle(t *testing.T) {
 		t.Fatalf("double resolve: %v", err)
 	}
 	st, _ := s.GetRealm(ctx, "g")
-	if st.Alive() || st.Recent[0] != "grand_games" {
+	if recent, _ := s.RecentEventKeys(ctx, "g", 10); st.Alive() || len(recent) != 1 || recent[0] != "grand_games" {
 		t.Fatalf("realm: %+v", st)
 	}
 	if courts, _ := s.RunningCourts(ctx); len(courts) != 0 {
@@ -111,7 +111,7 @@ func TestVoteSelling(t *testing.T) {
 	buyer := newChar(t, s, "b", "merchant")
 	third := newChar(t, s, "c", "cupbearer")
 	now := time.Now()
-	m, _ := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now.Add(2*time.Hour), nil)
+	m, _ := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now.Add(2*time.Hour))
 
 	// Player sells to player; buyer picks the option on accepting.
 	o, err := s.CreateOffer(ctx, VoteOffer{MatterID: m.ID, Kind: OfferSell, FromID: seller.ID, ToID: buyer.ID, Price: 25}, now)
@@ -145,10 +145,10 @@ func TestVoteSelling(t *testing.T) {
 	}
 
 	// Selling to a senator pays and locks.
-	if err := s.SellVoteToSenator(ctx, m.ID, third.ID, "modest", "Varro Kell", 12, now); err != nil {
+	if err := s.SellVoteToSenator(ctx, m.ID, third.ID, "modest", game.Senator{Name: "Varro Kell"}, 12, 0, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SellVoteToSenator(ctx, m.ID, third.ID, "none", "Varro Kell", 12, now); !errors.Is(err, ErrVoteSold) {
+	if err := s.SellVoteToSenator(ctx, m.ID, third.ID, "none", game.Senator{Name: "Varro Kell"}, 12, 0, now); !errors.Is(err, ErrVoteSold) {
 		t.Fatalf("sold twice: %v", err)
 	}
 	if v, _ := s.Votes(ctx, m.ID); v[third.ID] != "modest" || v[seller.ID] != "lavish" {
@@ -171,7 +171,7 @@ func TestRecentDecisions(t *testing.T) {
 	_ = s.ClaimAdmin(ctx, "g", "a")
 	now := time.Now()
 	_ = s.CreateRealm(ctx, "g", game.StartingRealm(), nil, now)
-	m, _ := s.CreateMatter(ctx, "g", "grand_games", 0, now, now, now, nil)
+	m, _ := s.CreateMatter(ctx, "g", "grand_games", 0, now, now, now)
 	err := s.ResolveMatter(ctx, m, MatterResolution{Summary: map[string]any{"winner": "lavish", "succeeded": true},
 		Realm: game.StartingRealm()}, now)
 	if err != nil {

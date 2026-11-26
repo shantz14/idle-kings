@@ -160,8 +160,92 @@ func TestVoteOffers(t *testing.T) {
 	if _, _, ok := (Senator{Traits: []Trait{TraitIncorruptible}}).VoteOffer(testMatter, 5, realm, 1); ok {
 		t.Fatal("incorruptible senators don't buy votes")
 	}
-	offers := BestVoteOffers(testMatter, []Senator{hawk, {ID: 1, Traits: []Trait{TraitEconomical}}}, 5, realm, 1)
+	offers := BestVoteOffers(testMatter, []Senator{hawk, {ID: 1, Traits: []Trait{TraitEconomical}}}, 5, realm, 1, nil)
 	if offers["spend"].Senator.ID != 2 || offers["cheap"].Senator.ID != 1 {
 		t.Fatalf("offers: %+v", offers)
+	}
+}
+
+func TestPickMatterVariety(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 4))
+	var recent []string
+	for day := 0; day < 200; day++ {
+		ev := PickMatter(r, StartingRealm(), recent)
+		if ev.Key == "" || ev.FollowUpOnly {
+			t.Fatalf("day %d: bad pick %+v", day, ev.Key)
+		}
+		for _, k := range recent[max(0, len(recent)-MatterCooldown):] {
+			if k == ev.Key {
+				t.Fatalf("day %d: %s repeated within %d matters", day, ev.Key, MatterCooldown)
+			}
+		}
+		if len(recent) > 0 && lastTheme(recent) == ev.Theme {
+			t.Fatalf("day %d: theme %s twice in a row", day, ev.Theme)
+		}
+		recent = append(recent, ev.Key)
+	}
+}
+
+func TestEveryMatterHasATheme(t *testing.T) {
+	random := 0
+	for _, e := range MatterEvents {
+		if e.Theme == "" {
+			t.Errorf("%s has no theme", e.Key)
+		}
+		if !e.FollowUpOnly {
+			random++
+		}
+		for _, o := range e.Options {
+			for _, out := range []MatterOutcome{o.Success, o.Failure} {
+				for _, f := range out.FollowUps {
+					if _, ok := MatterByKey(f.Event); !ok {
+						t.Errorf("%s/%s: unknown follow-up %s", e.Key, o.Key, f.Event)
+					}
+				}
+			}
+		}
+		if _, ok := e.Option(e.Default); !ok {
+			t.Errorf("%s: default %s is not an option", e.Key, e.Default)
+		}
+	}
+	if random < MatterCooldown+10 {
+		t.Fatalf("only %d random events; the cooldown would leave too few to pick from", random)
+	}
+}
+
+func TestFollowUpNeverRepeatsLastMatter(t *testing.T) {
+	if FollowUpAllowed("plague", []string{"grand_games", "plague"}) {
+		t.Fatal("a follow-up must not repeat the matter just before")
+	}
+	if !FollowUpAllowed("plague", []string{"plague", "grand_games"}) || !FollowUpAllowed("plague", nil) {
+		t.Fatal("follow-ups may break the cooldown")
+	}
+}
+
+func TestSenatorsWontEndTheRealm(t *testing.T) {
+	ev := MatterEvent{Key: "test", Default: "keep", Options: []MatterOption{
+		{Key: "spend", Leans: map[Lean]float64{LeanPopular: 3, LeanMilitary: 3, LeanTradition: 3},
+			Success: MatterOutcome{Realm: Realm{AttrTreasury: -15}}},
+		{Key: "keep", Success: MatterOutcome{}},
+	}}
+	broke := Realm{AttrTreasury: 11, AttrMilitary: 70, AttrStability: 70, AttrPopularity: 70, AttrForeign: 70}
+	if _, fatal := ev.Options[0].RealmDanger(broke); !fatal {
+		t.Fatal("spending 15 from 11 should be fatal")
+	}
+	r := rand.New(rand.NewPCG(3, 4))
+	for g := 0; g < 50; g++ {
+		for i, s := range GenerateSenate(r, SenateSize) {
+			s.ID = int64(i + 1)
+			if p := s.Preferred(ev, broke, int64(g)); p != "keep" {
+				t.Fatalf("senator %s (%v) voted to bankrupt the realm", s.Name, s.Traits)
+			}
+			if _, ok := s.BribePrice(ev, "spend", broke, int64(g)); ok {
+				t.Fatalf("senator %s took a bribe to bankrupt the realm", s.Name)
+			}
+		}
+	}
+	rich := Realm{AttrTreasury: 60, AttrMilitary: 70, AttrStability: 70, AttrPopularity: 70, AttrForeign: 70}
+	if d, fatal := ev.Options[0].RealmDanger(rich); fatal || d != 0 {
+		t.Errorf("a rich realm shouldn't fear spending: %v %v", d, fatal)
 	}
 }

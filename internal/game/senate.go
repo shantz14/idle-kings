@@ -210,7 +210,8 @@ func (s Senator) Score(opt MatterOption, realm Realm, matterID int64) float64 {
 		need := (TrackerMax - realm[a]) / 50
 		score += 0.06 * d * need
 	}
-	return score + noise(matterID, s.ID, opt.Key)
+	danger, _ := opt.RealmDanger(realm)
+	return score - danger + noise(matterID, s.ID, opt.Key)
 }
 
 // Preferred is the option the senator votes for unless bribed.
@@ -224,12 +225,31 @@ func (s Senator) Preferred(ev MatterEvent, realm Realm, matterID int64) string {
 	return best
 }
 
+// decide is how a senator actually votes when the matter closes: their own
+// preference, pulled toward players they like and away from players they
+// don't.
+func (s Senator) decide(ev MatterEvent, realm Realm, matterID int64, players []Player, ops CourtOpinions) string {
+	best, bestScore := "", math.Inf(-1)
+	for _, o := range ev.Options {
+		sc := s.Score(o, realm, matterID) + followBonus(s, o.Key, players, ops)
+		if sc > bestScore {
+			best, bestScore = o.Key, sc
+		}
+	}
+	return best
+}
+
 // BribePrice is what it costs to buy this senator's vote for an option.
 // The further it is from what they want, the more it costs. ok is false if
 // they can't be bought.
 func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID int64) (price int, ok bool) {
 	if s.Has(TraitIncorruptible) {
 		return 0, false
+	}
+	if o, ok := ev.Option(optKey); ok {
+		if _, fatal := o.RealmDanger(realm); fatal { // no price is worth the realm
+			return 0, false
+		}
 	}
 	pref := s.Preferred(ev, realm, matterID)
 	base := float64(s.BasePrice)
@@ -287,10 +307,11 @@ func (s Senator) VoteOffer(ev MatterEvent, voterInfluence float64, realm Realm, 
 const VoteOfferRate = 1.2
 
 // BestVoteOffers is, per option, the senator paying the most for it.
-func BestVoteOffers(ev MatterEvent, senators []Senator, voterInfluence float64, realm Realm, matterID int64) map[string]VoteOfferFrom {
+// ops is the senators' opinions of the voter (nil = all neutral).
+func BestVoteOffers(ev MatterEvent, senators []Senator, voterInfluence float64, realm Realm, matterID int64, ops Opinions) map[string]VoteOfferFrom {
 	out := map[string]VoteOfferFrom{}
 	for _, s := range senators {
-		opt, gold, ok := s.VoteOffer(ev, voterInfluence, realm, matterID)
+		opt, gold, ok := s.VoteOfferFor(ev, voterInfluence, realm, matterID, ops[s.ID])
 		if ok && gold > out[opt].Gold {
 			out[opt] = VoteOfferFrom{Senator: s, Gold: gold}
 		}
@@ -305,9 +326,62 @@ type VoteOfferFrom struct {
 
 // ---- picking the day's matter ----
 
-// PickMatter chooses a random non-follow-up event, avoiding recent ones and
-// favoring events whose Bias trackers are low.
+// Theme groups related Senate events.
+type Theme string
+
+const (
+	ThemeBarbarians Theme = "barbarians"
+	ThemeBandits    Theme = "bandits"
+	ThemeFood       Theme = "food"
+	ThemeSickness   Theme = "sickness"
+	ThemeForeign    Theme = "foreign"
+	ThemeSoldiers   Theme = "soldiers"
+	ThemeMoney      Theme = "money"
+	ThemeFaith      Theme = "faith"
+	ThemeWorks      Theme = "works" // walls, aqueducts, libraries
+	ThemePeople     Theme = "people"
+	ThemeSea        Theme = "sea"
+	ThemeLand       Theme = "land" // fires, floods, forests
+)
+
+// MatterCooldown is how many matters must pass before an event can be
+// picked again.
+const MatterCooldown = 10
+
+// lastTheme is the theme of the most recent event in recent (oldest first).
+func lastTheme(recent []string) Theme {
+	if len(recent) == 0 {
+		return ""
+	}
+	e, _ := MatterByKey(recent[len(recent)-1])
+	return e.Theme
+}
+
+// FollowUpAllowed reports whether a queued follow-up may open now. Chains may
+// break the cooldown, but never repeat the matter just before.
+func FollowUpAllowed(key string, recent []string) bool {
+	return len(recent) == 0 || recent[len(recent)-1] != key
+}
+
+// PickMatter chooses a random non-follow-up event, favoring events whose Bias
+// trackers are low. recent is the latest event keys, oldest first: none of
+// the last MatterCooldown repeat, and the theme of the last one is skipped.
+// If that leaves nothing, the theme rule and then the cooldown are relaxed.
 func PickMatter(r Roller, realm Realm, recent []string) MatterEvent {
+	if len(recent) > MatterCooldown {
+		recent = recent[len(recent)-MatterCooldown:]
+	}
+	if e, ok := pickMatter(r, realm, recent, lastTheme(recent)); ok {
+		return e
+	}
+	if e, ok := pickMatter(r, realm, recent, ""); ok {
+		return e
+	}
+	e, _ := pickMatter(r, realm, nil, "")
+	return e
+}
+
+func pickMatter(r Roller, realm Realm, recent []string, avoid Theme) (MatterEvent, bool) {
 	skip := map[string]bool{}
 	for _, k := range recent {
 		skip[k] = true
@@ -316,7 +390,7 @@ func PickMatter(r Roller, realm Realm, recent []string) MatterEvent {
 	var weights []float64
 	total := 0.0
 	for _, e := range MatterEvents {
-		if e.FollowUpOnly || skip[e.Key] {
+		if e.FollowUpOnly || skip[e.Key] || (avoid != "" && e.Theme == avoid) {
 			continue
 		}
 		w := 1.0
@@ -331,11 +405,14 @@ func PickMatter(r Roller, realm Realm, recent []string) MatterEvent {
 	x := float64(r.IntN(10000)) / 10000 * total
 	for i, w := range weights {
 		if x < w {
-			return pool[i]
+			return pool[i], true
 		}
 		x -= w
 	}
-	return pool[len(pool)-1]
+	if len(pool) == 0 {
+		return MatterEvent{}, false
+	}
+	return pool[len(pool)-1], true
 }
 
 // ---- resolution ----
@@ -352,9 +429,11 @@ type MatterInput struct {
 	MatterID int64
 	Event    MatterEvent
 	Realm    Realm
+	Sectors  SectorState
 	Senators []Senator
 	Bribes   map[int64]string // senator ID -> option they were paid to vote for
 	Players  []Player
+	Opinions CourtOpinions // senators' opinions of players; nil = all neutral
 }
 
 type CastVote struct {
@@ -375,12 +454,14 @@ type MatterResult struct {
 	Votes        []CastVote
 	Succeeded    bool // the option's roll, if it had one
 	Outcome      MatterOutcome
-	Realm        Realm // after
+	Realm        Realm       // after
+	Sectors      SectorState // after
 	Fallen       bool
 	FallenReason string
 	Deltas       map[int64]Delta
 	Notices      map[int64][]string
 	FollowUps    []QueuedEvent
+	Opinions     []OpinionChange // how each senator now feels about each voter
 }
 
 // ResolveMatter counts the votes, picks the winner, rolls its outcome and
@@ -389,11 +470,13 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	ev := in.Event
 	res := MatterResult{Tally: map[string]float64{}, Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
 
+	senVotes := map[int64]string{}
 	for _, s := range in.Senators {
-		opt := s.Preferred(ev, in.Realm, in.MatterID)
+		opt := s.decide(ev, in.Realm, in.MatterID, in.Players, in.Opinions)
 		if b, ok := in.Bribes[s.ID]; ok {
 			opt = b
 		}
+		senVotes[s.ID] = opt
 		res.Tally[opt] += s.Influence
 		res.Votes = append(res.Votes, CastVote{Name: s.Name, Option: opt, Weight: s.Influence, AI: true})
 	}
@@ -426,9 +509,12 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 
 	res.Realm = in.Realm.Clone()
 	res.Realm.Apply(out.Realm)
+	res.Sectors = in.Sectors.Fill().Clone()
+	res.Sectors.Apply(out.Sectors)
 	res.Fallen, res.FallenReason = res.Realm.Fallen()
 	if !res.Fallen {
 		res.Realm.Apply(res.Realm.Drift())
+		res.Sectors.Drift()
 	}
 
 	for _, p := range in.Players {
@@ -444,6 +530,26 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		if desc := d.Describe(); desc != "" {
 			res.Deltas[p.ID] = d
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("The Senate voted to **%s**. For you: %s", strings.ToLower(winner.Label), desc))
+		}
+		if _, voted := ev.Option(p.Vote); !voted {
+			continue
+		}
+		var warmer, cooler []OpinionChange
+		for _, s := range in.Senators {
+			ch := OpinionChange{SenatorID: s.ID, CharacterID: p.ID,
+				Delta: voteOpinion(s, ev, in.Realm, in.MatterID, senVotes[s.ID], p.Vote)}
+			res.Opinions = append(res.Opinions, ch)
+			if ch.Delta > 0 {
+				warmer = append(warmer, ch)
+			} else {
+				cooler = append(cooler, ch)
+			}
+		}
+		if len(warmer) > 0 {
+			res.Notices[p.ID] = append(res.Notices[p.ID], "Senators who voted with you think better of you: "+describeOpinionChanges(warmer, in.Senators))
+		}
+		if len(cooler) > 0 {
+			res.Notices[p.ID] = append(res.Notices[p.ID], "Senators you voted against think less of you: "+describeOpinionChanges(cooler, in.Senators))
 		}
 	}
 

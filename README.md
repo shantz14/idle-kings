@@ -14,11 +14,11 @@ DISCORD_TOKEN=... go run ./cmd/idle-kings
 | --- | --- |
 | `DISCORD_TOKEN` | Bot token (required) |
 | `IDLE_KINGS_DB` | SQLite path, default `idle-kings.db` |
-| `IDLE_KINGS_FAST` | `1` for testing: parties last 4 minutes instead of 2 hours, and a Senate "day" is 6 minutes (4 to vote) |
+| `IDLE_KINGS_FAST` | `1` for testing: parties last 4 minutes instead of 2 hours, investments 3 minutes instead of 3 hours, and a Senate "day" is 6 minutes (4 to vote) |
 
 Invite the bot with the `bot` and `applications.commands` scopes. Commands are registered globally so they also work in DMs with the bot.
 
-The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.db`.
+The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.db`. (The senator opinion system added the `senator_opinions` table and `activities.target_id`, party budgets added `activities.spend`, ventures added `realms.sectors` and the `sector_stakes` table, duels and hunts added the `conditions` and `bets` tables, spies added the `spy_networks` table, public works added the `monuments` table, the Alchemy and Black Market sectors renamed sector keys in `realms.sectors`, and the estate shop added `characters.residence_id`, `estate_items.guild_id`/`price_paid` and the `estate_offers` table (and dropped `realms.recent`), so older databases need deleting.)
 
 ## Game flow (current)
 
@@ -26,10 +26,20 @@ The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.
 2. `/start announcements:#channel` — admin only. Posts a **Join the court** button in this channel; public events go to the announcements channel (defaults to this one).
 3. **Join the court** (or `/join`) opens the character creator, a private popup: name, family name and motto → crest (color + symbol emoji) → assign 6 stat points → background (8 backstories; sets renown, gold and the starting estate) → role. Progress is saved, so a closed popup resumes where it left off. Family names are unique per court.
 4. `/court` (in the server or in a DM with the bot) opens a button menu: Diplomacy, Monetary, Intrigue, Martial, The Senate, My Character, Estate.
-5. Diplomacy → **Throw a Party** → pick a goal. The party is announced with an **Attend** button; the host gets 1–2 events by DM with buttons. Everything resolves when the party ends; results arrive by DM, and a summary is posted publicly.
-6. **The Senate** (`/senate`, or The Senate in `/court`): every day a matter is posted in the announcements channel with vote buttons. Votes are weighted by influence against 8 AI senators with traits. Players can bribe senators, sell their vote to a senator or a player, or offer to buy another player's vote (deals are accepted in DMs). Results, everyone's votes and the realm's trackers are posted when voting closes. If a realm tracker hits 0 the realm falls and everyone loses.
-7. Daily income (base income plus estate items) is paid every real day.
-8. Info pages: `/realm`, `/players`, `/profile [player]` (add `public: True` to post them for everyone), `/character`, `/estate`, `/help`. Other players see your house, role, background, influence, renown and estate; only you see your stats and gold.
+5. Diplomacy → **Court a Senator** → pick a senator and an approach (flatter, gift, share secrets, talk strategy). It takes an hour; the result arrives by DM and changes that senator's opinion of you. A player can run one action (party, courting or investing) at a time.
+6. Diplomacy → **Throw a Party** → pick a goal. The party is announced with an **Attend** button; the host gets 1–2 events by DM with buttons. Everything resolves when the party ends; results arrive by DM, and a summary is posted publicly.
+7. **The Senate** (`/senate`, or The Senate in `/court`): every day a matter is posted in the announcements channel with vote buttons. Votes are weighted by influence against 8 AI senators with traits. Players can bribe senators, sell their vote to a senator or a player, or offer to buy another player's vote (deals are accepted in DMs). Results, everyone's votes and the realm's trackers are posted when voting closes. If a realm tracker hits 0 the realm falls and everyone loses.
+8. **Opinion**: each senator has an opinion of each player (-100 to +100, shown with 🟢/🔴). Votes, bribes, vote sales, parties, rumors and courting move it; it fades 3% per Senate day. It scales bribe prices and senators' offers for your vote, makes hostile senators refuse to deal, and pulls senators toward (or away from) your side on close votes.
+9. Monetary → **Invest in a Venture** → pick one of 7 industries (Agriculture, Mining, Alchemy & Apothecaries, Luxury Goods, Trade, Timber & Shipbuilding, the Black Market) and an amount. After 3 hours a hidden stewardship roll (intrigue for the Black Market) decides how big a share the gold buys. Each sector's daily revenue is split between its owners; NPC houses hold the rest. Senate decisions shock sectors (barbarians burn the farms, a trade pact fills the harbor), and realm trackers shift them too, so votes move players' income. Stakes in the Black Market are secret, unless a deal goes badly wrong.
+10. Martial → **Challenge to a Duel** → pick a player and an optional gold wager. The defender accepts or declines by DM (declining or not answering in 4 hours costs a little renown). Once accepted the duel is announced with **Bet** buttons and fought 30 minutes later; each duelist picks a stance by DM (attack > trick > guard > attack, or yield). The winner takes renown and the purse, bettors on the winner split the pot, and a bad loss leaves the loser **Wounded** (−2 Prowess, −1 Martial for 3 days).
+11. Martial → **Hunt in the Royal Forest** → pick a goal (Chase Glory or Talk in the Saddle). Costs 10 gold, takes 2 hours, runs like a party: host events by DM, and others can **Join the hunt** to hunt for glory, ride with friends, or arrange an accident for another rider.
+12. A player can host one action at a time (party, courting, investing, hunt, speech, canvassing, bread and circuses, spying, or an issued challenge); a public work being built doesn't count. Answering a challenge, attending, riding along and betting don't count.
+13. **Influence actions.** Diplomacy → **Canvass the Districts** (3 hours, free, always a little influence) and **Give a Speech** (pick a cause; public; others attend to cheer or heckle, a Diplomacy contest; senators who share the cause warm to a good speaker). Monetary → **Bread and Circuses** (30–1000 gold; influence with diminishing returns, raises realm Popularity, Populists approve) and **Endow a Public Work** (statue/road/temple/aqueduct, 150–800 gold, 1–4 days to build, doesn't use your action; when it opens you get permanent Senate vote weight and a named monument on your profile). Influence from canvassing, speeches and circuses shrinks as your influence grows (half at 30).
+14. **Story arcs**: some Senate matters are chapters in a story (🌲 The Witch of the Ashwood, ☄️ The Fallen Star, 💀 The Barrow King, ⚗️ The Elixir of Youth, plus the older chains: the Northern Tribes, the Plague, Pirates…). Each chapter's decision leads to the next, branching on what the Senate chose; the announcement shows "Chapter N of M", and `/realm` has a **Chronicle** of where every story stands. An arc can't start again while it's running. Mystical events (omens, ghosts, the fey, sorcerers, alchemists) appear in the Senate, at parties and on hunts.
+15. **Estate and shop** (`/shop`, or Shop on `/estate`): buy properties (humble rooms up to castles) and possessions (art, artifacts, war relics, weapons, armor, equipment). A fixed shelf of common goods (up to Grand-tier houses) is always in stock; a rotating market of 2 unique properties and 2 unique possessions changes daily (the Fine house and the Castle only appear there). Shop prices are 20% under list (`ShopPriceScale`) (every 10 minutes in fast mode). Unique pieces have one owner per court. You live in one property (move on `/estate`); it and your possessions count fully toward estate value, other properties half and only for income and stats. Sell back to the shop for 60%, or make deals with other players (sell, buy or trade, with gold either way) by DM; you always keep at least one property. Weapons and armor raise prowess for duels and hunts.
+16. **Senate variety**: an event can't come back within 10 matters, and two in a row never share a theme (barbarians, bandits, food, sea…). Follow-ups can break the cooldown but never repeat the matter just before.
+17. Daily income (base income, estate items and ventures) is paid every real day.
+18. Info pages: `/realm` (now with Industries), `/players`, `/profile [player]` (add `public: True` to post them for everyone), `/character`, `/estate`, `/shop`, `/help`. Other players see your house, role, background, influence, renown and estate; only you see your stats and gold.
 
 ## Layout
 
@@ -37,9 +47,12 @@ The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.
 cmd/idle-kings     entrypoint, env config
 internal/game      pure rules: stats, Check (sheet → % chance), character creation (creation.go,
                    crest.go, backgrounds.go, roles.go, estate.go items), party rules and events,
-                   realm trackers, senators and traits, daily matters (matters.go), vote resolution
-internal/store     SQLite schema + queries (characters, activities, realm, senators, matters, votes, bribes, vote deals)
-internal/bot       slash commands, button menus, party flow, game loop
+                   realm trackers, senators and traits, daily matters (matters.go), vote resolution,
+                   senator opinion and Court a Senator (opinion.go), sectors and investing (sectors.go),
+                   duels (duel.go), hunts (hunt.go), conditions like wounds (conditions.go), timings.go
+internal/store     SQLite schema + queries (characters, activities, realm, senators, matters, votes, bribes,
+                   vote deals, senator opinions, sector stakes, duels and bets, conditions)
+internal/bot       slash commands, button menus, party, courting, investing, duel and hunt flows, game loop
 ```
 
 To check balance after changing events or numbers: `IDLE_KINGS_SIM=1 go test ./internal/game -run TestBalance -v` simulates 300 AI-only realms for 90 days.

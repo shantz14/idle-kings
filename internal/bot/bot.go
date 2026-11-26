@@ -16,11 +16,15 @@ import (
 )
 
 type Bot struct {
-	s      *discordgo.Session
-	store  *store.Store
-	rng    *lockedRand
-	timing game.PartyTiming
-	senate game.SenateTiming
+	s         *discordgo.Session
+	store     *store.Store
+	rng       *lockedRand
+	t         game.Timings
+	timing    game.PartyTiming  // = t.Party
+	senate    game.SenateTiming // = t.Senate
+	courtFor  time.Duration     // = t.Court
+	investFor time.Duration     // = t.Invest
+	deals     dealDrafts        // estate offers being put together
 }
 
 // lockedRand makes one RNG safe for concurrent handlers.
@@ -36,14 +40,14 @@ func (l *lockedRand) Perm(n int) []int {
 	return l.r.Perm(n)
 }
 
-func New(token string, st *store.Store, timing game.PartyTiming, senate game.SenateTiming) (*Bot, error) {
+func New(token string, st *store.Store, t game.Timings) (*Bot, error) {
 	s, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
 	}
 	s.Identify.Intents = discordgo.IntentsGuilds
 	b := &Bot{
-		s: s, store: st, timing: timing, senate: senate,
+		s: s, store: st, t: t, timing: t.Party, senate: t.Senate, courtFor: t.Court, investFor: t.Invest,
 		rng: &lockedRand{r: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))},
 	}
 	s.AddHandler(b.onInteraction)
@@ -95,8 +99,31 @@ func (b *Bot) tick(ctx context.Context) {
 		slog.Error("ended activities", "err", err)
 	} else {
 		for _, a := range ended {
-			if a.Kind == game.KindParty {
+			switch a.Kind {
+			case game.KindParty:
 				b.resolveParty(ctx, a, now)
+			case game.KindCourt:
+				b.resolveCourt(ctx, a, now)
+			case game.KindInvest:
+				b.resolveInvest(ctx, a, now)
+			case game.KindDuel:
+				b.resolveDuel(ctx, a, now)
+			case game.KindHunt:
+				b.resolveHunt(ctx, a, now)
+			case game.KindPlantSpies:
+				b.resolvePlant(ctx, a, now)
+			case game.KindRootOut:
+				b.resolveRootOut(ctx, a, now)
+			case game.KindCanvass:
+				b.resolveCanvass(ctx, a, now)
+			case game.KindSpeech:
+				b.resolveSpeech(ctx, a, now)
+			case game.KindCircus:
+				b.resolveCircus(ctx, a, now)
+			case game.KindWork:
+				b.resolveWork(ctx, a, now)
+			default:
+				slog.Error("unknown activity kind", "kind", a.Kind, "id", a.ID)
 			}
 		}
 	}

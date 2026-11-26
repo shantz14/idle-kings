@@ -66,7 +66,7 @@ func TestCatalogueConsistency(t *testing.T) {
 			t.Errorf("%s: summary too long for a menu", b.Key)
 		}
 		home, ok := ItemByKey(b.Home)
-		if !ok || home.Kind != KindHome {
+		if !ok || home.Kind != KindProperty {
 			t.Errorf("%s: bad home %s", b.Key, b.Home)
 		}
 		for _, k := range b.Items {

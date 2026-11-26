@@ -20,10 +20,10 @@ var (
 type RealmState struct {
 	GuildID      string
 	Trackers     game.Realm
+	Sectors      game.SectorState
 	Status       string // alive | fallen
 	FallenReason string
 	NextMatterAt time.Time
-	Recent       []string
 }
 
 func (r RealmState) Alive() bool { return r.Status == "alive" }
@@ -73,9 +73,10 @@ func (s *Store) CreateRealm(ctx context.Context, guildID string, realm game.Real
 	}
 	defer tx.Rollback()
 	tr, _ := json.Marshal(realm)
+	sec, _ := json.Marshal(game.StartingSectors())
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO realms (guild_id, trackers, next_matter_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
-		guildID, string(tr), firstMatter.Unix())
+		`INSERT INTO realms (guild_id, trackers, sectors, next_matter_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+		guildID, string(tr), string(sec), firstMatter.Unix())
 	if err != nil {
 		return err
 	}
@@ -95,12 +96,12 @@ func (s *Store) CreateRealm(ctx context.Context, guildID string, realm game.Real
 
 func (s *Store) GetRealm(ctx context.Context, guildID string) (RealmState, error) {
 	var r RealmState
-	var tr, recent string
+	var tr, sec string
 	var reason sql.NullString
 	var next int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT guild_id, trackers, status, fallen_reason, next_matter_at, recent FROM realms WHERE guild_id = ?`, guildID).
-		Scan(&r.GuildID, &tr, &r.Status, &reason, &next, &recent)
+		`SELECT guild_id, trackers, sectors, status, fallen_reason, next_matter_at FROM realms WHERE guild_id = ?`, guildID).
+		Scan(&r.GuildID, &tr, &sec, &r.Status, &reason, &next)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	} else if err != nil {
@@ -111,7 +112,11 @@ func (s *Store) GetRealm(ctx context.Context, guildID string) (RealmState, error
 	if err := json.Unmarshal([]byte(tr), &r.Trackers); err != nil {
 		return r, err
 	}
-	return r, json.Unmarshal([]byte(recent), &r.Recent)
+	if err := json.Unmarshal([]byte(sec), &r.Sectors); err != nil {
+		return r, err
+	}
+	r.Sectors = r.Sectors.Fill()
+	return r, nil
 }
 
 func (s *Store) Senators(ctx context.Context, guildID string) ([]game.Senator, error) {
@@ -194,9 +199,37 @@ func (s *Store) NextQueued(ctx context.Context, guildID string, now time.Time) (
 	return id, key, err
 }
 
+// RecentEventKeys lists the court's last n matters' event keys, oldest first.
+func (s *Store) RecentEventKeys(ctx context.Context, guildID string, n int) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT event_key FROM matters WHERE guild_id = ? ORDER BY opened_at DESC, id DESC LIMIT ?`, guildID, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, rows.Err()
+}
+
+// DeferQueued pushes a queued follow-up back to a later time.
+func (s *Store) DeferQueued(ctx context.Context, id int64, due time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE realm_queue SET due_at = ? WHERE id = ?`, due.Unix(), id)
+	return err
+}
+
 // CreateMatter opens a matter, schedules the next one, and consumes the
 // queued follow-up it came from (queueID 0 = none).
-func (s *Store) CreateMatter(ctx context.Context, guildID, eventKey string, queueID int64, opened, closes, next time.Time, recent []string) (Matter, error) {
+func (s *Store) CreateMatter(ctx context.Context, guildID, eventKey string, queueID int64, opened, closes, next time.Time) (Matter, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Matter{}, err
@@ -209,9 +242,8 @@ func (s *Store) CreateMatter(ctx context.Context, guildID, eventKey string, queu
 		return Matter{}, err
 	}
 	id, _ := res.LastInsertId()
-	rc, _ := json.Marshal(recent)
-	if _, err := tx.ExecContext(ctx, `UPDATE realms SET next_matter_at = ?, recent = ? WHERE guild_id = ?`,
-		next.Unix(), string(rc), guildID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE realms SET next_matter_at = ? WHERE guild_id = ?`,
+		next.Unix(), guildID); err != nil {
 		return Matter{}, err
 	}
 	if queueID != 0 {
@@ -291,8 +323,9 @@ func (s *Store) SoldVote(ctx context.Context, matterID, charID int64) (option, s
 	return option, to.String, err == nil
 }
 
-// SellVoteToSenator locks the vote and pays the player.
-func (s *Store) SellVoteToSenator(ctx context.Context, matterID, charID int64, option, senator string, gold int, now time.Time) error {
+// SellVoteToSenator locks the vote, pays the player, and warms the senator
+// to them by opinion.
+func (s *Store) SellVoteToSenator(ctx context.Context, matterID, charID int64, option string, senator game.Senator, gold int, opinion float64, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -301,10 +334,13 @@ func (s *Store) SellVoteToSenator(ctx context.Context, matterID, charID int64, o
 	if err := s.openMatterTx(ctx, tx, matterID, now); err != nil {
 		return err
 	}
-	if err := setVote(ctx, tx, matterID, charID, option, "senator:"+senator, now); err != nil {
+	if err := setVote(ctx, tx, matterID, charID, option, "senator:"+senator.Name, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, gold, charID); err != nil {
+		return err
+	}
+	if err := changeOpinions(ctx, tx, []game.OpinionChange{{SenatorID: senator.ID, CharacterID: charID, Delta: opinion}}); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -470,7 +506,8 @@ func (s *Store) Bribes(ctx context.Context, matterID int64) (map[int64]Bribe, er
 }
 
 // PayBribe buys a senator's vote if nobody else has and the briber can pay.
-func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64, option string, price int, now time.Time) error {
+// opinion is how much the senator warms to the briber.
+func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64, option string, price int, opinion float64, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -495,18 +532,27 @@ func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64,
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("you need %d gold for that", price)
 	}
+	if err := changeOpinions(ctx, tx, []game.OpinionChange{{SenatorID: senatorID, CharacterID: charID, Delta: opinion}}); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
 // MatterResolution is everything that changes when a matter is decided.
 type MatterResolution struct {
-	Summary      any // stored as JSON for the record
-	Realm        game.Realm
+	Summary any // stored as JSON for the record
+	Realm   game.Realm
+	// Sectors replaces the realm's sectors (nil = unchanged). It must be
+	// built from a fresh GetRealm: investments resolve in the same tick,
+	// before matters, so nothing else writes sectors in between.
+	Sectors      game.SectorState
 	Fallen       bool
 	FallenReason string
 	Deltas       map[int64]game.Delta
 	FollowUps    []game.QueuedEvent
 	DayLength    time.Duration // how long a follow-up "day" is
+	Opinions     []game.OpinionChange
+	OpinionDecay float64 // share of every opinion kept (applied before Opinions); 0 = no decay
 }
 
 // ResolveMatter applies a decision once: realm, players, follow-ups.
@@ -534,6 +580,12 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 		string(tr), status, reason, m.GuildID); err != nil {
 		return err
 	}
+	if r.Sectors != nil {
+		sec, _ := json.Marshal(r.Sectors)
+		if _, err := tx.ExecContext(ctx, `UPDATE realms SET sectors = ? WHERE guild_id = ?`, string(sec), m.GuildID); err != nil {
+			return err
+		}
+	}
 	if r.Fallen {
 		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = 'fallen' WHERE guild_id = ?`, m.GuildID); err != nil {
 			return err
@@ -543,6 +595,17 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 		if err := applyDelta(ctx, tx, id, d); err != nil {
 			return err
 		}
+	}
+	if r.OpinionDecay > 0 {
+		if err := decayOpinions(ctx, tx, m.GuildID, r.OpinionDecay); err != nil {
+			return err
+		}
+		if err := decaySpies(ctx, tx, m.GuildID, game.SpyDecay); err != nil {
+			return err
+		}
+	}
+	if err := changeOpinions(ctx, tx, r.Opinions); err != nil {
+		return err
 	}
 	for _, f := range r.FollowUps {
 		// Due slightly before that day's matter opens, so it's picked up then.
@@ -587,6 +650,25 @@ func (s *Store) RecentDecisions(ctx context.Context, guildID string, n int) ([]D
 		_ = json.Unmarshal([]byte(result), &r)
 		d.Winner, d.Succeeded, d.ResolvedAt = r.Winner, r.Succeeded, time.Unix(at, 0)
 		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// QueuedEvents lists the event keys waiting in a court's follow-up queue,
+// soonest first.
+func (s *Store) QueuedEvents(ctx context.Context, guildID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT event_key FROM realm_queue WHERE guild_id = ? ORDER BY due_at, id`, guildID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
 	}
 	return out, rows.Err()
 }

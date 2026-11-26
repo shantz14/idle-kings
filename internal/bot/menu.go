@@ -15,6 +15,8 @@ import (
 //   menu:cat:<category>  actions in a category
 //   menu:act:<action>    one action's panel
 //   menu:char            character sheet
+//   menu:estate          estate page
+//   menu:senate          the Senate panel
 
 func button(label, id string, style discordgo.ButtonStyle, disabled bool) discordgo.Button {
 	return discordgo.Button{Label: label, CustomID: id, Style: style, Disabled: disabled}
@@ -40,8 +42,31 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 		b.update(i, b.estatePage(c, true))
 	case parts[0] == "cat" && len(parts) > 1:
 		b.update(i, categoryPanel(game.Category(parts[1]), c.Role))
-	case parts[0] == "act" && len(parts) > 1 && parts[1] == game.KindParty:
-		b.update(i, b.partyPanel(ctx, c, ""))
+	case parts[0] == "act" && len(parts) > 1:
+		switch parts[1] {
+		case game.KindParty:
+			b.update(i, b.partyPanel(ctx, c, ""))
+		case game.KindCourt:
+			b.update(i, b.courtPanel(ctx, c, 0, ""))
+		case game.KindDuel:
+			b.update(i, b.duelPanel(ctx, c, ""))
+		case game.KindHunt:
+			b.update(i, b.huntPanel(ctx, c, ""))
+		case game.KindInvest:
+			b.update(i, b.investPanel(ctx, c, ""))
+		case game.KindPlantSpies:
+			b.update(i, b.plantPanel(ctx, c, ""))
+		case game.KindRootOut:
+			b.update(i, b.rootOutPanel(ctx, c, ""))
+		case game.KindCanvass:
+			b.update(i, b.canvassPanel(ctx, c, ""))
+		case game.KindSpeech:
+			b.update(i, b.speechPanel(ctx, c, ""))
+		case game.KindCircus:
+			b.update(i, b.circusPanel(ctx, c, ""))
+		case game.KindWork:
+			b.update(i, b.worksPanel(ctx, c, ""))
+		}
 	}
 }
 
@@ -51,7 +76,10 @@ func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.Inter
 		desc = "**The realm has fallen.** " + st.FallenReason + "\n\n" + desc
 	}
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
-		desc += fmt.Sprintf("\n\nYou are hosting a party. It ends <t:%d:R>.", a.EndsAt.Unix())
+		desc += "\n\n" + b.activityLine(ctx, a)
+	}
+	if a, err := b.store.WorkInProgress(ctx, c.ID); err == nil {
+		desc += "\n\n" + b.activityLine(ctx, a)
 	}
 	var cats []discordgo.MessageComponent
 	for _, cat := range game.Categories {
@@ -116,7 +144,7 @@ func (b *Bot) partyPanel(ctx context.Context, c store.Character, note string) *d
 	busy := false
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		busy = true
-		fmt.Fprintf(&sb, "\nYou are already hosting. It ends <t:%d:R>.", a.EndsAt.Unix())
+		sb.WriteString("\n" + b.activityLine(ctx, a))
 	} else if c.Wealth < game.PartyMinSpend {
 		busy = true
 		fmt.Fprintf(&sb, "\nYou only have %d gold.", c.Wealth)

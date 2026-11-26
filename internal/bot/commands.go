@@ -35,7 +35,8 @@ func commands() []*discordgo.ApplicationCommand {
 		cmd("court", "Open your actions menu (works in DMs too)", anywhere),
 		cmd("senate", "See today's matter and vote (works in DMs too)", anywhere),
 		cmd("character", "Your full character sheet", anywhere),
-		cmd("estate", "Your home and possessions", anywhere),
+		cmd("estate", "Your properties and possessions", anywhere),
+		cmd("shop", "Buy houses, art, artifacts, weapons and armor", anywhere),
 		cmd("realm", "The state of the realm and recent Senate decisions", anywhere, public),
 		cmd("players", "Everyone at court, by influence", anywhere, public),
 		cmd("profile", "A player's public profile", anywhere,
@@ -106,6 +107,8 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 				b.respond(i, ephemeral(b.characterPage(ctx, c, false)))
 			case "estate":
 				b.respond(i, ephemeral(b.estatePage(c, false)))
+			case "shop":
+				b.respond(i, ephemeral(b.shopPanel(ctx, c, shopProps, "")))
 			}
 		}
 	case discordgo.InteractionMessageComponent:
@@ -120,6 +123,30 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onMenu(ctx, i, parts[1:])
 		case "party":
 			b.onParty(ctx, i, parts[1:])
+		case "court":
+			b.onCourt(ctx, i, parts[1:])
+		case "duel":
+			b.onDuel(ctx, i, parts[1:])
+		case "hunt":
+			b.onHunt(ctx, i, parts[1:])
+		case "invest":
+			b.onInvest(ctx, i, parts[1:])
+		case "canvass":
+			b.onCanvass(ctx, i, parts[1:])
+		case "speech":
+			b.onSpeech(ctx, i, parts[1:])
+		case "circus":
+			b.onCircus(ctx, i, parts[1:])
+		case "work":
+			b.onWork(ctx, i, parts[1:])
+		case "spy":
+			b.onSpy(ctx, i, parts[1:])
+		case "estate":
+			b.onEstate(ctx, i, parts[1:])
+		case "shop":
+			b.onShop(ctx, i, parts[1:])
+		case "deal":
+			b.onDeal(ctx, i, parts[1:])
 		case "senate":
 			b.onSenate(ctx, i, parts[1:])
 		}
@@ -132,6 +159,14 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onTradeModal(ctx, i, parts[1:])
 		case "party":
 			b.onPartyModal(ctx, i, parts[1:])
+		case "duel":
+			b.onDuelModal(ctx, i, parts[1:])
+		case "invest":
+			b.onInvestModal(ctx, i, parts[1:])
+		case "circus":
+			b.onCircusModal(ctx, i, parts[1:])
+		case "deal":
+			b.onDealModal(ctx, i, parts[1:])
 		}
 	}
 }

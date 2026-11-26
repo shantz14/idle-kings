@@ -2,7 +2,9 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -49,8 +51,12 @@ func (b *Bot) onInfoCommand(ctx context.Context, i *discordgo.InteractionCreate,
 			target = t
 		}
 		// Stats and gold only on your own profile, and only privately.
-		show(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{
-			b.profileEmbed(ctx, target, target.ID == c.ID && !public)}})
+		d := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{
+			b.profileEmbed(ctx, target, target.ID == c.ID && !public)}}
+		if !public {
+			d.Components = profileButtons(target, target.ID == c.ID)
+		}
+		show(d)
 	}
 }
 
@@ -73,7 +79,8 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			return
 		}
 		self := t.UserID == userOf(i).ID
-		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.profileEmbed(ctx, t, self)}}))
+		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.profileEmbed(ctx, t, self)},
+			Components: profileButtons(t, self)}))
 	case "senator":
 		vals := i.MessageComponentData().Values
 		c, ok := b.myCharacter(ctx, i)
@@ -89,7 +96,8 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 		if !ok {
 			return
 		}
-		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s)}}))
+		ops, _ := b.store.Opinions(ctx, c.ID)
+		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s, ops[s.ID])}}))
 	}
 }
 
@@ -149,6 +157,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 	}
 	chars, _ := b.store.CharactersInCourt(ctx, guildID)
 	sen, _ := b.store.Senators(ctx, guildID)
+	chronicle := b.chronicle(ctx, guildID)
 
 	var fall []string
 	for _, t := range game.Trackers {
@@ -162,6 +171,8 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 		Color:       color,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Recent decisions", Value: history.String()},
+			{Name: "📜 Chronicle", Value: chronicle},
+			{Name: "Industries", Value: industriesBlock(st)},
 			{Name: "The court", Value: fmt.Sprintf("%d players · %d senators", len(chars), len(sen)), Inline: true},
 			{Name: "If any of these reach 0, everyone loses", Value: strings.Join(fall, ", "), Inline: true},
 		},
@@ -207,13 +218,14 @@ func (b *Bot) profileEmbed(ctx context.Context, c store.Character, private bool)
 	desc += fmt.Sprintf("**%s** · %s\n%s\n<@%s>", role.Name, bg.Name, bg.Story, c.UserID)
 
 	var estate []string
-	for _, k := range c.Items {
-		if it, ok := game.ItemByKey(k); ok {
-			icon := "📦"
-			if it.Kind == game.KindHome {
-				icon = "🏠"
+	home, _ := c.Residence()
+	for _, h := range c.Holdings {
+		if it, ok := h.Item(); ok {
+			line := game.KindByKey(it.Kind).Emoji + " " + it.Name
+			if h.ID == home.ID {
+				line = "🏡 " + it.Name + " *(home)*"
 			}
-			estate = append(estate, icon+" "+it.Name)
+			estate = append(estate, line)
 		}
 	}
 	if len(estate) == 0 {
@@ -228,8 +240,17 @@ func (b *Bot) profileEmbed(ctx context.Context, c store.Character, private bool)
 				game.Num(b.share(ctx, c.GuildID, c.VoteWeight()))), Inline: true},
 			{Name: "Renown", Value: game.Num(c.Renown), Inline: true},
 			{Name: "Estate value", Value: game.Num(c.EstateValue()), Inline: true},
-			{Name: "Estate", Value: strings.Join(estate, "\n")},
+			{Name: "Estate", Value: joinLines(estate, 1000)},
 		},
+	}
+	if f := venturesField(c, private); f != nil {
+		e.Fields = append(e.Fields, f)
+	}
+	if f := conditionsField(c); f != nil {
+		e.Fields = append(e.Fields, f)
+	}
+	if f := monumentsField(c); f != nil {
+		e.Fields = append(e.Fields, f)
 	}
 	if private {
 		e.Fields = append(e.Fields,
@@ -243,14 +264,38 @@ func (b *Bot) profileEmbed(ctx context.Context, c store.Character, private bool)
 }
 
 func effectiveStatsBlock(c store.Character) string {
-	bonus := c.Effects().Stats
+	estate := game.SumEffects(c.Items).Stats
+	conds := game.ConditionEffects(c.Conditions).Stats
 	notes := map[game.Stat]string{}
-	for s, v := range bonus {
-		if v != 0 {
-			notes[s] = fmt.Sprintf("(%+g from estate)", v)
+	for _, s := range game.AllStats {
+		var parts []string
+		if v := estate[s]; v != 0 {
+			parts = append(parts, fmt.Sprintf("%+g from estate", v))
+		}
+		if v := conds[s]; v != 0 {
+			parts = append(parts, fmt.Sprintf("%+g from wounds", v))
+		}
+		if len(parts) > 0 {
+			notes[s] = "(" + strings.Join(parts, ", ") + ")"
 		}
 	}
 	return statsBlock(c.Effective(), notes)
+}
+
+// conditionsField lists active conditions like wounds, or nil.
+func conditionsField(c store.Character) *discordgo.MessageEmbedField {
+	var lines []string
+	for _, cd := range c.Conditions {
+		d, ok := game.ConditionByKey(cd.Key)
+		if !ok {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s **%s** (%s), heals <t:%d:R>", d.Emoji, d.Name, d.Effects.Describe(), cd.EndsAt.Unix()))
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return &discordgo.MessageEmbedField{Name: "Condition", Value: strings.Join(lines, "\n")}
 }
 
 // ---- your own pages ----
@@ -264,8 +309,15 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 		weight += fmt.Sprintf(" (+%s vote weight from estate)", game.Num(eff.VoteWeight))
 	}
 	income := fmt.Sprintf("%d gold/day", c.TotalIncome())
-	if eff.DailyIncome != 0 {
-		income += fmt.Sprintf(" (%d base + %d from estate)", c.DailyIncome, eff.DailyIncome)
+	if eff.DailyIncome != 0 || c.VentureIncome > 0 {
+		parts := []string{fmt.Sprintf("%d base", c.DailyIncome)}
+		if eff.DailyIncome != 0 {
+			parts = append(parts, fmt.Sprintf("%d from estate", eff.DailyIncome))
+		}
+		if c.VentureIncome > 0 {
+			parts = append(parts, game.Num(c.VentureIncome)+" from ventures")
+		}
+		income += " (" + strings.Join(parts, " + ") + ")"
 	}
 	e := &discordgo.MessageEmbed{
 		Title:       c.FullName(),
@@ -281,39 +333,14 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 			{Name: "Estate value", Value: game.Num(c.EstateValue()), Inline: true},
 		},
 	}
+	e.Fields = append(e.Fields, ventureSheetField(c), spiesField(b.spyLines(ctx, c)))
+	if f := conditionsField(c); f != nil {
+		e.Fields = append(e.Fields, f)
+	}
+	if f := monumentsField(c); f != nil {
+		e.Fields = append(e.Fields, f)
+	}
 	btns := []discordgo.MessageComponent{button("Estate", "menu:estate", discordgo.SecondaryButton, false)}
-	if back {
-		btns = append(btns, button("Back", "menu:home", discordgo.SecondaryButton, false))
-	}
-	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: []discordgo.MessageComponent{row(btns...)}}
-}
-
-func (b *Bot) estatePage(c store.Character, back bool) *discordgo.InteractionResponseData {
-	e := &discordgo.MessageEmbed{
-		Title: fmt.Sprintf("%s · the estate of %s", c.House(), c.FullName()),
-		Color: colorGold,
-	}
-	desc := fmt.Sprintf("Estate value **%s**. A finer estate makes your parties more successful.", game.Num(c.EstateValue()))
-	if total := c.Effects().Describe(); total != "" {
-		desc += "\nAll together: " + total
-	}
-	e.Description = desc
-	for _, k := range c.Items {
-		it, ok := game.ItemByKey(k)
-		if !ok {
-			continue
-		}
-		icon := "📦"
-		if it.Kind == game.KindHome {
-			icon = "🏠"
-		}
-		val := it.Description + fmt.Sprintf("\nValue %s", game.Num(it.Value))
-		if fx := it.Effects.Describe(); fx != "" {
-			val += " · " + fx
-		}
-		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: icon + " " + it.Name, Value: val})
-	}
-	btns := []discordgo.MessageComponent{button("My Character", "menu:char", discordgo.SecondaryButton, false)}
 	if back {
 		btns = append(btns, button("Back", "menu:home", discordgo.SecondaryButton, false))
 	}
@@ -322,7 +349,8 @@ func (b *Bot) estatePage(c store.Character, back bool) *discordgo.InteractionRes
 
 // ---- senators ----
 
-func (b *Bot) senatorEmbed(ctx context.Context, guildID string, s game.Senator) *discordgo.MessageEmbed {
+// op is the senator's opinion of the viewer.
+func (b *Bot) senatorEmbed(ctx context.Context, guildID string, s game.Senator, op float64) *discordgo.MessageEmbed {
 	var traits []string
 	for _, t := range s.Traits {
 		if ti, ok := game.TraitByKey(t); ok {
@@ -336,6 +364,7 @@ func (b *Bot) senatorEmbed(ctx context.Context, guildID string, s game.Senator) 
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Influence", Value: game.Num(s.Influence), Inline: true},
 			{Name: "Share of the Senate", Value: game.Num(b.share(ctx, guildID, s.Influence)) + "%", Inline: true},
+			{Name: "Their opinion of you", Value: opinionBlock(op)},
 		},
 	}
 }
@@ -345,23 +374,56 @@ func (b *Bot) senatorEmbed(ctx context.Context, guildID string, s game.Senator) 
 var helpPages = []struct{ title, body string }{
 	{"Welcome to Idle Kings", "You are a member of one of the great families at the court of the Republic. " +
 		"Grow your **influence**, your family's **renown** and your **wealth** through parties, deals and votes in the Senate.\n\n" +
-		"Most things take real time: a party lasts two hours, and the Senate meets once a day. Start something, then come back later.\n\n" +
+		"Most things take real time: a party takes two hours, and the Senate meets once a day. Start something, then come back later.\n\n" +
 		"The realm is shared. If it goes bankrupt, loses its army, collapses into lawlessness or rises up against the Senate, **everyone loses**."},
 	{"Your character", "**Stats**: Diplomacy (parties, persuasion), Martial (soldiers and guards), Stewardship (money), Intrigue (rumors and schemes) and Prowess (your own sword arm). They decide your odds whenever you try something. Rolls happen in the background and are never shown.\n\n" +
 		"**Influence** is your weight in the Senate. New players barely count; with enough influence, your vote can decide matters.\n\n" +
 		"**Renown** is your family's fame. **Wealth** is your gold, and you earn **income** every real day.\n\n" +
 		"**Estate**: your home and possessions. They add to your estate value, which helps your parties, and many have small bonuses of their own."},
 	{"Actions and parties", "Use `/court` (in the server or in a DM with me) to open your actions menu.\n\n" +
-		"**Throw a Party** (Diplomacy): pick a goal, Make Friends or Talk Business. It lasts two hours, everyone is told, and others can attend. " +
+		"**Throw a Party** (Diplomacy): pick a goal, Make Friends or Talk Business. It takes two hours, everyone is told, and others can attend. " +
 		"Something will probably go wrong during the evening; I'll DM you to decide what to do.\n\n" +
 		"**Attending** someone's party, you can make friends, talk business, or **spread rumors** about another player. " +
-		"Targets and hosts may notice the rumors, and might even learn who started them."},
+		"Targets and hosts may notice the rumors, and might even learn who started them.\n\n" +
+		"**Court a Senator** (Diplomacy): spend an hour with a senator, flattering them, bringing a gift, sharing secrets or talking strategy. " +
+		"Pick the approach that suits their traits. It can raise their opinion of you, or lower it if it goes badly.\n\n" +
+		"**Invest in a Venture** (Monetary): put gold into one of the realm's industries, from farms and mines to the Black Market. " +
+		"Your gold grows the industry and buys you a share of what it earns every day; how big a share depends on how well you negotiate. " +
+		"What the Senate decides moves these industries, and your income with them.\n\n" +
+		"**Estate and shop** (`/shop`, or Shop on your estate page): buy houses up to castles, and art, artifacts, war relics, weapons and armor. " +
+		"You can own several properties but live in one; that's where you throw parties. Named pieces are one of a kind, and the market changes daily. " +
+		"Sell back to the shop for 60% of the price, or deal with other players (Offer a deal, or Make an offer on their profile)."},
+	{"Winning influence", "Influence is your weight in the Senate. Besides parties and backing winning votes:\n\n" +
+		"**Canvass the Districts** (Diplomacy): three hours of handshakes across the city. Free, and always worth a little influence.\n\n" +
+		"**Give a Speech** (Diplomacy): speak for a cause in the Forum for an hour. Others can come to **cheer** (helping you) or **heckle** " +
+		"(a battle of wits: win it and the crowd is theirs, lose it and they look the fool). Senators who share your cause warm to a good speaker.\n\n" +
+		"**Bread and Circuses** (Monetary): feed and entertain the city. Raises the people's mood and your influence; each coin helps a little less than the last.\n\n" +
+		"**Endow a Public Work** (Monetary): pay for a statue, road, temple or aqueduct with your name on it. It takes days to build, " +
+		"doesn't stop you doing other things, and once it opens its Senate vote weight is yours for good.\n\n" +
+		"The more influence you have, the less canvassing, speeches and circuses add. Public works don't shrink."},
+	{"Duels and hunts", "**Challenge to a Duel** (Martial): call out another player, with or without a gold wager they must match. " +
+		"They answer by DM; refusing costs them a little renown. If they accept, you fight 30 minutes later and the court can **bet** on it: " +
+		"whoever backs the winner splits the whole pot. Midway you each pick a stance (attack beats a trick, a trick beats a guard, a guard beats an attack) or yield. " +
+		"Prowess decides most fights. The winner takes renown from the loser, and a bad loss leaves you **wounded**: weaker for a few days.\n\n" +
+		"**Hunt in the Royal Forest** (Martial): ride out for two hours to chase glory (renown) or talk in the saddle (influence). " +
+		"Others may join to hunt, make friends, or **arrange an accident** for another rider. Victims and hosts may notice, and learn who did it.\n\n" +
+		"Only hosting a hunt or issuing a challenge takes up your one action; answering a challenge, riding along and betting don't."},
+	{"Spies", "**Plant Spies** (Intrigue): slip an agent into another player's household. Your Intrigue is set against theirs, and gold helps. " +
+		"Each success takes your network deeper, from **Low** up to **Extremely High**: someone very close to them. A clumsy attempt may be noticed, " +
+		"and a very clumsy one gets your agent caught, and they will give up your name.\n\n" +
+		"Your spies may send word when their master does something in private: bribes, vote deals, secret votes, courting, rumors, schemes. " +
+		"The deeper the network, the more often they write, and the more they know.\n\n" +
+		"**Root Out Spies** (Intrigue): search your own household. Agents you find are dismissed, and you may learn who sent them.\n\n" +
+		"Networks fade a little each day. Every action also gives a little practice in the skill it uses."},
 	{"The Senate", "Every day the Senate votes on a matter in the realm. Vote with the buttons on the announcement, or with `/senate`.\n\n" +
 		"Your vote counts in proportion to your influence, against 8 AI senators whose traits decide how they vote. " +
 		"You can **bribe** a senator, **sell** your vote to a senator or a player, or offer to **buy** another player's vote. Player deals are accepted in DMs.\n\n" +
-		"Decisions change the realm's trackers and can help or hurt players depending on how they voted and their role. Some decisions lead to new matters later."},
-	{"Commands", "`/court`: your actions menu\n`/senate`: today's matter and voting\n`/character`: your full sheet\n`/estate`: your home and possessions\n" +
-		"`/realm`: the realm's trackers and recent decisions\n`/players`: everyone at court\n`/profile`: a player's profile\n`/join`: create your character\n`/help`: this guide\n\n" +
+		"Decisions change the realm's trackers and can help or hurt players depending on how they voted and their role. Some decisions lead to new matters later, and some matters are chapters in a longer story: what the Senate decides changes what happens next. `/realm` keeps a **Chronicle** of the stories under way.\n\n" +
+		"**Opinion**: every senator has an opinion of you, from -100 to +100. Voting with them, paying them, selling them your vote, good parties and courting raise it; " +
+		"voting against them, dull parties and rumors lower it, and it fades a little each day. Senators who like you take smaller bribes, pay more for your vote, " +
+		"and may follow your lead on a close vote. Those who hate you won't deal with you at all, and may vote against you out of spite."},
+	{"Commands", "`/court`: your actions menu\n`/senate`: today's matter and voting\n`/character`: your full sheet\n`/estate`: your properties and possessions\n`/shop`: buy houses and treasures\n" +
+		"`/realm`: the realm's trackers, industries and recent decisions\n`/players`: everyone at court\n`/profile`: a player's profile\n`/join`: create your character\n`/help`: this guide\n\n" +
 		"Add `public: True` to `/realm`, `/players` or `/profile` to post it for everyone."},
 }
 
@@ -381,4 +443,82 @@ func helpPage(n int) *discordgo.InteractionResponseData {
 			button("Next ▶", fmt.Sprintf("info:help:%d", n+1), discordgo.SecondaryButton, n == len(helpPages)-1),
 		)},
 	}
+}
+
+// industriesBlock lists every sector's earnings and condition.
+func industriesBlock(st store.RealmState) string {
+	var lines []string
+	for _, d := range game.SectorDefs {
+		lines = append(lines, fmt.Sprintf("%s %s · %s gold/day · %s", d.Emoji, d.Name,
+			game.Num(st.Sectors.Revenue(d, st.Trackers)), st.Sectors.Condition(d, st.Trackers)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ventureSheetField is the character sheet's view of your investments:
+// always shown, with total income, or a pointer to where to start.
+func ventureSheetField(c store.Character) *discordgo.MessageEmbedField {
+	f := venturesField(c, true)
+	if f == nil {
+		return &discordgo.MessageEmbedField{Name: "Ventures", Value: "No investments yet. Monetary → Invest in a Venture."}
+	}
+	f.Value += fmt.Sprintf("\nAll together: **%s gold/day**", game.Num(c.VentureIncome))
+	return f
+}
+
+// venturesField lists a character's stakes. Secret sectors and income are
+// only shown privately. nil if there's nothing to show.
+func venturesField(c store.Character, private bool) *discordgo.MessageEmbedField {
+	var lines []string
+	for _, d := range game.SectorDefs {
+		v, ok := c.Ventures[d.Key]
+		if !ok || (d.Secret && !private) {
+			continue
+		}
+		line := fmt.Sprintf("%s %s · owns %s", d.Emoji, d.Name, pct(v.Share))
+		if private {
+			line += fmt.Sprintf(" · %s gold/day", game.Num(v.Income))
+			if d.Secret {
+				line += " · *secret*"
+			}
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return &discordgo.MessageEmbedField{Name: "Ventures", Value: strings.Join(lines, "\n")}
+}
+
+// profileButtons lets you make an estate offer from someone else's profile.
+func profileButtons(t store.Character, self bool) []discordgo.MessageComponent {
+	if self {
+		return nil
+	}
+	return []discordgo.MessageComponent{row(button("Make an offer", fmt.Sprintf("deal:to:%d", t.ID), discordgo.PrimaryButton, false))}
+}
+
+// chronicle is the realm page's account of the stories under way.
+func (b *Bot) chronicle(ctx context.Context, guildID string) string {
+	ds, err1 := b.store.RecentDecisions(ctx, guildID, 30)
+	queued, err2 := b.store.QueuedEvents(ctx, guildID)
+	if err := errors.Join(err1, err2); err != nil {
+		slog.Error("chronicle", "err", err)
+	}
+	var decided []game.Decided
+	for _, d := range ds {
+		decided = append(decided, game.Decided{EventKey: d.EventKey, Winner: d.Winner})
+	}
+	return chronicleText(game.Chronicle(decided, queued))
+}
+
+func chronicleText(entries []game.ChronicleEntry) string {
+	if len(entries) == 0 {
+		return "No great stories are unfolding in the realm. Yet."
+	}
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, e.Line())
+	}
+	return joinSep(lines, "\n\n", 1000)
 }

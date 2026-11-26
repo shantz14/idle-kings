@@ -2,7 +2,10 @@ package bot
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/bwmarrin/discordgo"
@@ -124,4 +127,208 @@ func TestPartyBudgetPanelFitsDiscord(t *testing.T) {
 			checkLimits(t, fmt.Sprintf("budget %s %d", g.Key, gold), (&Bot{}).budgetPanel(c, g.Key, "a note"))
 		}
 	}
+}
+
+func TestCourtViewFitsDiscord(t *testing.T) {
+	sen := game.GenerateSenate(rand.New(rand.NewPCG(1, 2)), game.SenateSize)
+	for i := range sen {
+		sen[i].ID = int64(i + 1)
+	}
+	ops := game.Opinions{1: 100, 2: -100, 3: 0.4, 4: -37.6}
+	for _, gold := range []int{0, 10000} {
+		c := store.Character{Name: "A", FamilyName: "B", Wealth: gold}
+		for _, id := range []int64{0, 1, 2, 3, 4} {
+			for _, busy := range []string{"", "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."} {
+				checkLimits(t, fmt.Sprintf("court %d %d %q", gold, id, busy), courtView(c, sen, ops, id, time.Hour, busy, "a note"))
+			}
+		}
+	}
+	m := store.Matter{ID: 999999}
+	checkLimits(t, "bribe select", &discordgo.InteractionResponseData{
+		Components: []discordgo.MessageComponent{senatorSelect(m, sen, map[int64]store.Bribe{1: {}}, ops)}})
+}
+
+func TestOpinionTags(t *testing.T) {
+	for v, want := range map[float64]string{35: "🟢 +35", -20: "🔴 -20", 0.3: "⚪ 0", -0.4: "⚪ 0"} {
+		if got := opinionTag(v); got != want {
+			t.Errorf("opinionTag(%v) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+func TestInvestViewsFitDiscord(t *testing.T) {
+	st := store.RealmState{Trackers: game.StartingRealm(), Sectors: game.StartingSectors(), Status: "alive"}
+	c := store.Character{Name: "A", FamilyName: "B", Wealth: 30, Ventures: map[game.SectorKey]store.Venture{}}
+	for _, d := range game.SectorDefs {
+		c.Ventures[d.Key] = store.Venture{Stake: 1000, Share: 0.4567, Income: 123.4}
+	}
+	c.VentureIncome = 863.8
+	long := "You are negotiating a stake in Timber & Shipbuilding. The deal is struck <t:9999999999:R>."
+	checkLimits(t, "invest picker", investView(c, st, "", long, "a note", time.Hour))
+	for _, d := range game.SectorDefs {
+		checkLimits(t, "invest "+string(d.Key), investView(c, st, d.Key, long, "a note", time.Hour))
+	}
+	page := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x", Description: "x",
+		Fields: []*discordgo.MessageEmbedField{{Name: "Industries", Value: industriesBlock(st)}, venturesField(c, true)}}}}
+	checkLimits(t, "industries and ventures", page)
+	if f := venturesField(c, false); f == nil || strings.Contains(f.Value, "Black Market") {
+		t.Fatal("the Black Market must stay off public profiles")
+	}
+}
+
+func TestMartialViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 10000, Crest: game.Crest{Color: "red", Symbol: "lion"}}
+	d := store.Character{ID: 2, Name: long, FamilyName: long, Wealth: 0, Crest: game.Crest{Color: "red", Symbol: "lion"}}
+	busy := "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."
+	for _, timing := range []game.DuelTiming{game.DefaultDuelTiming, game.FastDuelTiming} {
+		checkLimits(t, "duel", duelView(timing, "", "a note"))
+		checkLimits(t, "duel busy", duelView(timing, busy, ""))
+	}
+	checkLimits(t, "wager", wagerView(c, d, "a note"))
+	checkLimits(t, "wager broke", wagerView(d, c, ""))
+	a := store.Activity{ID: 999999, Spend: 1000, EndsAt: time.Unix(1999999999, 0)}
+	checkLimits(t, "bet", betView(a, c, d, "a note"))
+	for _, goal := range []string{game.DuelPending, game.DuelAccepted} {
+		a.Goal = goal
+		checkLimits(t, "announce "+goal, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{duelAnnouncement(a, c, d, "")}, Components: betButtons(a, c, d)})
+	}
+	checkLimits(t, "announce result", &discordgo.InteractionResponseData{
+		Embeds: []*discordgo.MessageEmbed{duelAnnouncement(a, c, d, "**"+long+"** wins the duel decisively.")}})
+
+	checkLimits(t, "hunt", huntView(2*time.Hour, "", "a note"))
+	checkLimits(t, "hunt busy", huntView(2*time.Hour, busy, ""))
+	checkLimits(t, "hunt join", huntJoinView(a, c))
+	checkLimits(t, "accident", accidentPicker(a.ID, ""))
+
+	// Event DMs: one button per choice, all in one row.
+	for _, list := range [][]game.PartyEvent{game.PartyEvents, game.HuntEvents, game.DuelEvents} {
+		for _, ev := range list {
+			var btns []discordgo.MessageComponent
+			for _, ch := range ev.Choices {
+				btns = append(btns, button(ch.Label, fmt.Sprintf("party:event:%d:%s", 999999999, ch.Key), discordgo.PrimaryButton, false))
+			}
+			def, _ := ev.Choice(ev.Default)
+			checkLimits(t, "event "+ev.Key, &discordgo.InteractionResponseData{
+				Embeds:     []*discordgo.MessageEmbed{eventResultEmbed("On the dueling ground", ev, def, def.Success, true)},
+				Components: []discordgo.MessageComponent{row(btns...)}})
+		}
+	}
+}
+
+func TestIntrigueViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 1000}
+	tgt := store.Character{ID: 999999999, Name: long, FamilyName: long}
+	busy := "You are searching your household for spies. You'll be done <t:9999999999:R>."
+	var lines []spyLine
+	for i := 0; i < 40; i++ {
+		top := game.SpyTiers[len(game.SpyTiers)-1]
+		lines = append(lines, spyLine{Name: long + " " + long, Tier: top.Name, Flavor: fmt.Sprintf(top.Flavor, long+" "+long)})
+	}
+	checkLimits(t, "plant", plantView(lines, time.Hour, "", "a note"))
+	checkLimits(t, "plant busy", plantView(nil, time.Hour, busy, ""))
+	for _, tier := range game.SpyTiers {
+		checkLimits(t, "purse "+tier.Name, purseView(c, tgt, tier, "High", "a note"))
+	}
+	checkLimits(t, "root out", rootOutView(2*time.Hour, "", "a note"))
+	checkLimits(t, "root out busy", rootOutView(2*time.Hour, busy, ""))
+	checkLimits(t, "intrigue category", categoryPanel(game.CatIntrigue, "scribe"))
+}
+
+func TestEstateViewsFitDiscord(t *testing.T) {
+	// Someone who owns the whole catalogue.
+	rich := store.Character{ID: 1, Name: "A", FamilyName: "B", Wealth: 100000, Crest: game.Crest{Color: "red", Symbol: "lion"}, Stats: game.Stats{}}
+	for n, it := range game.Items {
+		rich.Holdings = append(rich.Holdings, store.Holding{ID: int64(n + 1), Key: it.Key})
+		rich.Items = append(rich.Items, it.Key)
+		if it.IsProperty() && rich.ResidenceID == 0 {
+			rich.ResidenceID = int64(n + 1)
+		}
+	}
+	poor := store.Character{ID: 2, Name: "C", FamilyName: "D", Crest: game.Crest{Color: "red", Symbol: "lion"}, Stats: game.Stats{},
+		Holdings: []store.Holding{{ID: 999, Key: "rented_room"}}, Items: []string{"rented_room"}, ResidenceID: 999}
+	checkLimits(t, "estate (everything)", estateView(rich, true, "a note"))
+	checkLimits(t, "estate (one room)", estateView(poor, false, ""))
+	for _, h := range rich.Holdings {
+		checkLimits(t, "sell "+h.Key, sellConfirm(rich, h.ID))
+	}
+
+	st := shopState{period: 1, ends: time.Now(), owners: map[string]int64{}, houses: map[int64]string{1: "House B"}, market: map[string]bool{}}
+	st.stock = game.FixedShelf()
+	for _, it := range game.Items { // the whole catalogue on sale at once
+		if it.Shelf == game.ShelfMarket {
+			st.stock = append(st.stock, it)
+			st.market[it.Key] = true
+		}
+	}
+	for _, c := range []store.Character{rich, poor} {
+		for _, tab := range []string{shopProps, shopGoods} {
+			checkLimits(t, "shop "+tab, shopView(c, st, tab, "a note"))
+		}
+		for _, it := range game.Items {
+			checkLimits(t, "item "+it.Key, itemView(c, st, it.Key, "a note"))
+		}
+	}
+
+	dr := dealDraft{ToID: 2, Gold: -5000}
+	for _, h := range rich.Holdings {
+		dr.Give = append(dr.Give, h.ID)
+	}
+	checkLimits(t, "deal composer", dealView(rich, poor, dr, "a note"))
+	checkLimits(t, "deal composer (reverse)", dealView(poor, rich, dealDraft{ToID: 1, Want: dr.Give, Gold: 300}, ""))
+	checkLimits(t, "deal start", dealStart("a note"))
+	o := store.EstateOffer{ID: 99999, Gold: 5000, ExpiresAt: time.Now()}
+	msg := offerMessage(o, rich, poor, names(rich, dr.Give), []string{"Rented Room in the Lower City"})
+	checkLimits(t, "offer DM", &discordgo.InteractionResponseData{Embeds: msg.Embeds, Components: msg.Components})
+}
+
+func TestInfluenceViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	busy := "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."
+	for _, gold := range []int{0, 100000} {
+		c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: gold, Monuments: []string{"statue"}}
+		for _, b := range []string{"", busy} {
+			checkLimits(t, "canvass", canvassView(3*time.Hour, b, "a note"))
+			checkLimits(t, "speech", speechView(time.Hour, b, "a note"))
+			checkLimits(t, "circus", circusView(c, 2*time.Hour, b, "a note"))
+			times := map[string]time.Duration{}
+			for _, w := range game.WorkDefs {
+				times[w.Key] = time.Duration(w.Days * float64(24*time.Hour))
+			}
+			checkLimits(t, "works", worksView(c, times, b, "a note"))
+		}
+		for _, cause := range game.Causes {
+			a := store.Activity{ID: 999999, Goal: cause.Key}
+			checkLimits(t, "speech attend "+cause.Key, speechAttendView(a, c))
+		}
+		if f := monumentsField(store.Character{FamilyName: long, Monuments: []string{"statue", "road", "temple", "aqueduct"}}); f == nil || len(f.Value) > 1024 {
+			t.Fatal("monuments field")
+		}
+	}
+}
+
+func TestSheetAndChronicleFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	var lines []spyLine
+	for i := 0; i < 40; i++ {
+		top := game.SpyTiers[len(game.SpyTiers)-1]
+		lines = append(lines, spyLine{Name: long, Tier: top.Name, Flavor: fmt.Sprintf(top.Flavor, long)})
+	}
+	c := store.Character{Name: long, FamilyName: long, Ventures: map[game.SectorKey]store.Venture{}}
+	for _, d := range game.SectorDefs {
+		c.Ventures[d.Key] = store.Venture{Stake: 1e6, Share: 0.999, Income: 123456}
+	}
+	for _, f := range []*discordgo.MessageEmbedField{spiesField(lines), spiesField(nil), ventureSheetField(c), ventureSheetField(store.Character{})} {
+		checkLimits(t, "sheet "+f.Name, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x", Fields: []*discordgo.MessageEmbedField{f}}}})
+	}
+
+	// Every arc at once, at its longest.
+	var entries []game.ChronicleEntry
+	for _, a := range game.Arcs {
+		entries = append(entries, game.ChronicleEntry{Arc: a, Chapter: a.Chapters, Title: long + long, Choice: long + long})
+	}
+	checkLimits(t, "chronicle", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x",
+		Fields: []*discordgo.MessageEmbedField{{Name: "Chronicle", Value: chronicleText(entries)}, {Name: "empty", Value: chronicleText(nil)}}}}})
 }

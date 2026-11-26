@@ -1,0 +1,143 @@
+package game
+
+// Mystical Senate events: omens, ghosts, fey things and the alchemists.
+// Magic in the realm is rare, feared and never quite explained. Same shape
+// as matters.go; appended at init. Placeholder numbers — tune freely.
+
+const (
+	ThemeOmens   Theme = "omens"   // signs, prophecies, ghosts
+	ThemeSorcery Theme = "sorcery" // witches, sorcerers, alchemists, the fey
+)
+
+func init() { MatterEvents = append(MatterEvents, magicMatters...) }
+
+var magicMatters = []MatterEvent{
+	{
+		Key: "two_headed_calf", Title: "A Two-Headed Calf", Theme: ThemeOmens, Bias: map[Attr]float64{AttrStability: 0.2},
+		Prompt:  "On a farm outside the gate, a calf has been born with two heads. One head lows; the other has not stopped staring at the city. Crowds walk out to see it.",
+		Default: "ignore",
+		Options: []MatterOption{
+			{Key: "augurs", Label: "Have the augurs read it", Hint: "The augurs will say what it means. They may say something unwelcome.",
+				Leans: L{LeanTradition: 1.5}, Check: chk(40, AttrStability, 0.4),
+				Success: MatterOutcome{Text: "The augurs declare it a sign of a double harvest. The people are delighted.",
+					Realm: R{AttrTreasury: -2, AttrPopularity: 4}, Sectors: SC{SectorAgriculture: {Health: 0.1}}},
+				Failure: MatterOutcome{Text: "The augurs go pale and refuse to speak. Nobody needed them to.",
+					Realm: R{AttrTreasury: -2, AttrStability: -4, AttrPopularity: -2}}},
+			{Key: "sacrifice", Label: "Sacrifice it to the gods", Hint: "Whatever it means, give it back.",
+				Leans: L{LeanTradition: 1},
+				Success: MatterOutcome{Text: "The calf is burned on the old altar. The smoke goes straight up, which everyone agrees is good.",
+					Realm: R{AttrStability: 2}}},
+			{Key: "ignore", Label: "It's a deformed calf", Hint: "Farmers see stranger things every spring.",
+				Leans: L{LeanRisk: 0.5},
+				Success: MatterOutcome{Text: "The calf dies in a week. The stories about it don't.",
+					Realm: R{AttrStability: -2}}},
+		},
+	},
+	{
+		Key: "oracle_smoke", Title: "The Oracle's Smoke", Theme: ThemeOmens,
+		Prompt:  "The blind oracle of the hill shrine has sent word: for a fee, she will breathe the smoke and tell the Senate what the coming season holds.",
+		Default: "refuse",
+		Options: []MatterOption{
+			{Key: "pay", Label: "Pay for the prophecy", Hint: "Prophecies are expensive. Good ones are worth it.",
+				Leans: L{LeanRisk: 1, LeanTradition: 0.5}, Check: chk(45, AttrStability, 0.3),
+				Success: MatterOutcome{Text: "\"The wolves will come from the north, but find the gate barred.\" The Senate strengthens the border in time.",
+					Realm: R{AttrTreasury: -6, AttrMilitary: 6, AttrStability: 2}},
+				Failure: MatterOutcome{Text: "She speaks of a city drowned in ash, and will say no more. The Senate pays and wishes it hadn't.",
+					Realm: R{AttrTreasury: -6, AttrPopularity: -4, AttrStability: -2}}},
+			{Key: "refuse", Label: "Refuse", Hint: "The Senate makes its own future.",
+				Leans: L{LeanTradition: -0.5},
+				Success: MatterOutcome{Text: "The oracle shrugs and sells her prophecy to a merchant house instead. They do very well this year.",
+					Realm: R{}}},
+			{Key: "seize", Label: "Bring her to the city in chains", Hint: "A seer should serve the Republic.",
+				Leans: L{LeanMilitary: 1, LeanScheme: 1}, Check: chk(30, AttrMilitary, 0.4),
+				Success: MatterOutcome{Text: "She prophesies for the Senate now, sullenly. Her visions are uncanny, and unkind.",
+					Realm: R{AttrStability: 3, AttrPopularity: -3}},
+				Failure: MatterOutcome{Text: "The soldiers come back without her, and without their sight for three days.",
+					Realm: R{AttrMilitary: -4, AttrStability: -3}}},
+		},
+	},
+	{
+		Key: "senate_ghost", Title: "A Ghost in the Senate House", Theme: ThemeOmens,
+		Prompt:  "The night watch swear a figure in an old-fashioned toga walks the Senate floor after dark, and sits in the consul's chair. Clerks are refusing to work late.",
+		Default: "leave",
+		Options: []MatterOption{
+			{Key: "exorcise", Label: "Have the priests exorcise it", Hint: "Bells, salt, prayers. Costly but proper.",
+				Leans: L{LeanTradition: 1.5},
+				Success: MatterOutcome{Text: "Three nights of chanting. The figure is not seen again, or at least not reported.",
+					Realm: R{AttrTreasury: -4, AttrStability: 3}}},
+			{Key: "seance", Label: "Hold a séance and ask what it wants", Hint: "The dead sometimes know things.",
+				Leans: L{LeanRisk: 1.5, LeanScheme: 0.5}, Check: chk(35, AttrStability, 0.4),
+				Success: MatterOutcome{Text: "The ghost names a consul from a century ago, and the vault where he hid the treasury's gold. It's still there.",
+					Realm: R{AttrTreasury: 12, AttrPopularity: 2}},
+				Failure: MatterOutcome{Text: "The candles go out and something laughs. Two senators resign the next morning.",
+					Realm: R{AttrStability: -5}}},
+			{Key: "leave", Label: "Let it walk", Hint: "It was here before us. It isn't hurting anyone.",
+				Success: MatterOutcome{Text: "The ghost keeps its hours. Visitors now pay to stand in the gallery at midnight.",
+					Realm: R{AttrTreasury: 2, AttrStability: -2}}},
+		},
+	},
+	{
+		Key: "fey_lights", Title: "Fey Lights on the Marsh Road", Theme: ThemeSorcery, Bias: map[Attr]float64{AttrStability: 0.3},
+		Prompt:  "Travelers on the marsh road follow pale lights into the reeds and are not seen again. The caravans have started going the long way round.",
+		Default: "close",
+		Options: []MatterOption{
+			{Key: "close", Label: "Close the road", Hint: "Nobody follows lights on a closed road. Trade will suffer.",
+				Leans: L{LeanTradition: 0.5},
+				Success: MatterOutcome{Text: "The road is chained off. The lights are still seen, dancing, on still nights.",
+					Realm: R{AttrStability: 1}, Sectors: SC{SectorTrade: {Health: -0.15}}}},
+			{Key: "soldiers", Label: "Send soldiers with torches", Hint: "Cold iron and fire. If anything lives out there, they'll find it.",
+				Leans: L{LeanMilitary: 1.5}, Check: chk(35, AttrMilitary, 0.5),
+				Success: MatterOutcome{Text: "The soldiers burn the reeds to the waterline. Whatever was there has gone deeper in.",
+					Realm: R{AttrMilitary: -2, AttrStability: 3}, Sectors: SC{SectorTrade: {Health: 0.1}}},
+				Failure: MatterOutcome{Text: "Half a cohort follows the lights into the marsh. The other half comes back white-haired.",
+					Realm: R{AttrMilitary: -7, AttrStability: -3}, Sectors: SC{SectorTrade: {Health: -0.1}}}},
+			{Key: "offerings", Label: "Leave offerings at the marsh edge", Hint: "Milk, bread and silver, the old way.",
+				Leans: L{LeanTradition: 1, LeanPopular: 0.5},
+				Success: MatterOutcome{Text: "The offerings are gone each morning, and the lights keep to the reeds. The caravans come back.",
+					Realm: R{AttrTreasury: -3, AttrPopularity: 2}, Sectors: SC{SectorTrade: {Health: 0.05}}}},
+		},
+	},
+	{
+		Key: "sorcerer_citizen", Title: "A Sorcerer Seeks Citizenship", Theme: ThemeSorcery,
+		Prompt:  "A foreign sorcerer in a coat of crow feathers asks to become a citizen. He offers the Republic his services in return. The priests are horrified; the alchemists are fascinated.",
+		Default: "banish",
+		Options: []MatterOption{
+			{Key: "grant", Label: "Make him a citizen", Hint: "His knowledge stays here, with us.",
+				Leans: L{LeanForeign: 1.5, LeanRisk: 1}, Check: chk(40, AttrStability, 0.4),
+				Success: MatterOutcome{Text: "He sets up shop on Crucible Street. Within a month the alchemists are making things they can't explain.",
+					Realm: R{AttrForeign: 3, AttrStability: -1}, Sectors: SC{SectorAlchemy: {Health: 0.2, Capacity: 5}}},
+				Failure: MatterOutcome{Text: "His first public working sets the Forum fountains boiling for a week.",
+					Realm: R{AttrStability: -5, AttrPopularity: -3}, Sectors: SC{SectorAlchemy: {Health: 0.1}}}},
+			{Key: "banish", Label: "Banish him", Hint: "No sorcery in the Republic.",
+				Leans: L{LeanTradition: 1.5, LeanForeign: -1},
+				Success: MatterOutcome{Text: "He leaves without a word. Every crow in the city follows him to the gate.",
+					Realm: R{AttrStability: 2, AttrForeign: -2}}},
+			{Key: "hire", Label: "Hire him, quietly, for the army", Hint: "A sorcerer on retainer is better than one in an enemy's.",
+				Leans: L{LeanMilitary: 1, LeanScheme: 1.5},
+				Success: MatterOutcome{Text: "Nobody knows quite what he does for the legions. The legions don't want to talk about it.",
+					Realm: R{AttrTreasury: -8, AttrMilitary: 6, AttrPopularity: -2}}},
+		},
+	},
+	{
+		Key: "alchemist_charter", Title: "The Alchemists' Guild Petitions", Theme: ThemeSorcery,
+		Prompt:  "The Alchemists' Guild asks for a royal charter: the sole right to brew cures, poisons and fire-powder in the realm. Hedge-witches and herb-wives would be outlawed.",
+		Default: "nothing",
+		Options: []MatterOption{
+			{Key: "charter", Label: "Grant the charter", Hint: "Order in the trade, and a healthy fee to the treasury.",
+				Leans: L{LeanTradition: 0.5},
+				Success: MatterOutcome{Text: "The guild's seal goes on every bottle. The herb-wives go to the countryside, and some to the Black Market.",
+					Realm: R{AttrTreasury: 6, AttrPopularity: -2}, Sectors: SC{SectorAlchemy: {Health: 0.2}, SectorBlackMarket: {Health: 0.1}}}},
+			{Key: "tax", Label: "Tax every brew instead", Hint: "Let anyone brew, and let everyone pay.",
+				Leans: L{LeanPopular: 0.5},
+				Success: MatterOutcome{Text: "Tax collectors learn to tell a cure from a poison, mostly by asking.",
+					Realm: R{AttrTreasury: 8}, Sectors: SC{SectorAlchemy: {Health: -0.1}}}},
+			{Key: "ban", Label: "Ban the dangerous brews", Hint: "No poisons, no fire-powder, no 'stranger things'.",
+				Leans: L{LeanTradition: 1, LeanMilitary: -0.5},
+				Success: MatterOutcome{Text: "Fire-powder vanishes from the shops and reappears, at twice the price, in the lower city.",
+					Realm: R{AttrStability: 2}, Sectors: SC{SectorAlchemy: {Health: -0.2}, SectorBlackMarket: {Health: 0.2}}}},
+			{Key: "nothing", Label: "Leave the trade as it is", Hint: "The guild can compete like everyone else.",
+				Success: MatterOutcome{Text: "The guild sulks. The herb-wives keep selling feverfew by the city gate.",
+					Realm: R{AttrPopularity: 1}}},
+		},
+	},
+}

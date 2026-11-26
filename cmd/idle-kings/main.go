@@ -22,9 +22,9 @@ func main() {
 	if dbPath == "" {
 		dbPath = "idle-kings.db"
 	}
-	timing, senate := game.DefaultPartyTiming, game.DefaultSenateTiming
+	timings := game.DefaultTimings
 	if os.Getenv("IDLE_KINGS_FAST") == "1" {
-		timing, senate = game.FastPartyTiming, game.FastSenateTiming
+		timings = game.FastTimings
 		slog.Info("fast mode: parties and senate days last minutes, not hours")
 	}
 
@@ -35,7 +35,7 @@ func main() {
 	}
 	defer st.Close()
 
-	b, err := bot.New(token, st, timing, senate)
+	b, err := bot.New(token, st, timings)
 	if err != nil {
 		slog.Error("create bot", "err", err)
 		os.Exit(1)

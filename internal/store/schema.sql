@@ -21,20 +21,41 @@ CREATE TABLE IF NOT EXISTS characters (
     renown         REAL NOT NULL DEFAULT 0,
     wealth         INTEGER NOT NULL DEFAULT 0,
     daily_income   INTEGER NOT NULL DEFAULT 0, -- base income; estate items add on top
+    residence_id   INTEGER,                    -- estate_items.id of the property they live in
     last_income_at INTEGER NOT NULL,
     created_at     INTEGER NOT NULL,
     UNIQUE (guild_id, user_id)
 );
 
--- What each character owns: their home and possessions (keys into game.Items).
--- Estate value is derived from these.
+-- What each character owns: properties and possessions (keys into game.Items).
+-- Estate value is derived from these. Unique items have one row per court.
 CREATE TABLE IF NOT EXISTS estate_items (
     id           INTEGER PRIMARY KEY,
     character_id INTEGER NOT NULL REFERENCES characters(id),
+    guild_id     TEXT NOT NULL,
     item_key     TEXT NOT NULL,
+    price_paid   INTEGER NOT NULL DEFAULT 0,
     acquired_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS estate_items_owner ON estate_items (character_id);
+CREATE INDEX IF NOT EXISTS estate_items_court ON estate_items (guild_id, item_key);
+
+-- Estate deals between players: give = the sender's estate_items ids,
+-- want = the recipient's; gold > 0 is paid by the recipient to the sender,
+-- gold < 0 by the sender to the recipient.
+CREATE TABLE IF NOT EXISTS estate_offers (
+    id         INTEGER PRIMARY KEY,
+    guild_id   TEXT NOT NULL,
+    from_id    INTEGER NOT NULL REFERENCES characters(id),
+    to_id      INTEGER NOT NULL REFERENCES characters(id),
+    give       TEXT NOT NULL DEFAULT '[]',
+    want       TEXT NOT NULL DEFAULT '[]',
+    gold       INTEGER NOT NULL DEFAULT 0,
+    status     TEXT NOT NULL DEFAULT 'pending', -- pending | accepted | declined | cancelled
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS estate_offers_open ON estate_offers (status, from_id, to_id);
 
 -- Character creator progress, so a closed popup can be resumed.
 CREATE TABLE IF NOT EXISTS character_drafts (
@@ -53,6 +74,7 @@ CREATE TABLE IF NOT EXISTS activities (
     kind                TEXT NOT NULL,
     goal                TEXT NOT NULL DEFAULT '',
     spend               INTEGER NOT NULL DEFAULT 0, -- gold the host paid
+    target_id           INTEGER NOT NULL DEFAULT 0, -- kind-specific target, e.g. the senator being courted
     public              INTEGER NOT NULL DEFAULT 0,
     announce_channel_id TEXT,
     announce_message_id TEXT,
@@ -95,10 +117,10 @@ CREATE INDEX IF NOT EXISTS events_open ON activity_events (fires_at) WHERE resol
 CREATE TABLE IF NOT EXISTS realms (
     guild_id       TEXT PRIMARY KEY REFERENCES courts(guild_id),
     trackers       TEXT NOT NULL,                 -- JSON game.Realm
+    sectors        TEXT NOT NULL DEFAULT '{}',    -- JSON game.SectorState
     status         TEXT NOT NULL DEFAULT 'alive', -- alive | fallen
     fallen_reason  TEXT,
-    next_matter_at INTEGER NOT NULL,
-    recent         TEXT NOT NULL DEFAULT '[]'     -- JSON list of recent event keys
+    next_matter_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS senators (
@@ -166,4 +188,58 @@ CREATE TABLE IF NOT EXISTS realm_queue (
     guild_id  TEXT NOT NULL REFERENCES courts(guild_id),
     event_key TEXT NOT NULL,
     due_at    INTEGER NOT NULL
+);
+
+-- What each senator thinks of each player, -100 to 100. Missing = 0.
+CREATE TABLE IF NOT EXISTS senator_opinions (
+    senator_id   INTEGER NOT NULL REFERENCES senators(id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    value        REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (senator_id, character_id)
+);
+
+-- How much of each sector a player owns. See game.Share.
+CREATE TABLE IF NOT EXISTS sector_stakes (
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    guild_id     TEXT NOT NULL,
+    sector       TEXT NOT NULL,
+    stake        REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (character_id, sector)
+);
+CREATE INDEX IF NOT EXISTS sector_stakes_guild ON sector_stakes (guild_id, sector);
+
+-- Temporary states on a character, like a wound. Expired rows are ignored.
+CREATE TABLE IF NOT EXISTS conditions (
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    key          TEXT NOT NULL,
+    ends_at      INTEGER NOT NULL,
+    PRIMARY KEY (character_id, key)
+);
+
+-- Spectators' bets on a duel (an activity), paid when placed.
+CREATE TABLE IF NOT EXISTS bets (
+    activity_id  INTEGER NOT NULL REFERENCES activities(id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    side_id      INTEGER NOT NULL REFERENCES characters(id), -- the duelist backed
+    amount       INTEGER NOT NULL,
+    placed_at    INTEGER NOT NULL,
+    PRIMARY KEY (activity_id, character_id)
+);
+
+-- How deep owner's spies run in target's court, 0–100. Missing = 0.
+CREATE TABLE IF NOT EXISTS spy_networks (
+    owner_id  INTEGER NOT NULL REFERENCES characters(id),
+    target_id INTEGER NOT NULL REFERENCES characters(id),
+    value     REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (owner_id, target_id)
+);
+CREATE INDEX IF NOT EXISTS spy_networks_target ON spy_networks (target_id);
+
+-- Public works a character has paid for, by work key (game.WorkDefs). One
+-- of each per character. Their vote weight and value count forever.
+CREATE TABLE IF NOT EXISTS monuments (
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    work_key     TEXT NOT NULL,
+    built_at     INTEGER NOT NULL,
+    PRIMARY KEY (character_id, work_key)
 );

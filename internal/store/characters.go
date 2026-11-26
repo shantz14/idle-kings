@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -26,8 +27,64 @@ type Character struct {
 	Influence   float64
 	Renown      float64
 	Wealth      int
-	DailyIncome int      // base income; see TotalIncome
-	Items       []string // estate item keys, home first
+	DailyIncome int       // base income; see TotalIncome
+	Items       []string  // estate item keys, residence first
+	Holdings    []Holding // the same items with their ids, in the same order
+	ResidenceID int64     // estate_items.id of the residence
+	// Ventures and VentureIncome come from sector_stakes and the realm's
+	// sectors; see fillVentures.
+	Ventures      map[game.SectorKey]Venture
+	VentureIncome float64 // gold/day from all ventures
+	// Conditions are active temporary states, like a wound; see fillConditions.
+	Conditions []game.Condition
+	// Monuments are finished public works (game.WorkDefs keys); see fillMonuments.
+	Monuments []string
+}
+
+// Holding is one estate item a character owns.
+type Holding struct {
+	ID        int64 // estate_items.id
+	Key       string
+	PricePaid int
+}
+
+func (h Holding) Item() (game.Item, bool) { return game.ItemByKey(h.Key) }
+
+// Residence is the property the character lives in. ok is false only for
+// characters with no property at all.
+func (c Character) Residence() (Holding, bool) {
+	for _, h := range c.Holdings {
+		if it, ok := h.Item(); ok && it.IsProperty() && (c.ResidenceID == 0 || h.ID == c.ResidenceID) {
+			return h, true
+		}
+	}
+	return Holding{}, false
+}
+
+// Holding finds an owned item by its estate_items id.
+func (c Character) Holding(id int64) (Holding, bool) {
+	for _, h := range c.Holdings {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return Holding{}, false
+}
+
+// Venture is a character's holding in one sector.
+type Venture struct {
+	Stake  float64
+	Share  float64 // fraction of the sector owned, 0–1
+	Income float64 // gold/day
+}
+
+// Stakes is the character's raw stakes, for game.VentureIncome.
+func (c Character) Stakes() game.Stakes {
+	out := game.Stakes{}
+	for k, v := range c.Ventures {
+		out[k] = v.Stake
+	}
+	return out
 }
 
 func (c Character) FullName() string { return c.Name + " " + c.FamilyName }
@@ -35,7 +92,13 @@ func (c Character) FullName() string { return c.Name + " " + c.FamilyName }
 // House is how the family is shown: "🟥🦁 House Vane".
 func (c Character) House() string { return c.Crest.Emoji() + " House " + c.FamilyName }
 
-func (c Character) Effects() game.Effects { return game.SumEffects(c.Items) }
+// Effects are estate item effects plus active conditions and monuments.
+func (c Character) Effects() game.Effects {
+	e := game.SumEffects(c.Items)
+	e.Add(game.ConditionEffects(c.Conditions))
+	e.Add(game.MonumentEffects(c.Monuments))
+	return e
+}
 
 // Effective is the stats the rules use: base plus estate item bonuses.
 func (c Character) Effective() game.Stats {
@@ -44,13 +107,18 @@ func (c Character) Effective() game.Stats {
 	return s
 }
 
-func (c Character) EstateValue() float64 { return game.EstateValue(c.Items) }
+// EstateValue counts estate items and finished public works.
+func (c Character) EstateValue() float64 {
+	return game.EstateValue(c.Items) + game.MonumentValue(c.Monuments)
+}
 
 // VoteWeight is how much this character's vote counts in the Senate.
 func (c Character) VoteWeight() float64 { return c.Influence + c.Effects().VoteWeight }
 
-// TotalIncome is gold per day: base income plus estate items.
-func (c Character) TotalIncome() int { return c.DailyIncome + c.Effects().DailyIncome }
+// TotalIncome is gold per day: base income, estate items and ventures.
+func (c Character) TotalIncome() int {
+	return c.DailyIncome + c.Effects().DailyIncome + int(math.Round(c.VentureIncome))
+}
 
 func (c Character) Sheet() game.Sheet {
 	return game.NewSheet(c.Effective(), c.Influence, c.Renown, c.EstateValue(), c.Wealth)
@@ -118,9 +186,18 @@ func (s *Store) CreateCharacter(ctx context.Context, guildID, userID string, b g
 	}
 	c.ID, _ = res.LastInsertId()
 	for _, k := range c.Items {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO estate_items (character_id, item_key, acquired_at) VALUES (?, ?, ?)`,
-			c.ID, k, now); err != nil {
+		res, err := tx.ExecContext(ctx, `INSERT INTO estate_items (character_id, guild_id, item_key, acquired_at) VALUES (?, ?, ?, ?)`,
+			c.ID, guildID, k, now)
+		if err != nil {
 			return c, err
+		}
+		id, _ := res.LastInsertId()
+		c.Holdings = append(c.Holdings, Holding{ID: id, Key: k})
+		if it, ok := game.ItemByKey(k); ok && it.IsProperty() && c.ResidenceID == 0 {
+			c.ResidenceID = id
+			if _, err := tx.ExecContext(ctx, `UPDATE characters SET residence_id = ? WHERE id = ?`, id, c.ID); err != nil {
+				return c, err
+			}
 		}
 	}
 	return c, tx.Commit()
@@ -150,8 +227,9 @@ func scanCharacter(row scanner, extra ...any) (Character, error) {
 	return c, json.Unmarshal([]byte(crest), &c.Crest)
 }
 
-// fillItems loads estate items for the given characters. Call it only after
-// any open rows are closed: the pool has a single connection.
+// fillItems loads estate items for the given characters, the residence
+// first (the convention game.EstateValue and SumEffects rely on). Call it
+// only after any open rows are closed: the pool has a single connection.
 func (s *Store) fillItems(ctx context.Context, chars []*Character) error {
 	if len(chars) == 0 {
 		return nil
@@ -160,23 +238,28 @@ func (s *Store) fillItems(ctx context.Context, chars []*Character) error {
 	args := make([]any, 0, len(chars))
 	for _, c := range chars {
 		byID[c.ID] = c
-		c.Items = nil
+		c.Items, c.Holdings, c.ResidenceID = nil, nil, 0
 		args = append(args, c.ID)
 	}
-	q := `SELECT character_id, item_key FROM estate_items WHERE character_id IN (?` +
-		strings.Repeat(",?", len(args)-1) + `) ORDER BY id`
+	q := `SELECT e.character_id, e.id, e.item_key, e.price_paid, COALESCE(c.residence_id, 0)
+	      FROM estate_items e JOIN characters c ON c.id = e.character_id
+	      WHERE e.character_id IN (?` + strings.Repeat(",?", len(args)-1) + `)
+	      ORDER BY e.character_id, (e.id = c.residence_id) DESC, e.id`
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id int64
-		var key string
-		if err := rows.Scan(&id, &key); err != nil {
+		var cid, res int64
+		var h Holding
+		if err := rows.Scan(&cid, &h.ID, &h.Key, &h.PricePaid, &res); err != nil {
 			return err
 		}
-		byID[id].Items = append(byID[id].Items, key)
+		c := byID[cid]
+		c.Items = append(c.Items, h.Key)
+		c.Holdings = append(c.Holdings, h)
+		c.ResidenceID = res
 	}
 	return rows.Err()
 }
@@ -186,7 +269,7 @@ func (s *Store) oneCharacter(ctx context.Context, where string, args ...any) (Ch
 	if err != nil {
 		return c, err
 	}
-	return c, s.fillItems(ctx, []*Character{&c})
+	return c, s.fillAll(ctx, []*Character{&c})
 }
 
 func (s *Store) listCharacters(ctx context.Context, where string, args ...any) ([]Character, error) {
@@ -212,7 +295,7 @@ func (s *Store) listCharacters(ctx context.Context, where string, args ...any) (
 	for i := range out {
 		ptrs[i] = &out[i]
 	}
-	return out, s.fillItems(ctx, ptrs)
+	return out, s.fillAll(ctx, ptrs)
 }
 
 func (s *Store) GetCharacter(ctx context.Context, guildID, userID string) (Character, error) {

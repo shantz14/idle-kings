@@ -38,16 +38,8 @@ func (b *Bot) onParty(ctx context.Context, i *discordgo.InteractionCreate, parts
 			b.onHostParty(ctx, i, game.Goal(parts[1]), int(atoi(parts[2])))
 		}
 	case "custom":
-		if err := b.s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseModal,
-			Data: &discordgo.InteractionResponseData{
-				CustomID: "party:amount:" + parts[1], Title: "How much will you spend?",
-				Components: []discordgo.MessageComponent{row(discordgo.TextInput{
-					CustomID: "gold", Label: fmt.Sprintf("Gold (%d to %d)", game.PartyMinSpend, game.PartyMaxSpend),
-					Style: discordgo.TextInputShort, Required: true, MinLength: 1, MaxLength: 4, Placeholder: "e.g. 100",
-				})},
-			},
-		}); err != nil {
+		if err := b.s.InteractionRespond(i.Interaction, amountModal("party:amount:"+parts[1], "How much will you spend?",
+			game.PartyMinSpend, game.PartyMaxSpend)); err != nil {
 			slog.Error("budget modal", "err", err)
 		}
 	case "attend":
@@ -75,8 +67,8 @@ func (b *Bot) onPartyModal(ctx context.Context, i *discordgo.InteractionCreate, 
 		return
 	}
 	goal := game.Goal(parts[1])
-	gold, err := strconv.Atoi(strings.TrimSpace(modalValues(i.ModalSubmitData())["gold"]))
-	if err != nil {
+	gold, ok := modalAmount(i)
+	if !ok {
 		if c, ok := b.myCharacter(ctx, i); ok {
 			b.update(i, b.budgetPanel(c, goal, "That wasn't a whole number of gold."))
 		}
@@ -286,14 +278,75 @@ func (b *Bot) joinParty(ctx context.Context, i *discordgo.InteractionCreate, a s
 		text = "Something went wrong."
 	default:
 		text = fmt.Sprintf("You're at the party to **%s**. You'll hear how it went <t:%d:R>.", strings.ToLower(game.GoalName(goal)), a.EndsAt.Unix())
+		if goal == game.GoalSpreadRumors {
+			if t, err := b.store.GetCharacterByID(ctx, targetID); err == nil {
+				defer b.leak(ctx, c, game.SecretRumor(c.FullName(), t.ID, t.FullName()))
+			}
+		}
 	}
 	b.update(i, &discordgo.InteractionResponseData{Content: text, Embeds: []*discordgo.MessageEmbed{}})
 }
 
 // ---- events during the party ----
 
+// eventWhere is the title prefix for an activity's DM events.
+func (b *Bot) eventWhere(ctx context.Context, activityID int64) string {
+	a, err := b.store.GetActivity(ctx, activityID)
+	if err != nil {
+		return "At your party"
+	}
+	switch a.Kind {
+	case game.KindHunt:
+		return "On your hunt"
+	case game.KindDuel:
+		return "On the dueling ground"
+	}
+	return "At your party"
+}
+
+// eventResults sums an activity's answered events: quality and the host's
+// delta (events happen to the host), and any conditions they gave.
+type eventResults struct {
+	quality    float64
+	delta      game.Delta
+	conditions []game.ConditionChange
+	choices    map[int64]string // character ID → last choice, e.g. duel stances
+}
+
+func (b *Bot) eventTotals(ctx context.Context, activityID int64) (eventResults, error) {
+	out := eventResults{choices: map[int64]string{}}
+	results, err := b.store.EventResults(ctx, activityID)
+	if err != nil {
+		return out, err
+	}
+	for _, e := range results {
+		out.choices[e.CharacterID] = e.Choice
+		if e.Result == nil {
+			continue
+		}
+		out.quality += e.Result.Quality
+		out.delta.Merge(e.Result.Delta)
+		if e.Result.Condition != "" {
+			out.conditions = append(out.conditions, game.ConditionChange{CharacterID: e.CharacterID, Key: e.Result.Condition})
+		}
+	}
+	return out, nil
+}
+
+// newConditions turns condition changes into stored conditions ending a
+// few game days from now.
+func (b *Bot) newConditions(cs []game.ConditionChange, now time.Time) []store.NewCondition {
+	var out []store.NewCondition
+	for _, c := range cs {
+		if d, ok := game.ConditionByKey(c.Key); ok {
+			out = append(out, store.NewCondition{CharacterID: c.CharacterID, Key: c.Key, EndsAt: d.Ends(now, b.t.Day)})
+		}
+	}
+	return out
+}
+
 func (b *Bot) fireEvent(ctx context.Context, e store.Event, now time.Time) {
-	ev, ok := game.PartyEventByKey(e.Key)
+	ev, ok := game.EventByKey(e.Key)
 	if !ok {
 		_ = b.store.MarkEventSent(ctx, e.ID, "", "", now)
 		return
@@ -305,7 +358,7 @@ func (b *Bot) fireEvent(ctx context.Context, e store.Event, now time.Time) {
 	def, _ := ev.Choice(ev.Default)
 	msg, err := b.dm(e.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title: "At your party: " + ev.Title, Description: ev.Prompt, Color: colorGold,
+			Title: b.eventWhere(ctx, e.ActivityID) + ": " + ev.Title, Description: ev.Prompt, Color: colorGold,
 			Fields: []*discordgo.MessageEmbedField{{Name: "Decide", Value: fmt.Sprintf("<t:%d:R>, or I'll assume: *%s*", e.Deadline.Unix(), def.Label)}},
 		}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -319,13 +372,13 @@ func (b *Bot) fireEvent(ctx context.Context, e store.Event, now time.Time) {
 	}
 }
 
-func eventResultEmbed(ev game.PartyEvent, choice game.EventChoice, out game.EventOutcome, timedOut bool) *discordgo.MessageEmbed {
+func eventResultEmbed(where string, ev game.PartyEvent, choice game.EventChoice, out game.EventOutcome, timedOut bool) *discordgo.MessageEmbed {
 	head := "You chose: " + choice.Label
 	if timedOut {
 		head = "You didn't answer in time: " + choice.Label
 	}
 	return &discordgo.MessageEmbed{
-		Title:       "At your party: " + ev.Title,
+		Title:       where + ": " + ev.Title,
 		Description: fmt.Sprintf("%s\n*%s*\n\n%s", ev.Prompt, head, out.Text),
 		Color:       colorGold,
 	}
@@ -337,7 +390,7 @@ func (b *Bot) onEventChoice(ctx context.Context, i *discordgo.InteractionCreate,
 		b.reply(i, "That isn't yours to decide.")
 		return
 	}
-	ev, ok := game.PartyEventByKey(e.Key)
+	ev, ok := game.EventByKey(e.Key)
 	if !ok {
 		return
 	}
@@ -354,12 +407,12 @@ func (b *Bot) onEventChoice(ctx context.Context, i *discordgo.InteractionCreate,
 		b.fail(i, err)
 		return
 	}
-	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{eventResultEmbed(ev, choice, out, false)}})
+	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{eventResultEmbed(b.eventWhere(ctx, e.ActivityID), ev, choice, out, false)}})
 }
 
 // expireEvent applies the default choice to an unanswered event.
 func (b *Bot) expireEvent(ctx context.Context, e store.Event, now time.Time) {
-	ev, ok := game.PartyEventByKey(e.Key)
+	ev, ok := game.EventByKey(e.Key)
 	if !ok {
 		_ = b.store.ResolveEvent(ctx, e.ID, "", game.EventOutcome{}, now)
 		return
@@ -374,7 +427,7 @@ func (b *Bot) expireEvent(ctx context.Context, e store.Event, now time.Time) {
 		return // answered in the meantime
 	}
 	if e.DMMessageID != "" {
-		embeds := []*discordgo.MessageEmbed{eventResultEmbed(ev, choice, out, true)}
+		embeds := []*discordgo.MessageEmbed{eventResultEmbed(b.eventWhere(ctx, e.ActivityID), ev, choice, out, true)}
 		empty := []discordgo.MessageComponent{}
 		_, _ = b.s.ChannelMessageEditComplex(&discordgo.MessageEdit{Channel: e.DMChannelID, ID: e.DMMessageID, Embeds: &embeds, Components: &empty})
 	}
@@ -399,18 +452,13 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 		return
 	}
 	in := game.PartyInput{Host: host.Person(), Goal: game.Goal(a.Goal), Spend: a.Spend}
-	var eventDelta game.Delta
-	results, err := b.store.EventResults(ctx, a.ID)
+	ev, err := b.eventTotals(ctx, a.ID)
 	if err != nil {
 		slog.Error("event results", "err", err)
 		return
 	}
-	for _, e := range results {
-		if e.Result != nil {
-			in.Quality += e.Result.Quality
-			eventDelta.Merge(e.Result.Delta)
-		}
-	}
+	in.Quality = ev.quality
+	eventDelta := ev.delta
 
 	users := map[int64]string{host.ID: host.UserID}
 	parts, err := b.store.Participants(ctx, a.ID)
@@ -436,7 +484,9 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 	hd.Merge(eventDelta)
 	res.Deltas[host.ID] = hd
 
-	if err := b.store.ApplyResult(ctx, a.ID, res.Deltas, now); err != nil {
+	out := store.Outcome{Deltas: res.Deltas, Opinions: res.Opinions,
+		Conditions: b.newConditions(append(res.Conditions, ev.conditions...), now)}
+	if err := b.store.ApplyResult(ctx, a.ID, out, now); err != nil {
 		if !errors.Is(err, store.ErrEnded) {
 			slog.Error("apply party", "err", err)
 		}

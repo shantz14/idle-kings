@@ -87,21 +87,33 @@ func (b *Bot) senateTick(ctx context.Context, now time.Time) {
 }
 
 func (b *Bot) openMatter(ctx context.Context, court store.Court, st store.RealmState, now time.Time) {
+	recent, err := b.store.RecentEventKeys(ctx, court.GuildID, game.MatterCooldown)
+	if err != nil {
+		slog.Error("recent matters", "err", err)
+		return
+	}
 	var ev game.MatterEvent
 	qid, key, err := b.store.NextQueued(ctx, court.GuildID, now)
-	if err == nil {
-		ev, _ = game.MatterByKey(key)
-	} else {
+	switch {
+	case err != nil:
 		qid = 0
+	case !game.FollowUpAllowed(key, recent):
+		// Never the same matter twice in a row: it waits a day.
+		if err := b.store.DeferQueued(ctx, qid, now.Add(b.senate.Interval)); err != nil {
+			slog.Error("defer follow-up", "err", err)
+		}
+		qid = 0
+	default:
+		ev, _ = game.MatterByKey(key)
 	}
 	if ev.Key == "" {
-		ev = game.PickMatter(b.rng, st.Trackers, st.Recent)
+		queued, err := b.store.QueuedEvents(ctx, court.GuildID)
+		if err != nil {
+			slog.Error("queued matters", "err", err)
+		}
+		ev = game.PickMatterAvoiding(b.rng, st.Trackers, recent, game.ActiveArcs(queued))
 	}
-	recent := append(st.Recent, ev.Key)
-	if len(recent) > 5 {
-		recent = recent[len(recent)-5:]
-	}
-	m, err := b.store.CreateMatter(ctx, court.GuildID, ev.Key, qid, now, now.Add(b.senate.VoteWindow), now.Add(b.senate.Interval), recent)
+	m, err := b.store.CreateMatter(ctx, court.GuildID, ev.Key, qid, now, now.Add(b.senate.VoteWindow), now.Add(b.senate.Interval))
 	if err != nil {
 		slog.Error("create matter", "err", err)
 		return
@@ -135,12 +147,13 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	bribes, err2 := b.store.Bribes(ctx, m.ID)
 	votes, err3 := b.store.Votes(ctx, m.ID)
 	chars, err4 := b.store.CharactersInCourt(ctx, m.GuildID)
-	if err := errors.Join(err1, err2, err3, err4); err != nil {
+	ops, err5 := b.store.CourtOpinions(ctx, m.GuildID)
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
 		slog.Error("load matter", "err", err)
 		return
 	}
 
-	in := game.MatterInput{MatterID: m.ID, Event: ev, Realm: st.Trackers, Senators: senators, Bribes: map[int64]string{}}
+	in := game.MatterInput{MatterID: m.ID, Event: ev, Realm: st.Trackers, Sectors: st.Sectors, Senators: senators, Bribes: map[int64]string{}, Opinions: ops}
 	for sid, br := range bribes {
 		in.Bribes[sid] = br.Option
 	}
@@ -150,11 +163,13 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		in.Players = append(in.Players, game.Player{Person: c.Person(), Role: c.Role, Vote: votes[c.ID], Weight: c.VoteWeight()})
 	}
 	res := game.ResolveMatter(b.rng, in)
+	ventureNotices(chars, res)
 
 	err = b.store.ResolveMatter(ctx, m, store.MatterResolution{
 		Summary: map[string]any{"winner": res.Winner.Key, "succeeded": res.Succeeded, "tally": res.Tally},
-		Realm:   res.Realm, Fallen: res.Fallen, FallenReason: res.FallenReason,
+		Realm:   res.Realm, Sectors: res.Sectors, Fallen: res.Fallen, FallenReason: res.FallenReason,
 		Deltas: res.Deltas, FollowUps: res.FollowUps, DayLength: b.senate.Interval,
+		Opinions: res.Opinions, OpinionDecay: game.OpinionDecay,
 	}, now)
 	if err != nil {
 		if !errors.Is(err, store.ErrEnded) {
@@ -214,6 +229,9 @@ func trackersLine(r game.Realm) string {
 
 func matterEmbed(m store.Matter, ev game.MatterEvent, r game.Realm) *discordgo.MessageEmbed {
 	var sb strings.Builder
+	if l := ev.ArcLabel(); l != "" {
+		sb.WriteString("*" + l + "*\n\n")
+	}
 	sb.WriteString(ev.Prompt + "\n")
 	for _, o := range ev.Options {
 		fmt.Fprintf(&sb, "\n**%s**: %s", o.Label, o.Hint)
@@ -258,6 +276,9 @@ func decisionEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.Messag
 	desc := fmt.Sprintf("**%s**\n%s", res.Winner.Label, res.Outcome.Text)
 	if s := res.Outcome.Realm.Describe(); s != "" {
 		desc += "\n\n" + s
+	}
+	if s := game.DescribeChanges(res.Outcome.Sectors); s != "" {
+		desc += "\n" + s
 	}
 	var tally strings.Builder
 	for _, o := range ev.Options {
@@ -349,11 +370,12 @@ func (b *Bot) onRoster(ctx context.Context, i *discordgo.InteractionCreate) {
 	}
 	chars, _ := b.store.CharactersInCourt(ctx, c.GuildID)
 	sort.Slice(chars, func(a, b int) bool { return chars[a].VoteWeight() > chars[b].VoteWeight() })
+	ops, _ := b.store.Opinions(ctx, c.ID)
 
 	var sb strings.Builder
-	sb.WriteString("**Senators**\n")
+	sb.WriteString("**Senators** (and their opinion of you)\n")
 	for _, s := range sen {
-		fmt.Fprintf(&sb, "**%s**: %s · influence %s (%s%%)\n", s.Name, s.TraitNames(), game.Num(s.Influence),
+		fmt.Fprintf(&sb, "%s **%s**: %s · influence %s (%s%%)\n", opinionTag(ops[s.ID]), s.Name, s.TraitNames(), game.Num(s.Influence),
 			game.Num(b.share(ctx, c.GuildID, s.Influence)))
 	}
 	sb.WriteString("\n**Players**\n")
@@ -376,7 +398,7 @@ func (b *Bot) onRoster(ctx context.Context, i *discordgo.InteractionCreate) {
 	var opts []discordgo.SelectMenuOption
 	for _, s := range sen {
 		opts = append(opts, discordgo.SelectMenuOption{Label: s.Name, Value: fmt.Sprint(s.ID),
-			Description: truncate(s.TraitNames()+" · influence "+game.Num(s.Influence), 100)})
+			Description: truncate(fmt.Sprintf("Opinion %s · %s · influence %s", game.OpinionNum(ops[s.ID]), s.TraitNames(), game.Num(s.Influence)), 100)})
 	}
 	b.respond(i, ephemeral(&discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
@@ -434,18 +456,19 @@ func (b *Bot) onVote(ctx context.Context, i *discordgo.InteractionCreate, matter
 	}
 	b.reply(i, fmt.Sprintf("You voted to **%s**. Your voice carries **%s%%** of the Senate. You can change your vote until <t:%d:R>.",
 		strings.ToLower(o.Label), game.Num(b.share(ctx, m.GuildID, c.VoteWeight())), m.ClosesAt.Unix()))
+	b.leak(ctx, c, game.SecretVote(c.FullName(), ev.Title, o.Label))
 }
 
 // ---- bribes ----
 
-func (b *Bot) senatorSelect(ctx context.Context, m store.Matter, senators []game.Senator, bribes map[int64]store.Bribe) discordgo.ActionsRow {
+func senatorSelect(m store.Matter, senators []game.Senator, bribes map[int64]store.Bribe, ops game.Opinions) discordgo.ActionsRow {
 	var opts []discordgo.SelectMenuOption
 	for _, s := range senators {
-		desc := fmt.Sprintf("%s · influence %s", s.TraitNames(), game.Num(s.Influence))
+		desc := fmt.Sprintf("Opinion %s · %s · influence %s", game.OpinionNum(ops[s.ID]), s.TraitNames(), game.Num(s.Influence))
 		if _, paid := bribes[s.ID]; paid {
 			desc += " · already paid"
 		}
-		opts = append(opts, discordgo.SelectMenuOption{Label: s.Name, Value: fmt.Sprint(s.ID), Description: desc})
+		opts = append(opts, discordgo.SelectMenuOption{Label: s.Name, Value: fmt.Sprint(s.ID), Description: truncate(desc, 100)})
 	}
 	return row(discordgo.SelectMenu{
 		MenuType: discordgo.StringSelectMenu, CustomID: fmt.Sprintf("senate:bribewho:%d", m.ID),
@@ -461,7 +484,8 @@ func (b *Bot) onBribe(ctx context.Context, i *discordgo.InteractionCreate, matte
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
 	bribes, err2 := b.store.Bribes(ctx, m.ID)
-	if err := errors.Join(err1, err2); err != nil {
+	ops, err3 := b.store.Opinions(ctx, c.ID)
+	if err := errors.Join(err1, err2, err3); err != nil {
 		b.fail(i, err)
 		return
 	}
@@ -469,10 +493,10 @@ func (b *Bot) onBribe(ctx context.Context, i *discordgo.InteractionCreate, matte
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "Bribe a senator: " + ev.Title,
 			Description: fmt.Sprintf("Pay a senator to vote your way. Each senator can be bought once per matter. "+
-				"The less they like your option, the more it costs.\n\nYou have **%d gold**.", c.Wealth),
+				"The less they like your option, and the less they like you, the more it costs.\n\nYou have **%d gold**.", c.Wealth),
 			Color: colorGold,
 		}},
-		Components: []discordgo.MessageComponent{b.senatorSelect(ctx, m, sen, bribes)},
+		Components: []discordgo.MessageComponent{senatorSelect(m, sen, bribes, ops)},
 	}))
 }
 
@@ -494,7 +518,8 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
 	bribes, err2 := b.store.Bribes(ctx, m.ID)
 	st, err3 := b.store.GetRealm(ctx, m.GuildID)
-	if err := errors.Join(err1, err2, err3); err != nil {
+	ops, err4 := b.store.Opinions(ctx, c.ID)
+	if err := errors.Join(err1, err2, err3, err4); err != nil {
 		b.fail(i, err)
 		return
 	}
@@ -502,8 +527,9 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 	if !ok {
 		return
 	}
+	op := ops[s.ID]
 
-	desc := fmt.Sprintf("%s · influence %s\n\n", s.TraitNames(), game.Num(s.Influence))
+	desc := fmt.Sprintf("%s · influence %s\n**Their opinion of you**\n%s\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
 	var btns []discordgo.MessageComponent
 	if br, paid := bribes[s.ID]; paid {
 		if br.CharacterID == c.ID {
@@ -513,15 +539,17 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 		}
 	} else if _, can := s.BribePrice(ev, ev.Default, st.Trackers, m.ID); !can {
 		desc += "They cannot be bought."
+	} else if _, can := s.BribePriceFor(ev, ev.Default, st.Trackers, m.ID, op); !can {
+		desc += "They won't take your gold. They don't think highly enough of you."
 	} else {
 		desc += fmt.Sprintf("You have **%d gold**. Their price:", c.Wealth)
 		for _, o := range ev.Options {
-			price, _ := s.BribePrice(ev, o.Key, st.Trackers, m.ID)
+			price, _ := s.BribePriceFor(ev, o.Key, st.Trackers, m.ID, op)
 			btns = append(btns, button(fmt.Sprintf("%s: %d gold", o.Label, price),
 				fmt.Sprintf("senate:pay:%d:%d:%s", m.ID, s.ID, o.Key), discordgo.SuccessButton, price > c.Wealth))
 		}
 	}
-	comps := []discordgo.MessageComponent{b.senatorSelect(ctx, m, sen, bribes)}
+	comps := []discordgo.MessageComponent{senatorSelect(m, sen, bribes, ops)}
 	if len(btns) > 0 {
 		comps = append(comps, row(btns...))
 	}
@@ -539,7 +567,8 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
 	st, err2 := b.store.GetRealm(ctx, m.GuildID)
-	if err := errors.Join(err1, err2); err != nil {
+	ops, err3 := b.store.Opinions(ctx, c.ID)
+	if err := errors.Join(err1, err2, err3); err != nil {
 		b.fail(i, err)
 		return
 	}
@@ -550,15 +579,15 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	if _, ok := ev.Option(opt); !ok {
 		return
 	}
-	price, can := s.BribePrice(ev, opt, st.Trackers, m.ID)
+	price, can := s.BribePriceFor(ev, opt, st.Trackers, m.ID, ops[s.ID])
 	if !can {
 		b.update(i, &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: s.Name + " cannot be bought.", Color: colorGold}},
+			Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: s.Name + " won't take your gold.", Color: colorGold}},
 		})
 		return
 	}
 	var text string
-	switch err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, time.Now()); {
+	switch err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, game.BribeOpinion(s), time.Now()); {
 	case errors.Is(err, store.ErrBought):
 		text = "Someone got to " + s.Name + " first."
 	case errors.Is(err, store.ErrEnded):
@@ -566,9 +595,45 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	case err != nil:
 		text = err.Error()
 	default:
-		text = fmt.Sprintf("Gold changes hands. **%s** will vote to **%s**. (-%d gold)", s.Name, strings.ToLower(optionLabel(ev, opt)), price)
+		text = fmt.Sprintf("Gold changes hands. **%s** will vote to **%s**, and thinks a little better of you. (-%d gold, opinion %s)",
+			s.Name, strings.ToLower(optionLabel(ev, opt)), price, game.OpinionNum(game.BribeOpinion(s)))
+		defer b.leak(ctx, c, game.SecretBribe(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), price))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: text, Color: colorGold}},
 	})
+}
+
+// ventureNotices tells each player how the decision moved their venture
+// income. It compares income now with income under the new sectors and
+// realm (which includes the day's drift).
+func ventureNotices(chars []store.Character, res game.MatterResult) {
+	totals := game.Stakes{}
+	for _, c := range chars {
+		for k, st := range c.Stakes() {
+			totals[k] += st
+		}
+	}
+	for _, c := range chars {
+		if len(c.Ventures) == 0 {
+			continue
+		}
+		after := game.VentureIncome(res.Sectors, res.Realm, c.Stakes(), totals)
+		diff := after - c.VentureIncome
+		if diff > -0.5 && diff < 0.5 {
+			continue
+		}
+		word := "Your ventures do better"
+		if diff < 0 {
+			word = "Your ventures suffer"
+		}
+		res.Notices[c.ID] = append(res.Notices[c.ID], fmt.Sprintf("%s: %s gold/day, %s in all.", word, signedNum(diff), game.Num(after)))
+	}
+}
+
+func signedNum(v float64) string {
+	if v > 0 {
+		return "+" + game.Num(v)
+	}
+	return game.Num(v)
 }

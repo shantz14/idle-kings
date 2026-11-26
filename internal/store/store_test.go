@@ -91,10 +91,10 @@ func TestPartyLifecycle(t *testing.T) {
 		t.Fatalf("ended: %+v", ended)
 	}
 	deltas := map[int64]game.Delta{host.ID: {Influence: 2, Wealth: -15, Stats: game.Stats{game.Diplomacy: 0.3}}}
-	if err := s.ApplyResult(ctx, a.ID, deltas, now); err != nil {
+	if err := s.ApplyResult(ctx, a.ID, Outcome{Deltas: deltas}, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyResult(ctx, a.ID, deltas, now); !errors.Is(err, ErrEnded) {
+	if err := s.ApplyResult(ctx, a.ID, Outcome{Deltas: deltas}, now); !errors.Is(err, ErrEnded) {
 		t.Fatalf("double apply: %v", err)
 	}
 	got, _ := s.GetCharacterByID(ctx, host.ID)

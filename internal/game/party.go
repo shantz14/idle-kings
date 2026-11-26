@@ -145,9 +145,10 @@ const (
 // EventOutcome is the result of the host's choice in a party event.
 // Quality adds directly to the party's success chance.
 type EventOutcome struct {
-	Text    string  `json:"text"`
-	Quality float64 `json:"quality"`
-	Delta   Delta   `json:"delta"`
+	Text      string  `json:"text"`
+	Quality   float64 `json:"quality"`
+	Delta     Delta   `json:"delta"`
+	Condition string  `json:"condition,omitempty"` // given to whoever the event happened to
 }
 
 // EventChoice is one button on an event. With no Check it always gives Success.
@@ -293,6 +294,19 @@ func PartyEventByKey(key string) (PartyEvent, bool) {
 	return PartyEvent{}, false
 }
 
+// EventByKey finds an event in any activity's catalogue: parties, hunts
+// and duels share the same DM event machinery.
+func EventByKey(key string) (PartyEvent, bool) {
+	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents} {
+		for _, e := range list {
+			if e.Key == key {
+				return e, true
+			}
+		}
+	}
+	return PartyEvent{}, false
+}
+
 // ResolveEventChoice rolls the host's choice. Unknown choices fall back to
 // the event's default.
 func ResolveEventChoice(r Roller, ev PartyEvent, choiceKey string, host Sheet) (EventChoice, EventOutcome) {
@@ -342,6 +356,9 @@ type PartyResult struct {
 	Deltas  map[int64]Delta    // applied to characters; may include hidden losses
 	Notices map[int64][]string // private messages per character
 	Public  string             // announced to the court
+	// Opinions are changes with senators (SenatorID 0 = every senator).
+	Opinions   []OpinionChange
+	Conditions []ConditionChange // e.g. wounds from a hunting accident
 }
 
 func (r *PartyResult) delta(id int64, d Delta) {
@@ -385,10 +402,14 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		hd = hd.Scale(PartyRewardScale(in.Spend))
 		res.notice(host.ID, "%s", withEffects("Your party was a success.", hd))
 		res.Public = fmt.Sprintf("**%s**'s party was the talk of the court.", host.Name)
+		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: host.ID, Delta: OpinionPartySuccess})
+		res.notice(host.ID, "The Senate heard about it. Every senator thinks a little better of you (%s).", OpinionNum(OpinionPartySuccess))
 	} else {
 		hd.Merge(hostFailure)
 		res.notice(host.ID, "%s", withEffects("Your party fell flat.", hd))
 		res.Public = fmt.Sprintf("**%s**'s party was a forgettable affair.", host.Name)
+		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: host.ID, Delta: OpinionPartyFailure})
+		res.notice(host.ID, "Word reached the Senate. Every senator thinks a little less of you (%s).", OpinionNum(OpinionPartyFailure))
 	}
 	res.delta(host.ID, hd)
 
@@ -464,6 +485,7 @@ func resolveRumor(r Roller, res *PartyResult, host Person, a Attendee) {
 		res.notice(a.ID, "Your whispers about %s were stamped out before they spread.", t.Name)
 	default:
 		res.delta(t.ID, Delta{Influence: -rumorDamage})
+		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: t.ID, Delta: OpinionRumored})
 		res.notice(a.ID, "Your whispers about %s spread through %s's party.", t.Name, host.Name)
 	}
 }

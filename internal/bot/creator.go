@@ -353,7 +353,7 @@ func estateLines(keys []string) string {
 			continue
 		}
 		icon := "📦"
-		if it.Kind == game.KindHome {
+		if it.Kind == game.KindProperty {
 			icon = "🏠"
 		}
 		fmt.Fprintf(&sb, "%s **%s** (value %s)", icon, it.Name, game.Num(it.Value))

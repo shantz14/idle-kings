@@ -99,11 +99,12 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
 	st, err2 := b.store.GetRealm(ctx, m.GuildID)
-	if err := errors.Join(err1, err2); err != nil {
+	ops, err3 := b.store.Opinions(ctx, c.ID)
+	if err := errors.Join(err1, err2, err3); err != nil {
 		b.fail(i, err)
 		return
 	}
-	offers := game.BestVoteOffers(ev, sen, c.VoteWeight(), st.Trackers, m.ID)
+	offers := game.BestVoteOffers(ev, sen, c.VoteWeight(), st.Trackers, m.ID, ops)
 	var sb strings.Builder
 	sb.WriteString("Once sold, your vote is locked and you can't change it.\n\n**Senators' offers**\n")
 	var btns []discordgo.MessageComponent
@@ -139,7 +140,8 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
 	st, err2 := b.store.GetRealm(ctx, m.GuildID)
-	if err := errors.Join(err1, err2); err != nil {
+	ops, err3 := b.store.Opinions(ctx, c.ID)
+	if err := errors.Join(err1, err2, err3); err != nil {
 		b.fail(i, err)
 		return
 	}
@@ -147,13 +149,13 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 	if !ok {
 		return
 	}
-	opt, gold, ok := s.VoteOffer(ev, c.VoteWeight(), st.Trackers, m.ID)
+	opt, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, ops[s.ID])
 	if !ok {
 		b.update(i, &discordgo.InteractionResponseData{Content: s.Name + " isn't buying.", Embeds: []*discordgo.MessageEmbed{}})
 		return
 	}
 	var text string
-	switch err := b.store.SellVoteToSenator(ctx, m.ID, c.ID, opt, s.Name, gold, time.Now()); {
+	switch err := b.store.SellVoteToSenator(ctx, m.ID, c.ID, opt, s, gold, game.OpinionSoldVote, time.Now()); {
 	case errors.Is(err, store.ErrVoteSold):
 		text = "Your vote is already sold."
 	case errors.Is(err, store.ErrEnded):
@@ -162,7 +164,9 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 		b.fail(i, err)
 		return
 	default:
-		text = fmt.Sprintf("You sold your vote to **%s**. You will vote to **%s**. (+%d gold)", s.Name, strings.ToLower(optionLabel(ev, opt)), gold)
+		text = fmt.Sprintf("You sold your vote to **%s**. You will vote to **%s**. (+%d gold, their opinion of you %s)",
+			s.Name, strings.ToLower(optionLabel(ev, opt)), gold, game.OpinionNum(game.OpinionSoldVote))
+		defer b.leak(ctx, c, game.SecretSoldToSenator(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), gold))
 	}
 	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "Vote sold", Description: text, Color: colorGold}}})
 }
@@ -292,6 +296,8 @@ func (b *Bot) onTradeModal(ctx context.Context, i *discordgo.InteractionCreate, 
 		return true
 	}
 	b.reply(i, fmt.Sprintf("Your offer has been sent to %s. I'll DM you their answer.", other.FullName()))
+	b.leak(ctx, c, game.SecretVoteOffer(c.FullName(), other.ID, other.FullName(), ev.Title,
+		optionLabel(ev, offer.Option), price, offer.Kind == store.OfferBuy))
 	return true
 }
 
@@ -325,6 +331,7 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 			return
 		}
 		done("You declined.")
+		b.leak(ctx, me, game.SecretVoteDeal(me.FullName(), them.ID, them.FullName(), ev.Title, "", o.Price, false))
 		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf("**%s** declined your vote offer on **%s**.", me.FullName(), ev.Title)})
 		return
 	}
@@ -349,6 +356,8 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 		return
 	}
 	label := strings.ToLower(optionLabel(ev, o.Option))
+	defer b.leak(ctx, me, game.SecretVoteDeal(me.FullName(), them.ID, them.FullName(), ev.Title, optionLabel(ev, o.Option), o.Price, true))
+	defer b.leak(ctx, them, game.SecretVoteDeal(them.FullName(), me.ID, me.FullName(), ev.Title, optionLabel(ev, o.Option), o.Price, true))
 	if o.Kind == store.OfferSell { // I bought their vote
 		done(fmt.Sprintf("Deal. You paid %d gold. **%s** will vote to **%s**.", o.Price, them.FullName(), label))
 		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf(
