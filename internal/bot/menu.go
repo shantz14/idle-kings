@@ -82,8 +82,8 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 
 func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
 	desc := standingLine(c)
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
-		desc = "**The realm has fallen.** " + st.FallenReason + "\n\n" + desc
+	if c.RealmFallen {
+		desc = "**The realm has fallen.** " + c.FallenReason + "\n\n" + desc
 	}
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		desc += "\n\n" + b.activityLine(ctx, a)

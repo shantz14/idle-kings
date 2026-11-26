@@ -27,7 +27,7 @@ type RealmState struct {
 	NextMatterAt time.Time
 }
 
-func (r RealmState) Alive() bool { return r.Status == "alive" }
+func (r RealmState) Alive() bool { return r.Status == realmAlive }
 
 type Matter struct {
 	ID        int64
@@ -52,7 +52,7 @@ type Bribe struct {
 // RunningCourts lists courts whose game has started.
 func (s *Store) RunningCourts(ctx context.Context) ([]Court, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT guild_id, admin_user_id, COALESCE(announcements_channel_id, ''), status FROM courts WHERE status = 'running'`)
+		`SELECT guild_id, admin_user_id, COALESCE(announcements_channel_id, ''), status FROM courts WHERE status = ?`, courtRunning)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (s *Store) SellVoteToSenator(ctx context.Context, matterID, charID int64, o
 	if err := setVote(ctx, tx, matterID, charID, option, "senator:"+senator.Name, now); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, gold, charID); err != nil {
+	if err := credit(ctx, tx, charID, gold); err != nil {
 		return err
 	}
 	if err := changeOpinions(ctx, tx, []game.OpinionChange{{SenatorID: senator.ID, CharacterID: charID, Delta: opinion}}); err != nil {
@@ -511,14 +511,10 @@ func (s *Store) AcceptOffer(ctx context.Context, offerID int64, option string, n
 	if err := s.openMatterTx(ctx, tx, o.MatterID, now); err != nil {
 		return o, err
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, o.Price, o.Buyer(), o.Price)
-	if err != nil {
+	if err := spendOr(ctx, tx, o.Buyer(), o.Price, fmt.Sprintf("the buyer can't afford %d gold any more", o.Price)); err != nil {
 		return o, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return o, fmt.Errorf("the buyer can't afford %d gold any more", o.Price)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, o.Price, o.Seller()); err != nil {
+	if err := credit(ctx, tx, o.Seller(), o.Price); err != nil {
 		return o, err
 	}
 	if err := setVote(ctx, tx, o.MatterID, o.Seller(), option, fmt.Sprintf("player:%d", o.Buyer()), now); err != nil {
@@ -602,12 +598,8 @@ func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64,
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrBought
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, price, charID, price)
-	if err != nil {
+	if err := spendOr(ctx, tx, charID, price, fmt.Sprintf("you need %d gold for that", price)); err != nil {
 		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("you need %d gold for that", price)
 	}
 	if err := changeOpinions(ctx, tx, []game.OpinionChange{{SenatorID: senatorID, CharacterID: charID, Delta: opinion}}); err != nil {
 		return err
@@ -650,29 +642,26 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 		return ErrEnded
 	}
 	tr, _ := json.Marshal(r.Realm)
-	status, reason := "alive", any(nil)
+	status, reason := realmAlive, any(nil)
 	if r.Fallen {
-		status, reason = "fallen", r.FallenReason
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE realms SET trackers = ?, status = ?, fallen_reason = ? WHERE guild_id = ?`,
-		string(tr), status, reason, m.GuildID); err != nil {
-		return err
+		status, reason = realmFallen, r.FallenReason
 	}
 	laws, _ := json.Marshal(r.Laws)
 	if r.Laws == nil {
 		laws = []byte("[]")
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE realms SET laws = ? WHERE guild_id = ?`, string(laws), m.GuildID); err != nil {
-		return err
-	}
+	var sectors any // NULL keeps the sectors as they are
 	if r.Sectors != nil {
 		sec, _ := json.Marshal(r.Sectors)
-		if _, err := tx.ExecContext(ctx, `UPDATE realms SET sectors = ? WHERE guild_id = ?`, string(sec), m.GuildID); err != nil {
-			return err
-		}
+		sectors = string(sec)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE realms SET trackers = ?, status = ?, fallen_reason = ?, laws = ?, sectors = COALESCE(?, sectors) WHERE guild_id = ?`,
+		string(tr), status, reason, string(laws), sectors, m.GuildID); err != nil {
+		return err
 	}
 	if r.Fallen {
-		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = 'fallen' WHERE guild_id = ?`, m.GuildID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = ? WHERE guild_id = ?`, courtFallen, m.GuildID); err != nil {
 			return err
 		}
 	}

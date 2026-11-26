@@ -41,7 +41,7 @@ func (b *Bot) journeyPanel(ctx context.Context, c store.Character, note string) 
 	busy := ""
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		busy = b.activityLine(ctx, a)
-	} else if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	} else if c.RealmFallen {
 		busy = "The realm has fallen. Every road is a bandit's road now."
 	}
 	return journeyView(b.t.Journey, c.Wealth, busy, note)
@@ -84,7 +84,7 @@ func (b *Bot) onSetOut(ctx context.Context, i *discordgo.InteractionCreate, key 
 	if !ok {
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.journeyPanel(ctx, c, ""))
 		return
 	}

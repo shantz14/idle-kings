@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/shantz14/idle-kings/internal/game"
@@ -77,21 +76,6 @@ func (s *Store) BuyItem(ctx context.Context, charID int64, guildID, key string, 
 	return id, tx.Commit()
 }
 
-// spend takes gold from a character, or fails if they don't have it.
-func spend(ctx context.Context, tx *sql.Tx, charID int64, gold int) error {
-	if gold <= 0 {
-		return nil
-	}
-	res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, gold, charID, gold)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("that needs %d gold", gold)
-	}
-	return nil
-}
-
 // SellToShop sells an owned item back to the shop for payout gold. You can't
 // sell the property you live in (so you always keep one).
 func (s *Store) SellToShop(ctx context.Context, charID, holdingID int64, payout int) error {
@@ -118,10 +102,10 @@ func (s *Store) SellToShop(ctx context.Context, charID, holdingID int64, payout 
 	if err := fixResidence(ctx, tx, charID); err != nil { // keeps at least one property
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, payout, charID); err != nil {
+	if err := credit(ctx, tx, charID, payout); err != nil {
 		return err
 	}
-	if err := cancelOffersWith(ctx, tx, []int64{holdingID}, 0); err != nil {
+	if err := cancelOffersWith(ctx, tx, charID, []int64{holdingID}, 0); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -297,7 +281,7 @@ func (s *Store) AcceptEstateOffer(ctx context.Context, id int64, now time.Time) 
 	if err := spend(ctx, tx, payer, gold); err != nil {
 		return o, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, gold, payee); err != nil {
+	if err := credit(ctx, tx, payee, gold); err != nil {
 		return o, err
 	}
 	move := func(ids []int64, to int64) error {
@@ -322,7 +306,7 @@ func (s *Store) AcceptEstateOffer(ctx context.Context, id int64, now time.Time) 
 	if _, err := tx.ExecContext(ctx, `UPDATE estate_offers SET status = 'accepted' WHERE id = ?`, o.ID); err != nil {
 		return o, err
 	}
-	if err := cancelOffersWith(ctx, tx, append(append([]int64{}, o.Give...), o.Want...), o.ID); err != nil {
+	if err := cancelOffersWith(ctx, tx, o.FromID, append(append([]int64{}, o.Give...), o.Want...), o.ID); err != nil {
 		return o, err
 	}
 	o.Status = "accepted"
@@ -382,13 +366,15 @@ func fixResidence(ctx context.Context, tx *sql.Tx, charID int64) error {
 }
 
 // cancelOffersWith cancels pending offers (except keep) that involve any of
-// the given estate items, since they can no longer be carried out.
-func cancelOffersWith(ctx context.Context, tx *sql.Tx, items []int64, keep int64) error {
+// the given estate items, since they can no longer be carried out. Only
+// offers in charID's court are looked at.
+func cancelOffersWith(ctx context.Context, tx *sql.Tx, charID int64, items []int64, keep int64) error {
 	gone := map[int64]bool{}
 	for _, id := range items {
 		gone[id] = true
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT `+offerCols+` FROM estate_offers WHERE status = 'pending' AND id != ?`, keep)
+	rows, err := tx.QueryContext(ctx, `SELECT `+offerCols+` FROM estate_offers
+		 WHERE status = 'pending' AND guild_id = (SELECT guild_id FROM characters WHERE id = ?) AND id != ?`, charID, keep)
 	if err != nil {
 		return err
 	}

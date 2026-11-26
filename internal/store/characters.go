@@ -41,6 +41,10 @@ type Character struct {
 	Monuments []string
 	// Laws are the court's laws in force, loaded with the realm in fillVentures.
 	Laws game.Laws
+	// RealmFallen is set when the court's realm has fallen (loaded with the
+	// realm in fillVentures), so handlers needn't load the realm again.
+	RealmFallen  bool
+	FallenReason string
 }
 
 // Holding is one estate item a character owns.
@@ -330,6 +334,58 @@ func (s *Store) CharactersForUser(ctx context.Context, userID string) ([]Charact
 	return s.listCharacters(ctx, `c.user_id = ?`, userID)
 }
 
+// CharactersByIDs loads the given characters, keyed by id. Missing ids are
+// left out.
+func (s *Store) CharactersByIDs(ctx context.Context, ids []int64) (map[int64]Character, error) {
+	out := map[int64]Character{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	in, args := inList(ids)
+	list, err := s.listCharacters(ctx, `c.id IN `+in, args...)
+	for _, c := range list {
+		out[c.ID] = c
+	}
+	return out, err
+}
+
+// CharacterName is the little of a character most lists need.
+type CharacterName struct {
+	ID       int64
+	UserID   string
+	Name     string
+	Family   string
+	FullName string
+}
+
+// CharacterNames looks up names and Discord users without loading the
+// rest of each character. Missing ids are left out.
+func (s *Store) CharacterNames(ctx context.Context, ids []int64) (map[int64]CharacterName, error) {
+	out := map[int64]CharacterName{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	in, args := inList(ids)
+	list, err := queryAll(ctx, s.db, `SELECT id, user_id, name, family_name FROM characters WHERE id IN `+in,
+		func(r scanner) (CharacterName, error) {
+			var n CharacterName
+			err := r.Scan(&n.ID, &n.UserID, &n.Name, &n.Family)
+			n.FullName = n.Name + " " + n.Family
+			return n, err
+		}, args...)
+	for _, n := range list {
+		out[n.ID] = n
+	}
+	return out, err
+}
+
+// CountCharacters is how many characters sit at a court.
+func (s *Store) CountCharacters(ctx context.Context, guildID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM characters WHERE guild_id = ?`, guildID).Scan(&n)
+	return n, err
+}
+
 // CharactersInCourt lists every character in a court.
 func (s *Store) CharactersInCourt(ctx context.Context, guildID string) ([]Character, error) {
 	return s.listCharacters(ctx, `c.guild_id = ? ORDER BY c.id`, guildID)
@@ -339,30 +395,24 @@ func (s *Store) CharactersInCourt(ctx context.Context, guildID string) ([]Charac
 // per full real day since they were last paid.
 func (s *Store) PayIncome(ctx context.Context, now time.Time) error {
 	const day = 86400
-	due, err := s.listCharacters(ctx, `? - c.last_income_at >= ?`, now.Unix(), day)
+	due, err := s.listCharacters(ctx, `c.last_income_at <= ?`, now.Unix()-day)
 	if err != nil || len(due) == 0 {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, c := range due {
-		var last int64
-		if err := tx.QueryRowContext(ctx, `SELECT last_income_at FROM characters WHERE id = ?`, c.ID).Scan(&last); err != nil {
-			return err
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		for _, c := range due {
+			// Whole days owed, worked out in SQL from the row as it is now, so
+			// a payment made since the list was read is never paid twice.
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE characters SET wealth = wealth + ? * ((? - last_income_at) / ?),
+				        last_income_at = last_income_at + ? * ((? - last_income_at) / ?)
+				 WHERE id = ? AND last_income_at <= ?`,
+				c.TotalIncome(), now.Unix(), day, day, now.Unix(), day, c.ID, now.Unix()-day); err != nil {
+				return err
+			}
 		}
-		days := (now.Unix() - last) / day
-		if days <= 0 {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ?, last_income_at = last_income_at + ? WHERE id = ?`,
-			int64(c.TotalIncome())*days, days*day, c.ID); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+		return nil
+	})
 }
 
 // applyDelta changes one character inside a transaction.

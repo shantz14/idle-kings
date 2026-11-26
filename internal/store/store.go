@@ -31,7 +31,7 @@ type Court struct {
 
 // Open opens (and creates) the database and applies the schema.
 func Open(path string) (*Store, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func (s *Store) GetCourt(ctx context.Context, guildID string) (Court, error) {
 
 func (s *Store) StartCourt(ctx context.Context, guildID, announcementsChannelID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE courts SET status = 'running', announcements_channel_id = ? WHERE guild_id = ?`,
+		`UPDATE courts SET status = ?, announcements_channel_id = ? WHERE guild_id = ?`, courtRunning,
 		announcementsChannelID, guildID)
 	return err
 }

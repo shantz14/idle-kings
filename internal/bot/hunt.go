@@ -44,7 +44,7 @@ func (b *Bot) huntPanel(ctx context.Context, c store.Character, note string) *di
 	busy := ""
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		busy = b.activityLine(ctx, a)
-	} else if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	} else if c.RealmFallen {
 		busy = "The realm has fallen. The royal forest burns."
 	} else if c.Wealth < game.HuntCost {
 		busy = fmt.Sprintf("You only have %d gold.", c.Wealth)
@@ -90,7 +90,7 @@ func (b *Bot) onHostHunt(ctx context.Context, i *discordgo.InteractionCreate, go
 	if !valid {
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.huntPanel(ctx, c, ""))
 		return
 	}

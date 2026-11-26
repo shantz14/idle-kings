@@ -131,12 +131,8 @@ func (s *Store) StartActivity(ctx context.Context, a Activity, cost int, events 
 		}
 	}
 	if cost > 0 {
-		res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, cost, a.HostID, cost)
-		if err != nil {
+		if err := spendOr(ctx, tx, a.HostID, cost, fmt.Sprintf("you need %d gold for that", cost)); err != nil {
 			return a, err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return a, fmt.Errorf("you need %d gold for that", cost)
 		}
 	}
 	a.Spend = cost
@@ -230,16 +226,35 @@ func (s *Store) AddParticipant(ctx context.Context, activityID, charID int64, go
 	if targetID != 0 {
 		target = targetID
 	}
+	// The insert checks the activity is still open, in case it ended since
+	// it was read above.
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO participants (activity_id, character_id, goal, target_id, joined_at) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT DO NOTHING`, activityID, charID, goal, target, now.Unix())
+		`INSERT INTO participants (activity_id, character_id, goal, target_id, joined_at)
+		 SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM activities WHERE id = ? AND resolved_at IS NULL AND ends_at > ?)
+		 ON CONFLICT DO NOTHING`, activityID, charID, goal, target, now.Unix(), activityID, now.Unix())
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrExists
+		return s.whyNotJoined(ctx, s.db, activityID, charID)
 	}
 	return nil
+}
+
+// whyNotJoined explains a guarded participant insert that did nothing:
+// already joined, or the activity ended.
+func (s *Store) whyNotJoined(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, activityID, charID int64) error {
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM participants WHERE activity_id = ? AND character_id = ?`,
+		activityID, charID).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return ErrExists
+	}
+	return ErrEnded
 }
 
 func (s *Store) Participants(ctx context.Context, activityID int64) ([]Participant, error) {
@@ -437,7 +452,7 @@ func applyRealm(ctx context.Context, tx *sql.Tx, guildID string, d game.Realm) e
 	} else if err != nil {
 		return err
 	}
-	if status != "alive" {
+	if status != realmAlive {
 		return nil
 	}
 	r := game.Realm{}
@@ -450,10 +465,10 @@ func applyRealm(ctx context.Context, tx *sql.Tx, guildID string, d game.Realm) e
 		return err
 	}
 	if fell, why := r.Fallen(); fell {
-		if _, err := tx.ExecContext(ctx, `UPDATE realms SET status = 'fallen', fallen_reason = ? WHERE guild_id = ?`, why, guildID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE realms SET status = ?, fallen_reason = ? WHERE guild_id = ?`, realmFallen, why, guildID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = 'fallen' WHERE guild_id = ?`, guildID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = ? WHERE guild_id = ?`, courtFallen, guildID); err != nil {
 			return err
 		}
 	}
@@ -473,15 +488,11 @@ func (s *Store) ApplyAid(ctx context.Context, charID int64, guildID string, gold
 	if err := tx.QueryRowContext(ctx, `SELECT status FROM realms WHERE guild_id = ?`, guildID).Scan(&status); err != nil {
 		return err
 	}
-	if status != "alive" {
+	if status != realmAlive {
 		return ErrEnded
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, gold, charID, gold)
-	if err != nil {
+	if err := spendOr(ctx, tx, charID, gold, fmt.Sprintf("you need %d gold for that", gold)); err != nil {
 		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("you need %d gold for that", gold)
 	}
 	if err := applyRealm(ctx, tx, guildID, realm); err != nil {
 		return err

@@ -123,7 +123,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 		b.update(i, b.budgetPanel(c, goal, fmt.Sprintf("You only have %d gold.", c.Wealth)))
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.partyPanel(ctx, c, "The realm has fallen. There is nothing left to celebrate."))
 		return
 	}

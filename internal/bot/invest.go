@@ -184,7 +184,7 @@ func (b *Bot) onInvestGo(ctx context.Context, i *discordgo.InteractionCreate, c 
 		b.update(i, b.investAmountPanel(ctx, c, key, fmt.Sprintf("You only have %d gold.", c.Wealth)))
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.investAmountPanel(ctx, c, key, ""))
 		return
 	}

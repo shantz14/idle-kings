@@ -84,7 +84,7 @@ func (b *Bot) duelBusy(ctx context.Context, c store.Character) string {
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		return b.activityLine(ctx, a)
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		return "The realm has fallen. There is no honor left to fight for."
 	}
 	return ""

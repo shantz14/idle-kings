@@ -47,7 +47,7 @@ func (b *Bot) spyBusy(ctx context.Context, c store.Character) string {
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		return b.activityLine(ctx, a)
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		return "The realm has fallen. There are no secrets left worth keeping."
 	}
 	return ""

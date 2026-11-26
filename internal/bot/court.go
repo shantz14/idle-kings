@@ -73,7 +73,7 @@ func (b *Bot) courtPanel(ctx context.Context, c store.Character, senatorID int64
 	busy := ""
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		busy = b.activityLine(ctx, a)
-	} else if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	} else if c.RealmFallen {
 		busy = "The realm has fallen. No one is receiving visitors."
 	}
 	return courtView(c, sen, ops, senatorID, b.courtFor, busy, note)
@@ -156,7 +156,7 @@ func (b *Bot) onCourtGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 		b.update(i, b.courtPanel(ctx, c, 0, "That senator is gone."))
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.courtPanel(ctx, c, s.ID, ""))
 		return
 	}

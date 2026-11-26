@@ -34,7 +34,7 @@ func (b *Bot) worksPanel(ctx context.Context, c store.Character, note string) *d
 	building := ""
 	if a, err := b.store.WorkInProgress(ctx, c.ID); err == nil {
 		building = b.activityLine(ctx, a)
-	} else if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	} else if c.RealmFallen {
 		building = "The realm has fallen. Nobody is building anything now."
 	}
 	times := map[string]time.Duration{}
@@ -81,7 +81,7 @@ func (b *Bot) onBuildWork(ctx context.Context, i *discordgo.InteractionCreate, c
 	if !ok {
 		return
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		b.update(i, b.worksPanel(ctx, c, ""))
 		return
 	}

@@ -26,7 +26,7 @@ func (b *Bot) busyLine(ctx context.Context, c store.Character, fallen string) st
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		return b.activityLine(ctx, a)
 	}
-	if st, err := b.store.GetRealm(ctx, c.GuildID); err == nil && !st.Alive() {
+	if c.RealmFallen {
 		return fallen
 	}
 	return ""

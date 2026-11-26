@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS courts (
     guild_id                 TEXT PRIMARY KEY,
     admin_user_id            TEXT NOT NULL,
     announcements_channel_id TEXT,                          -- public actions post here; set on /start
-    status                   TEXT NOT NULL DEFAULT 'setup', -- setup | running
+    status                   TEXT NOT NULL DEFAULT 'setup', -- setup | running | fallen
     created_at               INTEGER NOT NULL
 );
 
@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS characters (
     created_at     INTEGER NOT NULL,
     UNIQUE (guild_id, user_id)
 );
+CREATE INDEX IF NOT EXISTS characters_user ON characters (user_id);
+CREATE INDEX IF NOT EXISTS characters_income ON characters (last_income_at);
 
 -- What each character owns: properties and possessions (keys into game.Items).
 -- Estate value is derived from these. Unique items have one row per court.
@@ -56,6 +58,7 @@ CREATE TABLE IF NOT EXISTS estate_offers (
     expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS estate_offers_open ON estate_offers (status, from_id, to_id);
+CREATE INDEX IF NOT EXISTS estate_offers_guild ON estate_offers (guild_id) WHERE status = 'pending';
 
 -- Character creator progress, so a closed popup can be resumed.
 CREATE TABLE IF NOT EXISTS character_drafts (
@@ -83,6 +86,8 @@ CREATE TABLE IF NOT EXISTS activities (
     resolved_at         INTEGER
 );
 CREATE INDEX IF NOT EXISTS activities_open ON activities (ends_at) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS activities_host ON activities (host_id) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS activities_target ON activities (target_id, kind) WHERE resolved_at IS NULL;
 
 -- Other players joining a public activity.
 CREATE TABLE IF NOT EXISTS participants (
@@ -110,6 +115,8 @@ CREATE TABLE IF NOT EXISTS activity_events (
     resolved_at   INTEGER
 );
 CREATE INDEX IF NOT EXISTS events_open ON activity_events (fires_at) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS events_deadline ON activity_events (deadline_at) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS events_activity ON activity_events (activity_id);
 
 -- ---- the Senate ----
 
@@ -132,6 +139,7 @@ CREATE TABLE IF NOT EXISTS senators (
     influence   REAL NOT NULL,
     base_price  INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS senators_guild ON senators (guild_id);
 
 -- A daily matter put to a vote.
 CREATE TABLE IF NOT EXISTS matters (
@@ -147,6 +155,8 @@ CREATE TABLE IF NOT EXISTS matters (
     petitioner_id INTEGER  -- the character who petitioned for it, if anyone
 );
 CREATE INDEX IF NOT EXISTS matters_open ON matters (closes_at) WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS matters_opened ON matters (guild_id, opened_at);
+CREATE INDEX IF NOT EXISTS matters_resolved ON matters (guild_id, resolved_at);
 
 CREATE TABLE IF NOT EXISTS votes (
     matter_id    INTEGER NOT NULL REFERENCES matters(id),
@@ -157,6 +167,7 @@ CREATE TABLE IF NOT EXISTS votes (
     sold_to      TEXT,                       -- who bought it, for the record
     PRIMARY KEY (matter_id, character_id)
 );
+CREATE INDEX IF NOT EXISTS votes_character ON votes (character_id, voted_at);
 
 -- Player-to-player vote deals. kind 'sell': from_id offers their vote to
 -- to_id, who picks the option on accepting. kind 'buy': from_id offers to
@@ -192,6 +203,7 @@ CREATE TABLE IF NOT EXISTS realm_queue (
     due_at    INTEGER NOT NULL,
     petitioner_id INTEGER -- set for a petition (see game.Petitions)
 );
+CREATE INDEX IF NOT EXISTS realm_queue_guild ON realm_queue (guild_id, due_at);
 
 -- What each senator thinks of each player, -100 to 100. Missing = 0.
 CREATE TABLE IF NOT EXISTS senator_opinions (
@@ -200,6 +212,7 @@ CREATE TABLE IF NOT EXISTS senator_opinions (
     value        REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (senator_id, character_id)
 );
+CREATE INDEX IF NOT EXISTS senator_opinions_character ON senator_opinions (character_id);
 
 -- How much of each sector a player owns. See game.Share.
 CREATE TABLE IF NOT EXISTS sector_stakes (
@@ -260,3 +273,4 @@ CREATE TABLE IF NOT EXISTS denunciations (
     expires_at INTEGER NOT NULL,   -- unused: reports keep forever
     used_at    INTEGER
 );
+CREATE INDEX IF NOT EXISTS denunciations_owner ON denunciations (owner_id) WHERE used_at IS NULL;

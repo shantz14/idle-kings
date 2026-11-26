@@ -50,12 +50,8 @@ func (s *Store) AcceptDuel(ctx context.Context, activityID, defenderID int64, bo
 		return a, ErrNotYourDuel
 	}
 	if a.Spend > 0 {
-		res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, a.Spend, defenderID, a.Spend)
-		if err != nil {
+		if err := spendOr(ctx, tx, defenderID, a.Spend, fmt.Sprintf("you need %d gold to match the wager", a.Spend)); err != nil {
 			return a, err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return a, fmt.Errorf("you need %d gold to match the wager", a.Spend)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE activities SET goal = ?, ends_at = ? WHERE id = ?`,
@@ -95,7 +91,7 @@ func (s *Store) DeclineDuel(ctx context.Context, activityID, defenderID int64, o
 	if n, _ := res.RowsAffected(); n == 0 {
 		return a, ErrEnded
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, a.Spend, a.HostID); err != nil {
+	if err := credit(ctx, tx, a.HostID, a.Spend); err != nil {
 		return a, err
 	}
 	if err := applyOutcome(ctx, tx, a.GuildID, out, now); err != nil {
@@ -135,12 +131,8 @@ func (s *Store) PlaceBet(ctx context.Context, activityID, charID, sideID int64, 
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrExists
 	}
-	res, err = tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, amount, charID, amount)
-	if err != nil {
+	if err := spendOr(ctx, tx, charID, amount, fmt.Sprintf("you need %d gold for that bet", amount)); err != nil {
 		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("you need %d gold for that bet", amount)
 	}
 	return tx.Commit()
 }
