@@ -80,7 +80,7 @@ func (b *Bot) onCanvass(ctx context.Context, i *discordgo.InteractionCreate, par
 		Embeds: []*discordgo.MessageEmbed{{Title: "Out in the districts",
 			Description: fmt.Sprintf("You head out to shake hands across the city. You'll be back <t:%d:R>, and I'll DM you how it went.", a.EndsAt.Unix()),
 			Color:       colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -102,7 +102,7 @@ func canvassView(dur time.Duration, busy, note string) *discordgo.InteractionRes
 		Embeds: []*discordgo.MessageEmbed{{Title: "Canvass the Districts", Description: desc, Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(
 			button("Go canvassing", "canvass:go", discordgo.SuccessButton, busy != ""),
-			button("Back", "menu:cat:"+string(game.CatDiplomacy), discordgo.SecondaryButton, false),
+			backButton(game.KindCanvass),
 		)},
 	}
 }
@@ -187,7 +187,7 @@ func circusView(c store.Character, dur time.Duration, busy, note string) *discor
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and Circuses", Description: desc, Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(button("Back", "menu:cat:"+string(game.CatMonetary), discordgo.SecondaryButton, false))},
+			row(backButton(game.KindCircus))},
 	}
 }
 
@@ -224,7 +224,7 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 			Description: fmt.Sprintf("You spent **%d gold** on a %s. It ends <t:%d:R>, and I'll DM you how the city took it.%s%s",
 				gold, lowerName(name), a.EndsAt.Unix(), where, permit),
 			Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -262,39 +262,6 @@ func (b *Bot) resolveCircus(ctx context.Context, a store.Activity, now time.Time
 }
 
 // ---- shared announcement helpers ----
-
-// announce posts a public activity in the court's announcements channel and
-// records it on the activity. It returns " The court has been told in #x."
-// or "".
-func (b *Bot) announce(ctx context.Context, a store.Activity, e *discordgo.MessageEmbed, comps []discordgo.MessageComponent) string {
-	court, err := b.store.GetCourt(ctx, a.GuildID)
-	if err != nil || court.AnnouncementsChannelID == "" {
-		return ""
-	}
-	msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
-		Embeds: []*discordgo.MessageEmbed{e}, Components: comps,
-	})
-	if err != nil {
-		slog.Warn("announce", "kind", a.Kind, "err", err)
-		return ""
-	}
-	_ = b.store.SetAnnouncement(ctx, a.ID, msg.ChannelID, msg.ID)
-	return fmt.Sprintf(" The court has been told in <#%s>.", msg.ChannelID)
-}
-
-// announceEnd posts a public activity's result and strips the buttons from
-// its announcement.
-func (b *Bot) announceEnd(a store.Activity, e *discordgo.MessageEmbed) {
-	if a.AnnounceChannelID == "" {
-		return
-	}
-	_, _ = b.s.ChannelMessageSendEmbed(a.AnnounceChannelID, e)
-	if a.AnnounceMessageID != "" {
-		ended := []*discordgo.MessageEmbed{e}
-		empty := []discordgo.MessageComponent{}
-		_, _ = b.s.ChannelMessageEditComplex(&discordgo.MessageEdit{Channel: a.AnnounceChannelID, ID: a.AnnounceMessageID, Embeds: &ended, Components: &empty})
-	}
-}
 
 // lowerName lowercases a preset name for use mid-sentence.
 func lowerName(s string) string {

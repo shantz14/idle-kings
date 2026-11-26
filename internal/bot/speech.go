@@ -78,7 +78,7 @@ func speechView(dur time.Duration, busy, note string) *discordgo.InteractionResp
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Give a Speech in the Forum", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(button("Back", "menu:cat:"+string(game.CatDiplomacy), discordgo.SecondaryButton, false))},
+			row(backButton(game.KindSpeech))},
 	}
 }
 
@@ -114,7 +114,7 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 		Embeds: []*discordgo.MessageEmbed{{Title: "You take the stand",
 			Description: fmt.Sprintf("Cause: **%s**. You'll hear how it went <t:%d:R>.%s%s", cause.Name, a.EndsAt.Unix(), where, permit),
 			Color:       colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 

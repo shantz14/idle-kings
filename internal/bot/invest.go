@@ -162,7 +162,7 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 	comps := []discordgo.MessageComponent{row(discordgo.SelectMenu{
 		MenuType: discordgo.StringSelectMenu, CustomID: "invest:pick", Placeholder: "Choose an industry…", Options: opts,
 	})}
-	back := button("Back", "menu:cat:"+string(game.CatMonetary), discordgo.SecondaryButton, false)
+	back := backButton(game.KindInvest)
 
 	d, ok := game.SectorByKey(key)
 	if !ok {
@@ -221,7 +221,7 @@ func (b *Bot) onInvestGo(ctx context.Context, i *discordgo.InteractionCreate, c 
 				gold, d.Emoji, d.Name, ends.Unix()),
 			Color: colorGreen,
 		}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -276,12 +276,10 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 	}
 
 	if res.Exposed {
-		if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-			_, _ = b.s.ChannelMessageSendEmbed(court.AnnouncementsChannelID, &discordgo.MessageEmbed{
-				Title:       "A scandal in the lower city",
-				Description: fmt.Sprintf("Word is that **%s** has been putting money into smuggling rings and gambling dens.", c.FullName()),
-				Color:       colorRed,
-			})
-		}
+		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
+			Title:       "A scandal in the lower city",
+			Description: fmt.Sprintf("Word is that **%s** has been putting money into smuggling rings and gambling dens.", c.FullName()),
+			Color:       colorRed,
+		})
 	}
 }

@@ -164,23 +164,12 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 	permit := b.payPermit(ctx, c)
 	budget := strings.ToLower(game.PartyBudgetName(spend))
 
-	where := ""
-	if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-		msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
-			Embeds: []*discordgo.MessageEmbed{{
-				Title:       fmt.Sprintf("%s is throwing %s %s party", c.FullName(), article(budget), budget),
-				Description: fmt.Sprintf("The doors of House %s's estate are open. The party ends <t:%d:R>.", c.FamilyName, ends.Unix()),
-				Color:       colorGold,
-			}},
-			Components: []discordgo.MessageComponent{row(button("Attend the party", fmt.Sprintf("party:attend:%d", a.ID), discordgo.SuccessButton, false))},
-		})
-		if err != nil {
-			slog.Warn("announce party", "err", err)
-		} else {
-			_ = b.store.SetAnnouncement(ctx, a.ID, msg.ChannelID, msg.ID)
-			where = fmt.Sprintf(" The court has been told in <#%s>.", msg.ChannelID)
-		}
-	}
+	where := b.announce(ctx, a, &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("%s is throwing %s %s party", c.FullName(), article(budget), budget),
+		Description: fmt.Sprintf("The doors of House %s's estate are open. The party ends <t:%d:R>.", c.FamilyName, ends.Unix()),
+		Color:       colorGold,
+	}, []discordgo.MessageComponent{row(button("Attend the party", fmt.Sprintf("party:attend:%d", a.ID), discordgo.SuccessButton, false))})
+
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "Your party has begun",
@@ -188,7 +177,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 				game.GoalName(goal), spend, ends.Unix(), where, permit),
 			Color: colorGreen,
 		}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -523,12 +512,7 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 		if !res.Success {
 			color = colorRed
 		}
-		_, _ = b.s.ChannelMessageSendEmbed(a.AnnounceChannelID, &discordgo.MessageEmbed{Title: title, Description: public, Color: color})
-		if a.AnnounceMessageID != "" {
-			ended := []*discordgo.MessageEmbed{{Title: title, Description: public, Color: color}}
-			empty := []discordgo.MessageComponent{}
-			_, _ = b.s.ChannelMessageEditComplex(&discordgo.MessageEdit{Channel: a.AnnounceChannelID, ID: a.AnnounceMessageID, Embeds: &ended, Components: &empty})
-		}
+		b.announceEnd(a, &discordgo.MessageEmbed{Title: title, Description: public, Color: color})
 	}
 }
 

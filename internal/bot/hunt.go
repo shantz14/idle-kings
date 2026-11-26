@@ -85,7 +85,7 @@ func huntView(dur time.Duration, busy, note string) *discordgo.InteractionRespon
 	for _, g := range game.HuntHostGoals {
 		btns = append(btns, button(g.Name, "hunt:host:"+string(g.Key), discordgo.SuccessButton, busy != ""))
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatMartial), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindHunt))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Hunt in the Royal Forest", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -129,23 +129,12 @@ func (b *Bot) onHostHunt(ctx context.Context, i *discordgo.InteractionCreate, go
 		b.update(i, b.huntPanel(ctx, c, err.Error()))
 		return
 	}
-	where := ""
-	if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-		msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
-			Embeds: []*discordgo.MessageEmbed{{
-				Title:       fmt.Sprintf("%s rides out to hunt", c.FullName()),
-				Description: fmt.Sprintf("Horns sound at House %s. The hunt returns <t:%d:R>.", c.FamilyName, ends.Unix()),
-				Color:       colorGold,
-			}},
-			Components: []discordgo.MessageComponent{row(button("Join the hunt", fmt.Sprintf("hunt:join:%d", a.ID), discordgo.SuccessButton, false))},
-		})
-		if err != nil {
-			slog.Warn("announce hunt", "err", err)
-		} else {
-			_ = b.store.SetAnnouncement(ctx, a.ID, msg.ChannelID, msg.ID)
-			where = fmt.Sprintf(" The court has been told in <#%s>.", msg.ChannelID)
-		}
-	}
+	where := b.announce(ctx, a, &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("%s rides out to hunt", c.FullName()),
+		Description: fmt.Sprintf("Horns sound at House %s. The hunt returns <t:%d:R>.", c.FamilyName, ends.Unix()),
+		Color:       colorGold,
+	}, []discordgo.MessageComponent{row(button("Join the hunt", fmt.Sprintf("hunt:join:%d", a.ID), discordgo.SuccessButton, false))})
+
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "The hunt is on",
@@ -153,7 +142,7 @@ func (b *Bot) onHostHunt(ctx context.Context, i *discordgo.InteractionCreate, go
 				game.HuntGoalName(goal), game.HuntCost, ends.Unix(), where),
 			Color: colorGreen,
 		}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -332,11 +321,6 @@ func (b *Bot) resolveHunt(ctx context.Context, a store.Activity, now time.Time) 
 		if !res.Success {
 			color = colorRed
 		}
-		_, _ = b.s.ChannelMessageSendEmbed(a.AnnounceChannelID, &discordgo.MessageEmbed{Title: title, Description: public, Color: color})
-		if a.AnnounceMessageID != "" {
-			ended := []*discordgo.MessageEmbed{{Title: title, Description: public, Color: color}}
-			empty := []discordgo.MessageComponent{}
-			_, _ = b.s.ChannelMessageEditComplex(&discordgo.MessageEdit{Channel: a.AnnounceChannelID, ID: a.AnnounceMessageID, Embeds: &ended, Components: &empty})
-		}
+		b.announceEnd(a, &discordgo.MessageEmbed{Title: title, Description: public, Color: color})
 	}
 }

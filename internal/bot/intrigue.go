@@ -170,7 +170,7 @@ func plantView(lines []spyLine, d time.Duration, busy, note string) *discordgo.I
 	if busy == "" {
 		comps = append(comps, userSelect("spy:who", "Whose court will you infiltrate?"))
 	}
-	comps = append(comps, row(button("Back", "menu:cat:"+string(game.CatIntrigue), discordgo.SecondaryButton, false)))
+	comps = append(comps, row(backButton(game.KindPlantSpies)))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Plant Spies", Description: sb.String(), Color: colorGold}},
 		Components: comps,
@@ -239,7 +239,7 @@ func (b *Bot) onPlantGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Planting Spies", Description: text, Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretPlant(c.FullName(), t.ID, t.FullName()))
 }
@@ -320,7 +320,7 @@ func rootOutView(d time.Duration, busy, note string) *discordgo.InteractionRespo
 		Embeds: []*discordgo.MessageEmbed{{Title: "Root Out Spies", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(
 			button("Root them out", "spy:root", discordgo.SuccessButton, busy != ""),
-			button("Back", "menu:cat:"+string(game.CatIntrigue), discordgo.SecondaryButton, false),
+			backButton(game.KindRootOut),
 		)},
 	}
 }
@@ -341,7 +341,7 @@ func (b *Bot) onRootOutGo(ctx context.Context, i *discordgo.InteractionCreate, c
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Rooting Out Spies",
 			Description: fmt.Sprintf("You turn your household upside down. I'll DM you <t:%d:R> with what you found.", ends.Unix()), Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretRootOut(c.FullName()))
 }

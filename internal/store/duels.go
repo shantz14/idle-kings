@@ -84,12 +84,8 @@ func (s *Store) DeclineDuel(ctx context.Context, activityID, defenderID int64, o
 	if defenderID != 0 && a.TargetID != defenderID {
 		return a, ErrNotYourDuel
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), a.ID)
-	if err != nil {
+	if err := resolveOnce(ctx, tx, a.ID, now); err != nil {
 		return a, err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return a, ErrEnded
 	}
 	if err := credit(ctx, tx, a.HostID, a.Spend); err != nil {
 		return a, err
@@ -139,19 +135,9 @@ func (s *Store) PlaceBet(ctx context.Context, activityID, charID, sideID int64, 
 
 // DuelBets lists the bets on a duel.
 func (s *Store) DuelBets(ctx context.Context, activityID int64) ([]game.Bet, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT character_id, side_id, amount FROM bets WHERE activity_id = ? ORDER BY placed_at`, activityID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []game.Bet
-	for rows.Next() {
-		var b game.Bet
-		if err := rows.Scan(&b.CharacterID, &b.SideID, &b.Amount); err != nil {
-			return nil, err
-		}
-		out = append(out, b)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db, `SELECT character_id, side_id, amount FROM bets WHERE activity_id = ? ORDER BY placed_at`,
+		func(r scanner) (game.Bet, error) {
+			var b game.Bet
+			return b, r.Scan(&b.CharacterID, &b.SideID, &b.Amount)
+		}, activityID)
 }

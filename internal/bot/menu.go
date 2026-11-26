@@ -116,6 +116,17 @@ func categoryPanel(cat game.Category, role string) *discordgo.InteractionRespons
 	}
 }
 
+// backButton returns to the menu category an action is listed under.
+func backButton(kind string) discordgo.Button {
+	a, _ := game.ActionByKey(kind)
+	return button("Back", "menu:cat:"+string(a.Category), discordgo.SecondaryButton, false)
+}
+
+// homeRow is a row with one Back button to the home panel.
+func homeRow() discordgo.ActionsRow {
+	return row(button("Back", "menu:home", discordgo.SecondaryButton, false))
+}
+
 // rows lays buttons out five to a row, as Discord allows.
 func rows(btns []discordgo.MessageComponent) []discordgo.MessageComponent {
 	var out []discordgo.MessageComponent
@@ -163,7 +174,7 @@ func (b *Bot) partyPanel(ctx context.Context, c store.Character, note string) *d
 	for _, g := range game.HostGoals {
 		btns = append(btns, button(g.Name, "party:host:"+string(g.Key), discordgo.SuccessButton, busy))
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatDiplomacy), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindParty))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Throw a Party", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...)},

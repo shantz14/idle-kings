@@ -268,11 +268,9 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 
 	// Famous pieces change hands in public.
 	if it.Unique {
-		if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-			_, _ = b.s.ChannelMessageSendEmbed(court.AnnouncementsChannelID, &discordgo.MessageEmbed{
-				Description: fmt.Sprintf("%s **%s** has bought **%s**.", game.KindByKey(it.Kind).Emoji, c.FullName(), it.Name),
-				Color:       colorGold,
-			})
-		}
+		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
+			Description: fmt.Sprintf("%s **%s** has bought **%s**.", game.KindByKey(it.Kind).Emoji, c.FullName(), it.Name),
+			Color:       colorGold,
+		})
 	}
 }

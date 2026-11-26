@@ -8,19 +8,13 @@ import (
 	"time"
 )
 
-// Status values stored in the database.
+// Court and realm status values stored in the database.
 const (
-	courtSetup   = "setup"
 	courtRunning = "running"
 	courtFallen  = "fallen"
 
 	realmAlive  = "alive"
 	realmFallen = "fallen"
-
-	statusPending   = "pending"
-	statusAccepted  = "accepted"
-	statusDeclined  = "declined"
-	statusCancelled = "cancelled"
 )
 
 // querier is what both *sql.DB and *sql.Tx can do.
@@ -58,6 +52,12 @@ func queryAll[T any](ctx context.Context, q querier, query string, scan func(sca
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+// scanString reads a one-column row of text.
+func scanString(r scanner) (string, error) {
+	var v string
+	return v, r.Scan(&v)
 }
 
 // inList is "(?,?,…)" for len(vals) placeholders, and vals as args.

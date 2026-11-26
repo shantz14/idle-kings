@@ -53,7 +53,7 @@ func (b *Bot) onEmbezzle(ctx context.Context, i *discordgo.InteractionCreate, pa
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Embezzling",
 			Description: fmt.Sprintf("You start cooking the treasury's books. I'll DM you <t:%d:R>.", ends.Unix()), Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
@@ -76,7 +76,7 @@ func embezzleView(d time.Duration, busy, note string) *discordgo.InteractionResp
 	for _, s := range game.EmbezzleSizes {
 		btns = append(btns, button(fmt.Sprintf("%s (~%d gold)", s.Name, s.Gold()), "embezzle:go:"+s.Key, discordgo.DangerButton, busy != ""))
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatIntrigue), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindEmbezzle))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Embezzle from the Treasury", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -118,11 +118,9 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 		Title: "The treasury's books", Description: desc, Color: color,
 	}}})
 	if res.Caught {
-		if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-			_, _ = b.s.ChannelMessageSendEmbed(court.AnnouncementsChannelID, &discordgo.MessageEmbed{
-				Title: "A thief in the treasury", Description: res.Public, Color: colorRed,
-			})
-		}
+		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
+			Title: "A thief in the treasury", Description: res.Public, Color: colorRed,
+		})
 	}
 	if res.Success {
 		b.leak(ctx, c, game.SecretEmbezzle(c.FullName(), res.Delta.Wealth))

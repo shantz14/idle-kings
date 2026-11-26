@@ -91,7 +91,7 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 		}
 		opts = append(opts, discordgo.SelectMenuOption{Label: truncate(p.Name, 100), Value: p.Key, Description: truncate(desc, 100), Default: p.Key == key})
 	}
-	back := button("Back", "menu:cat:"+string(game.CatDiplomacy), discordgo.SecondaryButton, false)
+	back := backButton(game.KindPetition)
 	comps := []discordgo.MessageComponent{row(discordgo.SelectMenu{
 		MenuType: discordgo.StringSelectMenu, CustomID: "petition:pick", Placeholder: "Choose what to petition for…", Options: opts,
 	})}
@@ -148,7 +148,7 @@ func (b *Bot) onStartPetition(ctx context.Context, i *discordgo.InteractionCreat
 			Description: fmt.Sprintf("You set about lobbying the clerks to **%s**. You'll know <t:%d:R> whether it reaches the floor, and I'll DM you.",
 				lowerName(p.Name), a.EndsAt.Unix()),
 			Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 

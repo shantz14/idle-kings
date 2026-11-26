@@ -210,11 +210,9 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 			if d := res.Delta.Describe(); d != "" {
 				text += fmt.Sprintf(" (%s)", d)
 			}
-			if court, err := b.store.GetCourt(ctx, m.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-				_, _ = b.s.ChannelMessageSendEmbed(court.AnnouncementsChannelID, &discordgo.MessageEmbed{
-					Title: "A bought vote", Description: res.Public, Color: colorRed,
-				})
-			}
+			b.post(ctx, m.GuildID, &discordgo.MessageEmbed{
+				Title: "A bought vote", Description: res.Public, Color: colorRed,
+			})
 		}
 	}
 	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "Vote sold", Description: text, Color: color}}})

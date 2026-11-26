@@ -130,7 +130,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "court:who",
 			Placeholder: "Choose a senator to call on…", Options: opts}))
 	}
-	back := button("Back", "menu:cat:"+string(game.CatDiplomacy), discordgo.SecondaryButton, false)
+	back := backButton(game.KindCourt)
 	if chosen == nil {
 		return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(back))}
 	}
@@ -199,7 +199,7 @@ func (b *Bot) onCourtGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Courting " + s.Name, Description: text, Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretCourt(c.FullName(), s.Name, strings.ToLower(a.Name)))
 }

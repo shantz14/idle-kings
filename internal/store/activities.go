@@ -193,21 +193,8 @@ func (s *Store) WorkInProgress(ctx context.Context, hostID int64) (Activity, err
 
 // EndedActivities lists unresolved activities whose time is up.
 func (s *Store) EndedActivities(ctx context.Context, now time.Time) ([]Activity, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+activityCols+` FROM activities WHERE resolved_at IS NULL AND ends_at <= ?`, now.Unix())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Activity
-	for rows.Next() {
-		a, err := scanActivity(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db, `SELECT `+activityCols+` FROM activities WHERE resolved_at IS NULL AND ends_at <= ?`,
+		func(r scanner) (Activity, error) { return scanActivity(r) }, now.Unix())
 }
 
 // AddParticipant lets a character join a public activity.
@@ -309,31 +296,25 @@ func insertEvents(ctx context.Context, tx *sql.Tx, a Activity, events []NewEvent
 }
 
 func (s *Store) queryEvents(ctx context.Context, where string, args ...any) ([]Event, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+eventCols+` FROM activity_events e JOIN characters c ON c.id = e.character_id WHERE `+where, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Event
-	for rows.Next() {
-		var e Event
-		var fires, deadline int64
-		var ch, msg, result sql.NullString
-		if err := rows.Scan(&e.ID, &e.ActivityID, &e.CharacterID, &e.UserID, &e.Key, &fires, &deadline, &ch, &msg, &e.Choice, &result); err != nil {
-			return nil, err
-		}
-		e.FiresAt, e.Deadline = time.Unix(fires, 0), time.Unix(deadline, 0)
-		e.DMChannelID, e.DMMessageID = ch.String, msg.String
-		if result.Valid {
-			e.Result = &game.EventOutcome{}
-			if err := json.Unmarshal([]byte(result.String), e.Result); err != nil {
-				return nil, err
+	return queryAll(ctx, s.db,
+		`SELECT `+eventCols+` FROM activity_events e JOIN characters c ON c.id = e.character_id WHERE `+where,
+		func(r scanner) (Event, error) {
+			var e Event
+			var fires, deadline int64
+			var ch, msg, result sql.NullString
+			if err := r.Scan(&e.ID, &e.ActivityID, &e.CharacterID, &e.UserID, &e.Key, &fires, &deadline, &ch, &msg, &e.Choice, &result); err != nil {
+				return e, err
 			}
-		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
+			e.FiresAt, e.Deadline = time.Unix(fires, 0), time.Unix(deadline, 0)
+			e.DMChannelID, e.DMMessageID = ch.String, msg.String
+			if result.Valid {
+				e.Result = &game.EventOutcome{}
+				if err := json.Unmarshal([]byte(result.String), e.Result); err != nil {
+					return e, err
+				}
+			}
+			return e, nil
+		}, args...)
 }
 
 func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
@@ -397,12 +378,8 @@ func (s *Store) ApplyResult(ctx context.Context, activityID int64, out Outcome, 
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
-	if err != nil {
+	if err := resolveOnce(ctx, tx, activityID, now); err != nil {
 		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrEnded
 	}
 	var guildID string
 	if err := tx.QueryRowContext(ctx, `SELECT guild_id FROM activities WHERE id = ?`, activityID).Scan(&guildID); err != nil {

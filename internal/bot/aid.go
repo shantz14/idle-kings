@@ -83,7 +83,7 @@ func aidView(st store.RealmState, note string) *discordgo.InteractionResponseDat
 	for _, t := range game.AidTargets {
 		btns = append(btns, button(t.Name, "aid:t:"+t.Key, discordgo.SuccessButton, !st.Alive()))
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatMonetary), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindAid))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Aid the Realm", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -159,11 +159,9 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 		Components: []discordgo.MessageComponent{row(button("Back", "menu:act:"+game.KindAid, discordgo.SecondaryButton, false))},
 	})
 	if res.Public != "" {
-		if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-			_, _ = b.s.ChannelMessageSendEmbed(court.AnnouncementsChannelID, &discordgo.MessageEmbed{
-				Title: "A gift to the Republic", Description: res.Public, Color: colorGreen,
-			})
-		}
+		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
+			Title: "A gift to the Republic", Description: res.Public, Color: colorGreen,
+		})
 	}
 	b.afterRealmChange(ctx, c.GuildID, before)
 }

@@ -26,21 +26,12 @@ func (s *Store) SpyLevel(ctx context.Context, ownerID, targetID int64) (float64,
 }
 
 func (s *Store) spyNetworks(ctx context.Context, where string, arg int64) ([]SpyNetwork, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT owner_id, target_id, value FROM spy_networks WHERE `+where+` AND value > 0 ORDER BY value DESC`, arg)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []SpyNetwork
-	for rows.Next() {
-		var n SpyNetwork
-		if err := rows.Scan(&n.OwnerID, &n.TargetID, &n.Value); err != nil {
-			return nil, err
-		}
-		out = append(out, n)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db,
+		`SELECT owner_id, target_id, value FROM spy_networks WHERE `+where+` AND value > 0 ORDER BY value DESC`,
+		func(r scanner) (SpyNetwork, error) {
+			var n SpyNetwork
+			return n, r.Scan(&n.OwnerID, &n.TargetID, &n.Value)
+		}, arg)
 }
 
 // SpyNetworksOn lists every network in the target's court.
@@ -55,15 +46,7 @@ func (s *Store) SpyNetworksBy(ctx context.Context, ownerID int64) ([]SpyNetwork,
 
 // ChangeSpies applies spy changes outside any other transaction.
 func (s *Store) ChangeSpies(ctx context.Context, changes []game.SpyChange) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := changeSpies(ctx, tx, changes); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error { return changeSpies(ctx, tx, changes) })
 }
 
 // changeSpies adds each change, clamped to 0..100.

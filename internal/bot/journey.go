@@ -86,7 +86,7 @@ func journeyView(t game.PartyTiming, wealth int, busy, note string) *discordgo.I
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatMartial), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindJourney))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Undertake a Journey", Description: sb.String(), Color: colorGold}},
 		Components: rows(btns),
@@ -140,7 +140,7 @@ func (b *Bot) onSetOut(ctx context.Context, i *discordgo.InteractionCreate, key 
 				d.Name, d.Cost, ends.Unix(), where),
 			Color: colorGreen,
 		}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 

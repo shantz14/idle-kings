@@ -52,15 +52,7 @@ func (s *Store) CourtOpinions(ctx context.Context, guildID string) (game.CourtOp
 
 // ChangeOpinions applies opinion changes outside any other transaction.
 func (s *Store) ChangeOpinions(ctx context.Context, changes []game.OpinionChange) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := changeOpinions(ctx, tx, changes); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error { return changeOpinions(ctx, tx, changes) })
 }
 
 // changeOpinions adds each change, clamped to -100..100. SenatorID 0 means

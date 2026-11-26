@@ -127,7 +127,7 @@ func duelView(t game.DuelTiming, busy, note string) *discordgo.InteractionRespon
 	if busy == "" {
 		comps = append(comps, userSelect("duel:who", "Choose your opponent…"))
 	}
-	comps = append(comps, row(button("Back", "menu:cat:"+string(game.CatMartial), discordgo.SecondaryButton, false)))
+	comps = append(comps, row(backButton(game.KindDuel)))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Challenge to a Duel", Description: sb.String(), Color: colorGold}},
 		Components: comps,
@@ -241,18 +241,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 		)},
 	})
 
-	where := ""
-	if court, err := b.store.GetCourt(ctx, c.GuildID); err == nil && court.AnnouncementsChannelID != "" {
-		msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
-			Embeds: []*discordgo.MessageEmbed{duelAnnouncement(a, c, t, "")},
-		})
-		if err != nil {
-			slog.Warn("announce duel", "err", err)
-		} else {
-			_ = b.store.SetAnnouncement(ctx, a.ID, msg.ChannelID, msg.ID)
-			where = fmt.Sprintf(" The court has been told in <#%s>.", msg.ChannelID)
-		}
-	}
+	where := b.announce(ctx, a, duelAnnouncement(a, c, t, ""), nil)
 	text := fmt.Sprintf("You have challenged **%s**. They have until <t:%d:R> to answer.%s", t.FullName(), a.EndsAt.Unix(), where)
 	if wager > 0 {
 		text += fmt.Sprintf(" Your wager of **%d gold** is held until then.", wager)
@@ -263,7 +252,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	text += lawNote
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "The gauntlet is thrown", Description: text, Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 

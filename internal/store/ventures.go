@@ -109,12 +109,8 @@ func (s *Store) ApplyInvestment(ctx context.Context, inv Investment, now time.Ti
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), inv.ActivityID)
-	if err != nil {
+	if err := resolveOnce(ctx, tx, inv.ActivityID, now); err != nil {
 		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrEnded
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO sector_stakes (character_id, guild_id, sector, stake) VALUES (?, ?, ?, ?)

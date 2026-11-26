@@ -110,7 +110,7 @@ func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionRes
 		}
 		comps = append(comps, row(discordgo.SelectMenu{CustomID: "dossier:pick", Placeholder: "Look at a report…", Options: opts}))
 	}
-	comps = append(comps, row(button("Back", "menu:cat:"+string(game.CatIntrigue), discordgo.SecondaryButton, false)))
+	comps = append(comps, row(backButton(game.KindDossier)))
 	desc := sb.String()
 	if len(desc) > 4000 {
 		desc = desc[:3999] + "…"

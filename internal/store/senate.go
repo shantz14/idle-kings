@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/shantz14/idle-kings/internal/game"
@@ -51,21 +52,12 @@ type Bribe struct {
 
 // RunningCourts lists courts whose game has started.
 func (s *Store) RunningCourts(ctx context.Context) ([]Court, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT guild_id, admin_user_id, COALESCE(announcements_channel_id, ''), status FROM courts WHERE status = ?`, courtRunning)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Court
-	for rows.Next() {
-		var c Court
-		if err := rows.Scan(&c.GuildID, &c.AdminUserID, &c.AnnouncementsChannelID, &c.Status); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db,
+		`SELECT guild_id, admin_user_id, COALESCE(announcements_channel_id, ''), status FROM courts WHERE status = ?`,
+		func(r scanner) (Court, error) {
+			var c Court
+			return c, r.Scan(&c.GuildID, &c.AdminUserID, &c.AnnouncementsChannelID, &c.Status)
+		}, courtRunning)
 }
 
 // CreateRealm sets up a court's realm and senate if it doesn't have one.
@@ -126,25 +118,16 @@ func (s *Store) GetRealm(ctx context.Context, guildID string) (RealmState, error
 }
 
 func (s *Store) Senators(ctx context.Context, guildID string) ([]game.Senator, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, traits, influence, base_price FROM senators WHERE guild_id = ? ORDER BY influence DESC, id`, guildID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []game.Senator
-	for rows.Next() {
-		var sn game.Senator
-		var traits string
-		if err := rows.Scan(&sn.ID, &sn.Name, &traits, &sn.Influence, &sn.BasePrice); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal([]byte(traits), &sn.Traits); err != nil {
-			return nil, err
-		}
-		out = append(out, sn)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db,
+		`SELECT id, name, traits, influence, base_price FROM senators WHERE guild_id = ? ORDER BY influence DESC, id`,
+		func(r scanner) (game.Senator, error) {
+			var sn game.Senator
+			var traits string
+			if err := r.Scan(&sn.ID, &sn.Name, &traits, &sn.Influence, &sn.BasePrice); err != nil {
+				return sn, err
+			}
+			return sn, json.Unmarshal([]byte(traits), &sn.Traits)
+		}, guildID)
 }
 
 // ---- matters ----
@@ -183,20 +166,7 @@ func (s *Store) OpenMatters(ctx context.Context, guildID string) ([]Matter, erro
 }
 
 func (s *Store) matters(ctx context.Context, query string, args ...any) ([]Matter, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Matter
-	for rows.Next() {
-		m, err := scanMatter(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db, query, func(r scanner) (Matter, error) { return scanMatter(r) }, args...)
 }
 
 // ClosedMatters lists matters whose voting has ended but aren't resolved.
@@ -227,24 +197,10 @@ func (s *Store) nextQueued(ctx context.Context, guildID string, now time.Time, c
 
 // RecentEventKeys lists the court's last n matters' event keys, oldest first.
 func (s *Store) RecentEventKeys(ctx context.Context, guildID string, n int) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT event_key FROM matters WHERE guild_id = ? ORDER BY opened_at DESC, id DESC LIMIT ?`, guildID, n)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			return nil, err
-		}
-		out = append(out, k)
-	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return out, rows.Err()
+	out, err := queryAll(ctx, s.db,
+		`SELECT event_key FROM matters WHERE guild_id = ? ORDER BY opened_at DESC, id DESC LIMIT ?`, scanString, guildID, n)
+	slices.Reverse(out)
+	return out, err
 }
 
 // DeferQueued pushes a queued follow-up back to a later time.
@@ -702,47 +658,28 @@ type Decision struct {
 
 // RecentDecisions lists a court's most recently decided matters, newest first.
 func (s *Store) RecentDecisions(ctx context.Context, guildID string, n int) ([]Decision, error) {
-	rows, err := s.db.QueryContext(ctx,
+	return queryAll(ctx, s.db,
 		`SELECT event_key, COALESCE(result, '{}'), resolved_at FROM matters
-		 WHERE guild_id = ? AND resolved_at IS NOT NULL ORDER BY resolved_at DESC, id DESC LIMIT ?`, guildID, n)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Decision
-	for rows.Next() {
-		var d Decision
-		var result string
-		var at int64
-		if err := rows.Scan(&d.EventKey, &result, &at); err != nil {
-			return nil, err
-		}
-		var r struct {
-			Winner    string `json:"winner"`
-			Succeeded bool   `json:"succeeded"`
-		}
-		_ = json.Unmarshal([]byte(result), &r)
-		d.Winner, d.Succeeded, d.ResolvedAt = r.Winner, r.Succeeded, time.Unix(at, 0)
-		out = append(out, d)
-	}
-	return out, rows.Err()
+		 WHERE guild_id = ? AND resolved_at IS NOT NULL ORDER BY resolved_at DESC, id DESC LIMIT ?`,
+		func(row scanner) (Decision, error) {
+			var d Decision
+			var result string
+			var at int64
+			if err := row.Scan(&d.EventKey, &result, &at); err != nil {
+				return d, err
+			}
+			var r struct {
+				Winner    string `json:"winner"`
+				Succeeded bool   `json:"succeeded"`
+			}
+			_ = json.Unmarshal([]byte(result), &r)
+			d.Winner, d.Succeeded, d.ResolvedAt = r.Winner, r.Succeeded, time.Unix(at, 0)
+			return d, nil
+		}, guildID, n)
 }
 
 // QueuedEvents lists the event keys waiting in a court's follow-up queue,
 // soonest first.
 func (s *Store) QueuedEvents(ctx context.Context, guildID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT event_key FROM realm_queue WHERE guild_id = ? ORDER BY due_at, id`, guildID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			return nil, err
-		}
-		out = append(out, k)
-	}
-	return out, rows.Err()
+	return queryAll(ctx, s.db, `SELECT event_key FROM realm_queue WHERE guild_id = ? ORDER BY due_at, id`, scanString, guildID)
 }

@@ -10,15 +10,7 @@ import (
 // ApplyOutcome applies an outcome that belongs to no activity, e.g. what a
 // law costs a player (a dueling ban, a bribe that comes out).
 func (s *Store) ApplyOutcome(ctx context.Context, guildID string, out Outcome, now time.Time) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := applyOutcome(ctx, tx, guildID, out, now); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.withTx(ctx, func(tx *sql.Tx) error { return applyOutcome(ctx, tx, guildID, out, now) })
 }
 
 // ---- the Informers' Law ----
@@ -67,24 +59,16 @@ func (s *Store) GetDenunciation(ctx context.Context, id int64) (Denunciation, er
 
 // Dossier is a player's unused reports, newest first.
 func (s *Store) Dossier(ctx context.Context, ownerID int64) ([]Denunciation, error) {
-	rows, err := s.db.QueryContext(ctx,
+	return queryAll(ctx, s.db,
 		`SELECT id, guild_id, owner_id, actor_id, crime, detail, created_at FROM denunciations
-		 WHERE owner_id = ? AND used_at IS NULL ORDER BY created_at DESC, id DESC`, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Denunciation
-	for rows.Next() {
-		var d Denunciation
-		var created int64
-		if err := rows.Scan(&d.ID, &d.GuildID, &d.OwnerID, &d.ActorID, &d.Crime, &d.Detail, &created); err != nil {
-			return nil, err
-		}
-		d.CreatedAt = time.Unix(created, 0)
-		out = append(out, d)
-	}
-	return out, rows.Err()
+		 WHERE owner_id = ? AND used_at IS NULL ORDER BY created_at DESC, id DESC`,
+		func(r scanner) (Denunciation, error) {
+			var d Denunciation
+			var created int64
+			err := r.Scan(&d.ID, &d.GuildID, &d.OwnerID, &d.ActorID, &d.Crime, &d.Detail, &created)
+			d.CreatedAt = time.Unix(created, 0)
+			return d, err
+		}, ownerID)
 }
 
 // Denounce uses a report once and applies what it does. ErrDenounced if it

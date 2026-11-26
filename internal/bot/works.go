@@ -86,7 +86,7 @@ func worksView(c store.Character, times map[string]time.Duration, building, note
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}
-	btns = append(btns, button("Back", "menu:cat:"+string(game.CatMonetary), discordgo.SecondaryButton, false))
+	btns = append(btns, backButton(game.KindWork))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "Endow a Public Work", Description: sb.String(), Color: colorGold}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -122,7 +122,7 @@ func (b *Bot) onBuildWork(ctx context.Context, i *discordgo.InteractionCreate, c
 			Description: fmt.Sprintf("You paid **%d gold** for %s. It opens <t:%d:R>, and I'll DM you when it does. You're free to do other things meanwhile.%s",
 				w.Cost, title, a.EndsAt.Unix(), where),
 			Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:home", discordgo.SecondaryButton, false))},
+		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
 
