@@ -9,7 +9,7 @@ func TestMisdeedsAreRealSecrets(t *testing.T) {
 		SecretVoteDeal("a", 2, "b", "m", "o", 1, false), SecretVote("a", "m", "o"), SecretCourt("a", "s", "x"),
 		SecretCourtResult("a", "s", true, false), SecretRumor("a", 2, "b"), SecretPlant("a", 2, "b"), SecretRootOut("a"),
 		SecretInvest("a", "s", 1), SecretEstateOffer("a", 2, "b", "x"), SecretEstateDeal("a", 2, "b", "x"),
-		SecretCanvass("a"), SecretEmbezzle("a", 1), SecretMagic("a", "i"),
+		SecretCanvass("a"), SecretEmbezzle("a", 1), SecretMagic("a", "i"), SecretWhisper("a", "b", "c"),
 	}
 	kinds := map[string]bool{}
 	for _, s := range secrets {

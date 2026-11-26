@@ -612,6 +612,8 @@ func IsCrime(kind string, ls Laws) bool {
 		return ls.Has(LawBribery)
 	case "magic":
 		return ls.Has(LawWitchcraftAct)
+	case "rumor", "whisper":
+		return ls.Has(LawSlander)
 	}
 	return false
 }

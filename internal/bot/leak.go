@@ -57,14 +57,15 @@ func (b *Bot) leak(ctx context.Context, actor store.Character, s game.Secret) {
 // exposeNote is what a report in the dossier could do, under the laws now.
 func exposeNote(ls game.Laws) string {
 	if ls.Has(game.LawInformers) {
-		return "That is worth exposing, and the Informers' Law pays for reports like this. It's filed in your dossier: denounce them now, or keep it for when it hurts most."
+		return "That is worth exposing, and the Informers' Law pays for reports like this. It's filed in your dossier: denounce them publicly, whisper it around and let it spread, or keep it for when it hurts most."
 	}
-	return "That is worth exposing. It's filed in your dossier: make it public now, or keep it for when it hurts most. (Under the Informers' Law it would hit harder, and pay.)"
+	return "That is worth exposing. It's filed in your dossier: denounce them publicly, whisper it around and let it spread, or keep it for when it hurts most. (Under the Informers' Law a denunciation would hit harder, and pay.)"
 }
 
 func denounceButtons(id int64, name string) []discordgo.MessageComponent {
 	return []discordgo.MessageComponent{row(
 		button(truncate("Denounce "+name, 80), fmt.Sprintf("law:denounce:%d", id), discordgo.DangerButton, false),
+		button("Whisper it", fmt.Sprintf("law:whisper:%d", id), discordgo.PrimaryButton, false),
 		button("Keep it for later", fmt.Sprintf("law:keep:%d", id), discordgo.SecondaryButton, false),
 	)}
 }

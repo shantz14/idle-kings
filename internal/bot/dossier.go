@@ -75,7 +75,7 @@ func (b *Bot) dossierPanel(ctx context.Context, c store.Character) *discordgo.In
 
 func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	sb.WriteString("Everything your spies have caught your rivals doing. Reports keep forever: use one now, or save it for when it hurts most. ")
+	sb.WriteString("Everything your spies have caught your rivals doing. Reports keep forever: denounce them publicly, whisper it around quietly, or save it for when it hurts most. ")
 	if ls.Has(game.LawInformers) {
 		sb.WriteString("While the Informers' Law stands, a denunciation hits harder and the treasury pays you for it.\n\n")
 	} else {
@@ -112,10 +112,11 @@ func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionRes
 }
 
 func reportView(d store.Denunciation, accused store.Character) *discordgo.InteractionResponseData {
-	force := "Making it public will shame them before the court, though nobody will pay you for it."
+	force := "Denouncing them shames them before the whole court, though nobody will pay you for it."
 	if accused.Laws.Has(game.LawInformers) {
-		force = "Under the Informers' Law this will hit them hard, and the treasury will pay you for it."
+		force = "Under the Informers' Law a denunciation hits them hard, and the treasury pays you for it."
 	}
+	force += " Or whisper it around: softer, and nothing is posted. They'll only hear that someone is talking, unless their spies are watching you."
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title:       fmt.Sprintf("📁 %s: %s", accused.FullName(), game.MisdeedWord(d.Crime)),
@@ -124,6 +125,7 @@ func reportView(d store.Denunciation, accused store.Character) *discordgo.Intera
 		}},
 		Components: []discordgo.MessageComponent{row(
 			button(truncate("Denounce "+accused.FullName(), 80), fmt.Sprintf("law:denounce:%d", d.ID), discordgo.DangerButton, false),
+			button("Whisper it", fmt.Sprintf("law:whisper:%d", d.ID), discordgo.PrimaryButton, false),
 			button("Back", "dossier:home", discordgo.SecondaryButton, false),
 		)},
 	}

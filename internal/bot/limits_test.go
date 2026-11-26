@@ -284,6 +284,10 @@ func TestIntrigueViewsFitDiscord(t *testing.T) {
 		Embeds:     []*discordgo.MessageEmbed{{Title: "🕵️ Word from your spies in House " + long, Description: strings.Repeat("w", 400) + "\n\n" + exposeNote(informers)}},
 		Components: denounceButtons(999999999, long+" "+long),
 	})
+	for kind := range game.MisdeedDefs {
+		checkLimits(t, "whispered "+kind, whisperedView(store.Denunciation{Crime: kind, Detail: strings.Repeat("w", 400)}, tgt,
+			game.Whisper([]game.Senator{{ID: 1}}, kind, tgt.ID)))
+	}
 	busy := "You are searching your household for spies. You'll be done <t:9999999999:R>."
 	var lines []spyLine
 	for i := 0; i < 40; i++ {

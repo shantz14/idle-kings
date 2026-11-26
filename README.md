@@ -41,7 +41,7 @@ The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.
 17. **Senate variety**: an event can't come back within 10 matters, and two in a row never share a theme (barbarians, bandits, food, sea…). Follow-ups can break the cooldown but never repeat the matter just before.
 18. Daily income (base income, estate items and ventures) is paid every real day.
 19. Info pages: `/realm` (now with Industries), `/players`, `/profile [player]` (add `public: True` to post them for everyone), `/character`, `/estate`, `/shop`, `/help`. Other players see your house, role, background, influence, renown and estate; only you see your stats and gold.
-20. **Dossier** (Intrigue → Your Dossier): when your spies catch a rival doing something shameful (embezzling, bribery, selling or trading votes, hiring bandits, spreading rumors, planting spies, enchanted goods under the Witchcraft Act) in enough detail, the report is filed and keeps forever. Denounce it straight from the DM or any time later: it shames them before the court; under the Informers' Law it hits harder and the treasury pays you.
+20. **Dossier** (Intrigue → Your Dossier): when your spies catch a rival doing something shameful (embezzling, bribery, selling or trading votes, hiring bandits, spreading rumors, planting spies, enchanted goods under the Witchcraft Act) in enough detail, the report is filed and keeps forever. Denounce it straight from the DM or any time later: it shames them before the court; under the Informers' Law it hits harder and the treasury pays you. Or **Whisper it**: softer and nothing is posted; they only get "someone is spreading the rumor that you…", unless their spies on you catch who.
 
 ## Layout
 

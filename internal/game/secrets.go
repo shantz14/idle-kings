@@ -174,6 +174,17 @@ func SecretRumor(actor string, victim int64, victimName string) Secret {
 	}
 }
 
+// SecretWhisper is quietly spreading a misdeed from your dossier. The victim
+// isn't skipped: if they have spies on the whisperer, they may learn who.
+func SecretWhisper(actor, victimName, word string) Secret {
+	return Secret{
+		Kind:    "whisper",
+		Vague:   fmt.Sprintf("%s has been seen gossiping in the bathhouses.", actor),
+		Partial: fmt.Sprintf("%s is spreading a story about another house.", actor),
+		Full:    fmt.Sprintf("%s is spreading the story that **%s** has been %s.", actor, victimName, word),
+	}
+}
+
 func SecretPlant(actor string, victim int64, victimName string) Secret {
 	return Secret{
 		Kind:    "plant",

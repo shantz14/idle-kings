@@ -15,12 +15,15 @@ import (
 
 // Law custom IDs:
 //   law:denounce:<denunciation>   expose a misdeed from your dossier
+//   law:whisper:<denunciation>    spread it quietly instead; only the culprit hears
 //   law:keep:<denunciation>       keep a fresh report for later (it's already filed)
 
 func (b *Bot) onLaw(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
 	switch {
 	case parts[0] == "denounce" && len(parts) > 1:
 		b.onDenounce(ctx, i, atoi(parts[1]))
+	case parts[0] == "whisper" && len(parts) > 1:
+		b.onWhisper(ctx, i, atoi(parts[1]))
 	case parts[0] == "keep" && len(parts) > 1:
 		b.onKeepReport(ctx, i, atoi(parts[1]))
 	}
@@ -41,25 +44,78 @@ func (b *Bot) onKeepReport(ctx context.Context, i *discordgo.InteractionCreate, 
 	b.update(i, &discordgo.InteractionResponseData{Embeds: embeds, Components: []discordgo.MessageComponent{}})
 }
 
-func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id int64) {
+// loadReport loads a dossier report the clicking player owns, with its
+// culprit and the court's senators. ok is false once it has replied.
+func (b *Bot) loadReport(ctx context.Context, i *discordgo.InteractionCreate, id int64) (d store.Denunciation, me, accused store.Character, sen []game.Senator, ok bool) {
 	d, err := b.store.GetDenunciation(ctx, id)
 	if err != nil {
 		b.reply(i, "That report has gone missing.")
 		return
 	}
-	me, err := b.store.GetCharacterByID(ctx, d.OwnerID)
+	me, err = b.store.GetCharacterByID(ctx, d.OwnerID)
 	if err != nil || me.UserID != userOf(i).ID {
 		b.reply(i, "That report isn't yours.")
 		return
 	}
-	accused, err := b.store.GetCharacterByID(ctx, d.ActorID)
+	accused, err = b.store.GetCharacterByID(ctx, d.ActorID)
 	if err != nil {
 		b.reply(i, "They are gone from court.")
 		return
 	}
-	sen, err := b.store.Senators(ctx, d.GuildID)
+	sen, err = b.store.Senators(ctx, d.GuildID)
 	if err != nil {
 		b.fail(i, err)
+		return
+	}
+	return d, me, accused, sen, true
+}
+
+// reportUsed answers a click on a report that's already been used.
+func (b *Bot) reportUsed(i *discordgo.InteractionCreate) {
+	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+		Title: "Already used", Description: "You've already used that report.", Color: colorGold}},
+		Components: []discordgo.MessageComponent{}})
+}
+
+// onWhisper spreads a report quietly. Nothing is posted; the culprit is
+// told someone is talking, and anyone with spies on the whisperer may learn
+// who, the culprit included.
+func (b *Bot) onWhisper(ctx context.Context, i *discordgo.InteractionCreate, id int64) {
+	d, me, accused, sen, ok := b.loadReport(ctx, i, id)
+	if !ok {
+		return
+	}
+	w := game.Whisper(sen, d.Crime, accused.ID)
+	out := store.Outcome{Deltas: map[int64]game.Delta{accused.ID: w.Accused}, Opinions: w.Opinions}
+	if err := b.store.Denounce(ctx, d.ID, out, time.Now()); errors.Is(err, store.ErrDenounced) {
+		b.reportUsed(i)
+		return
+	} else if err != nil {
+		b.fail(i, err)
+		return
+	}
+	word := game.MisdeedWord(d.Crime)
+	b.update(i, whisperedView(d, accused, w))
+	_, _ = b.dm(accused.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
+		Title:       "🗣️ Someone is talking",
+		Description: fmt.Sprintf("Someone is spreading the rumor that you've been %s. (%s, and the Senate thinks less of you)", word, w.Accused.Describe()),
+		Color:       colorRed,
+	}}})
+	b.leak(ctx, me, game.SecretWhisper(me.FullName(), accused.FullName(), word))
+}
+
+func whisperedView(d store.Denunciation, accused store.Character, w game.Denunciation) *discordgo.InteractionResponseData {
+	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+		Title: "You whispered it about",
+		Description: fmt.Sprintf("%s\n\nYou let it slip in the right ears, and the story is spreading. %s only knows that someone is talking, unless their own spies are watching you. (%s: %s)",
+			d.Detail, accused.FullName(), accused.FullName(), w.Accused.Describe()),
+		Color: colorGreen,
+	}}, Components: []discordgo.MessageComponent{}}
+}
+
+func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id int64) {
+	d, me, accused, sen, ok := b.loadReport(ctx, i, id)
+	if !ok {
 		return
 	}
 	now := time.Now()
@@ -70,9 +126,7 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 		Opinions: den.Opinions, Realm: den.Realm,
 	}
 	if err := b.store.Denounce(ctx, d.ID, out, now); errors.Is(err, store.ErrDenounced) {
-		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-			Title: "Already used", Description: "You've already made that report public.", Color: colorGold}},
-			Components: []discordgo.MessageComponent{}})
+		b.reportUsed(i)
 		return
 	} else if err != nil {
 		b.fail(i, err)
