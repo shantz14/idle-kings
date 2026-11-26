@@ -257,6 +257,6 @@ CREATE TABLE IF NOT EXISTS denunciations (
     crime      TEXT NOT NULL,   -- secret kind, e.g. 'bribe'
     detail     TEXT NOT NULL,   -- what the spies said
     created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,   -- unused: reports keep forever
     used_at    INTEGER
 );

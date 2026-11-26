@@ -353,12 +353,8 @@ func TestLawsBendEverydayRules(t *testing.T) {
 	if d, ok := RollLeak(rolls(t, 15, 99), 20, lawsOf(LawInformers)); !ok || d != Partial {
 		t.Fatalf("informers hear more, and more of it: %v %v", d, ok)
 	}
-	if CanDenounce("bribe", Full, lawsOf(LawInformers)) || !CanDenounce("bribe", Full, lawsOf(LawInformers, LawBribery)) ||
-		!CanDenounce("embezzle", Partial, lawsOf(LawInformers)) || CanDenounce("embezzle", Vague, lawsOf(LawInformers)) {
-		t.Fatal("only crimes, reported in enough detail, can be denounced")
-	}
-	den := Denounce(stern, 5, 6, 10)
-	if den.Accused.Renown >= 0 || den.Informer.Wealth <= 0 || den.Realm[AttrTreasury] >= 0 {
+	den := Denounce(stern, "embezzle", 5, 6, 10, lawsOf(LawInformers))
+	if den.Accused.Renown >= 0 || den.Informer.Wealth <= 0 || den.Realm[AttrTreasury] >= 0 || !den.Paid || !den.Crime {
 		t.Fatalf("denunciation: %+v", den)
 	}
 }

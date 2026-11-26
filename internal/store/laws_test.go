@@ -117,7 +117,7 @@ func TestDenunciation(t *testing.T) {
 	owner := newChar(t, s, "a", "scribe")
 	actor := newChar(t, s, "b", "merchant")
 	id, err := s.CreateDenunciation(ctx, Denunciation{GuildID: "g", OwnerID: owner.ID, ActorID: actor.ID,
-		Crime: "embezzle", Detail: "they stole", ExpiresAt: now.Add(time.Hour)}, now)
+		Crime: "embezzle", Detail: "they stole"}, now.Add(-1000*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +138,15 @@ func TestDenunciation(t *testing.T) {
 	if got.Wealth != owner.Wealth+25 || after.Trackers[game.AttrTreasury] >= before.Trackers[game.AttrTreasury] {
 		t.Fatalf("paid once from the treasury: %d gold, treasury %v", got.Wealth, after.Trackers[game.AttrTreasury])
 	}
-	old, _ := s.CreateDenunciation(ctx, Denunciation{GuildID: "g", OwnerID: owner.ID, ActorID: actor.ID,
-		Crime: "embezzle", Detail: "x", ExpiresAt: now.Add(-time.Minute)}, now)
-	if err := s.Denounce(ctx, old, out, now); !errors.Is(err, ErrDenounced) {
-		t.Fatalf("expired: %v", err)
+	// The dossier keeps unused reports, newest first.
+	older, _ := s.CreateDenunciation(ctx, Denunciation{GuildID: "g", OwnerID: owner.ID, ActorID: actor.ID,
+		Crime: "bribe", Detail: "older"}, now.Add(-time.Hour))
+	newer, _ := s.CreateDenunciation(ctx, Denunciation{GuildID: "g", OwnerID: owner.ID, ActorID: actor.ID,
+		Crime: "rumor", Detail: "newer"}, now)
+	_, _ = s.CreateDenunciation(ctx, Denunciation{GuildID: "g", OwnerID: actor.ID, ActorID: owner.ID,
+		Crime: "plant", Detail: "someone else's"}, now)
+	dos, err := s.Dossier(ctx, owner.ID)
+	if err != nil || len(dos) != 2 || dos[0].ID != newer || dos[1].ID != older {
+		t.Fatalf("dossier: %v %+v", err, dos)
 	}
 }

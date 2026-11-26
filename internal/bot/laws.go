@@ -14,25 +14,31 @@ import (
 )
 
 // Law custom IDs:
-//   law:denounce:<denunciation>   report a crime your spies uncovered (Informers' Law)
+//   law:denounce:<denunciation>   expose a misdeed from your dossier
+//   law:keep:<denunciation>       keep a fresh report for later (it's already filed)
 
 func (b *Bot) onLaw(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
-	if parts[0] == "denounce" && len(parts) > 1 {
+	switch {
+	case parts[0] == "denounce" && len(parts) > 1:
 		b.onDenounce(ctx, i, atoi(parts[1]))
+	case parts[0] == "keep" && len(parts) > 1:
+		b.onKeepReport(ctx, i, atoi(parts[1]))
 	}
 }
 
-// crimeWord is how a crime is named in a public denunciation.
-func crimeWord(kind string) string {
-	switch kind {
-	case "embezzle":
-		return "stealing from the treasury"
-	case "bribe":
-		return "bribing a senator"
-	case "magic":
-		return "dealing in enchanted goods"
+// onKeepReport takes the buttons off a spy report; it stays in the dossier.
+func (b *Bot) onKeepReport(ctx context.Context, i *discordgo.InteractionCreate, id int64) {
+	d, err := b.store.GetDenunciation(ctx, id)
+	me, err2 := b.store.GetCharacterByID(ctx, d.OwnerID)
+	if err != nil || err2 != nil || me.UserID != userOf(i).ID {
+		b.reply(i, "That report isn't yours.")
+		return
 	}
-	return "a crime against the state"
+	embeds := i.Message.Embeds
+	if len(embeds) > 0 {
+		embeds[0].Footer = &discordgo.MessageEmbedFooter{Text: "📁 Filed in your dossier (Intrigue → Your Dossier)."}
+	}
+	b.update(i, &discordgo.InteractionResponseData{Embeds: embeds, Components: []discordgo.MessageComponent{}})
 }
 
 func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id int64) {
@@ -51,19 +57,13 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 		b.reply(i, "They are gone from court.")
 		return
 	}
-	if !accused.Laws.Has(game.LawInformers) {
-		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-			Title: "Too late", Description: "The Informers' Law has been repealed. Nobody pays for reports any more.", Color: colorGold}},
-			Components: []discordgo.MessageComponent{}})
-		return
-	}
 	sen, err := b.store.Senators(ctx, d.GuildID)
 	if err != nil {
 		b.fail(i, err)
 		return
 	}
 	now := time.Now()
-	den := game.Denounce(sen, accused.ID, me.ID, me.Influence)
+	den := game.Denounce(sen, d.Crime, accused.ID, me.ID, me.Influence, accused.Laws)
 	before, hadRealm := b.realmBefore(ctx, d.GuildID)
 	out := store.Outcome{
 		Deltas:   map[int64]game.Delta{accused.ID: den.Accused, me.ID: den.Informer},
@@ -71,7 +71,7 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 	}
 	if err := b.store.Denounce(ctx, d.ID, out, now); errors.Is(err, store.ErrDenounced) {
 		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-			Title: "Old news", Description: "That report is too old to bring before the magistrates.", Color: colorGold}},
+			Title: "Already used", Description: "You've already made that report public.", Color: colorGold}},
 			Components: []discordgo.MessageComponent{}})
 		return
 	} else if err != nil {
@@ -82,23 +82,31 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 		b.afterRealmChange(ctx, d.GuildID, before)
 	}
 
-	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-		Title:       "You denounced " + accused.FullName(),
-		Description: fmt.Sprintf("%s\n\nThe magistrates thank you, and pay you for your trouble. (%s)", d.Detail, den.Informer.Describe()),
-		Color:       colorGreen,
-	}}, Components: []discordgo.MessageComponent{}})
+	b.update(i, denouncedView(d, accused, den))
+	word := game.MisdeedWord(d.Crime)
 	_, _ = b.dm(accused.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: "You have been denounced",
-		Description: fmt.Sprintf("Someone reported you to the magistrates for %s, and the whole court has heard. (%s, and the Senate thinks less of you)",
-			crimeWord(d.Crime), den.Accused.Describe()),
+		Description: fmt.Sprintf("Someone has exposed you before the whole court. The charge: %s. (%s, and the Senate thinks less of you)",
+			word, den.Accused.Describe()),
 		Color: colorRed,
 	}}})
-	b.postCourt(ctx, d.GuildID, &discordgo.MessageEmbed{
-		Title: "🕵️ Denounced",
-		Description: fmt.Sprintf("An informer has denounced **%s** (%s) for %s. The magistrates have the evidence, and the court is talking.",
-			accused.FullName(), accused.House(), crimeWord(d.Crime)),
-		Color: colorRed,
-	})
+	public := fmt.Sprintf("Word is going round that **%s** (%s) has been %s. Someone has the proof, and the court is talking.",
+		accused.FullName(), accused.House(), word)
+	if den.Crime && den.Paid {
+		public = fmt.Sprintf("An informer has denounced **%s** (%s) to the magistrates for %s. They have the evidence, and the court is talking.",
+			accused.FullName(), accused.House(), word)
+	}
+	b.postCourt(ctx, d.GuildID, &discordgo.MessageEmbed{Title: "🕵️ Denounced", Description: public, Color: colorRed})
+}
+
+func denouncedView(d store.Denunciation, accused store.Character, den game.Denunciation) *discordgo.InteractionResponseData {
+	text := fmt.Sprintf("%s\n\nThe court knows now. (%s: %s)", d.Detail, accused.FullName(), den.Accused.Describe())
+	if den.Paid {
+		text = fmt.Sprintf("%s\n\nThe Informers' Law pays you for your trouble. (%s)", d.Detail, den.Informer.Describe())
+	}
+	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+		Title: "You denounced " + accused.FullName(), Description: text, Color: colorGreen,
+	}}, Components: []discordgo.MessageComponent{}}
 }
 
 // postCourt posts an embed in the court's announcements channel, if it has one.
