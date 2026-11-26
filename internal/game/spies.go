@@ -248,8 +248,8 @@ func ResolveRootOut(r Roller, in RootInput) RootResult {
 // ---- practice ----
 
 const (
-	practiceSuccess = 0.15
-	practiceFailure = 0.05
+	practiceSuccess = 0.75
+	practiceFailure = 0.25
 )
 
 // Practice is the small stat gain from doing something that uses a stat.

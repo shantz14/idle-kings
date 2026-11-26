@@ -93,7 +93,7 @@ func StanceMod(challenger, defender string) float64 {
 
 // DuelChance is the percent chance the challenger wins, before the roll.
 func DuelChance(challenger, defender Sheet, mod float64) int {
-	f := 50 + 6*(challenger[AttrProwess]-defender[AttrProwess]) + 1*(challenger[AttrMartial]-defender[AttrMartial]) + mod
+	f := 50 + 5*(challenger[AttrProwess]-defender[AttrProwess]) + 1*(challenger[AttrMartial]-defender[AttrMartial]) + mod
 	return int(math.Max(MinChance, math.Min(MaxChance, f)))
 }
 

@@ -55,7 +55,7 @@ func TestSpyNetworks(t *testing.T) {
 		t.Errorf("a on c = %v, want 30", v)
 	}
 	after, _ := s.GetCharacterByID(ctx, a.ID)
-	if math.Abs(after.Stats[game.Intrigue]-a.Stats[game.Intrigue]-0.15) > 1e-9 {
+	if math.Abs(after.Stats[game.Intrigue]-a.Stats[game.Intrigue]-0.75) > 1e-9 {
 		t.Errorf("practice not applied: %v → %v", a.Stats[game.Intrigue], after.Stats[game.Intrigue])
 	}
 

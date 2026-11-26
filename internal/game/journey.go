@@ -85,7 +85,7 @@ var JourneyDests = []JourneyDest{
 		Description: "Ride to the White City and break lances before the King of Gondor. Winners go home rich and famous.",
 		Check:       Check{Base: 25, Weights: map[Attr]float64{AttrProwess: 4, AttrMartial: 2}},
 		Stat:        Prowess,
-		Success:     Delta{Renown: 1, Wealth: 50, Stats: Stats{Prowess: 0.3}},
+		Success:     Delta{Renown: 1, Wealth: 50, Stats: Stats{Prowess: 1.5}},
 		Failure:     Delta{Renown: 0.1},
 		Realm:       Realm{AttrForeign: 1},
 		Gift:        "gondor_shield",
@@ -97,8 +97,8 @@ var JourneyDests = []JourneyDest{
 		Description: "Spend weeks among the scrolls of the greatest library in the world. You come home wiser, and with secrets.",
 		Check:       Check{Base: 35, Weights: map[Attr]float64{AttrStewardship: 3, AttrIntrigue: 2}},
 		Stat:        Stewardship,
-		Success:     Delta{Renown: 0.3, Stats: Stats{Stewardship: 0.3, Intrigue: 0.3}},
-		Failure:     Delta{Stats: Stats{Stewardship: 0.1}},
+		Success:     Delta{Renown: 0.3, Stats: Stats{Stewardship: 1.5, Intrigue: 1.5}},
+		Failure:     Delta{Stats: Stats{Stewardship: 0.5}},
 		Gift:        "alexandrian_scroll",
 		GoodText:    "The librarians opened the locked stacks for you. Your notebooks are full.",
 		BadText:     "The librarians found you tiresome and kept you to the public reading room.",
@@ -119,9 +119,9 @@ func JourneyDestByKey(k string) (JourneyDest, bool) {
 var journeyGifts = []Item{
 	good("tyrian_cloak", "A Cloak of Tyrian Purple", KindArt, 4, 150, ShelfNone, false, Effects{PartyBonus: 1},
 		"A gift from the Carthaginian council, dyed with the purple only kings can afford."),
-	good("gondor_shield", "A Shield from Minas Tirith", KindArmor, 3, 300, ShelfNone, false, Effects{Stats: pro(1)},
+	good("gondor_shield", "A Shield from Minas Tirith", KindArmor, 3, 300, ShelfNone, false, Effects{Stats: pro(5)},
 		"Painted with the White Tree, and dented from a famous tourney."),
-	good("alexandrian_scroll", "A Copy from the Library of Alexandria", KindArtifact, 3, 150, ShelfNone, false, Effects{Stats: Stats{Stewardship: 1}},
+	good("alexandrian_scroll", "A Copy from the Library of Alexandria", KindArtifact, 3, 150, ShelfNone, false, Effects{Stats: Stats{Stewardship: 5}},
 		"A scholar's careful copy of a treatise nobody else in the Republic has read."),
 }
 
@@ -188,13 +188,13 @@ type BanditBand struct {
 
 var BanditBands = []BanditBand{
 	{Key: "cutthroats", Name: "A few cutthroats", Price: 40, Strength: 0,
-		Reward: Delta{Renown: 0.3, Stats: Stats{Prowess: 0.2, Martial: 0.1}},
+		Reward: Delta{Renown: 0.3, Stats: Stats{Prowess: 1, Martial: 0.5}},
 		Desc:   "Half a dozen desperate men with clubs and knives. Cheap, and easily scared."},
 	{Key: "outlaws", Name: "A band of outlaws", Price: 100, Strength: 15,
-		Reward: Delta{Renown: 0.6, Stats: Stats{Prowess: 0.3, Martial: 0.2}},
+		Reward: Delta{Renown: 0.6, Stats: Stats{Prowess: 1.5, Martial: 1}},
 		Desc:   "Twenty hard men from the hills who know every pass and ambush on the road."},
 	{Key: "sellswords", Name: "A sellsword company", Price: 250, Strength: 30,
-		Reward: Delta{Renown: 1, Stats: Stats{Prowess: 0.5, Martial: 0.3}},
+		Reward: Delta{Renown: 1, Stats: Stats{Prowess: 2.5, Martial: 1.5}},
 		Desc:   "Professional soldiers between wars, armored and mounted. Anyone who beats them will be famous."},
 }
 

@@ -31,8 +31,8 @@ func TestCreateCharacterWithEstate(t *testing.T) {
 	if got.Crest.Motto != "We endure" || got.Background != "foreign_exile" || len(got.Items) != 3 || got.Items[0] != "hill_villa" {
 		t.Fatalf("loaded: %+v", got)
 	}
-	// Letters of Introduction add vote weight; base 2 + 4 points + 2 exile + 2 emissary.
-	if got.VoteWeight() != c.Influence+2 || got.Stats[game.Diplomacy] != 10 || got.EstateValue() != 9+2+6 {
+	// Letters of Introduction add vote weight; (base 2 + 4 points + 2 exile + 2 emissary) × 5.
+	if got.VoteWeight() != c.Influence+2 || got.Stats[game.Diplomacy] != 50 || got.EstateValue() != 9+2+6 {
 		t.Fatalf("derived: weight %g diplomacy %g estate %g", got.VoteWeight(), got.Stats[game.Diplomacy], got.EstateValue())
 	}
 	if got.Person().Effects.PartyBonus != 2+3 {

@@ -49,11 +49,11 @@ var (
 	huntFriendsCheck = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
 	accidentCheck    = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 4, AttrProwess: 2}}
 
-	huntHostSuccess  = Delta{Renown: 0.3, Stats: Stats{Prowess: 0.2, Martial: 0.2}}
+	huntHostSuccess  = Delta{Renown: 0.3, Stats: Stats{Prowess: 1, Martial: 1}}
 	huntHostFailure  = Delta{Renown: -0.1}
 	huntHostGlory    = Delta{Renown: 0.5}
 	huntHostSaddle   = Delta{Influence: 1.5}
-	huntGuestGlory   = Delta{Renown: 0.3, Stats: Stats{Prowess: 0.1}}
+	huntGuestGlory   = Delta{Renown: 0.3, Stats: Stats{Prowess: 0.5}}
 	huntGuestFriends = Delta{Influence: 1}
 
 	accidentRenown     = 0.3 // the victim, thrown in front of everyone

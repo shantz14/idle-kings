@@ -39,7 +39,7 @@ func NewSheet(stats Stats, influence, renown, estate float64, wealth int) Sheet 
 		AttrWealth:    float64(wealth),
 	}
 	for st, v := range stats {
-		s[Attr(st)] = v
+		s[Attr(st)] = v / StatScale
 	}
 	return s
 }
@@ -84,7 +84,7 @@ func (d Delta) Scale(f float64) Delta {
 	return out
 }
 
-// Describe renders the delta as "+2 influence · +0.3 diplomacy".
+// Describe renders the delta as "+2 influence · +1.5 diplomacy".
 func (d Delta) Describe() string {
 	var parts []string
 	add := func(v float64, name string) {

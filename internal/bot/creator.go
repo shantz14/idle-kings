@@ -337,7 +337,7 @@ func statsBlock(st game.Stats, extra map[game.Stat]string) string {
 	var sb strings.Builder
 	sb.WriteString("```\n")
 	for _, s := range game.AllStats {
-		fmt.Fprintf(&sb, "%-12s %2s  %-10s %s\n", s, game.Num(st[s]), strings.Repeat("■", int(st[s])), extra[s])
+		fmt.Fprintf(&sb, "%-12s %2s  %-10s %s\n", s, game.Num(st[s]), strings.Repeat("■", int(st[s]/game.StatScale)), extra[s])
 	}
 	sb.WriteString("```")
 	return sb.String()
@@ -399,12 +399,12 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 		}
 
 	case stepStats:
-		fmt.Fprintf(&sb, "Every stat starts at %d. Spend **%d** points, at most %d in one stat. Your background and role add a few more later.\n\n",
-			game.BaseStat, game.FreePoints, game.MaxPointsPerStat)
+		fmt.Fprintf(&sb, "Every stat starts at %d. Spend **%d** points, each worth +%d, at most %d in one stat. Your background and role add a few more later.\n\n",
+			game.BaseStat*game.StatScale, game.FreePoints, game.StatScale, game.MaxPointsPerStat)
 		pts := map[game.Stat]string{}
 		for s, v := range bd.Points {
 			if v > 0 {
-				pts[s] = fmt.Sprintf("(+%s)", game.Num(v))
+				pts[s] = fmt.Sprintf("(+%s)", game.Num(v*game.StatScale))
 			}
 		}
 		sb.WriteString(statsBlock(bd.AssignedStats(), pts))

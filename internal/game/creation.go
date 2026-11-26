@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	BaseStat         = 2 // every stat starts here
+	BaseStat         = 2 // every stat starts here, in points (×StatScale when shown)
 	FreePoints       = 6 // points the player assigns
 	MaxPointsPerStat = 4 // most free points in one stat
 	MaxNameLen       = 32
@@ -81,7 +81,7 @@ type Start struct {
 func (b Build) AssignedStats() Stats {
 	s := Stats{}
 	for _, st := range AllStats {
-		s[st] = BaseStat + b.Points[st]
+		s[st] = (BaseStat + b.Points[st]) * StatScale
 	}
 	return s
 }

@@ -17,7 +17,7 @@ const CondWounded = "wounded"
 
 var ConditionDefs = []ConditionDef{
 	{Key: CondWounded, Name: "Wounded", Emoji: "🩹", Description: "Still healing. Weaker with a blade and in command.",
-		Effects: Effects{Stats: Stats{Prowess: -2, Martial: -1}}, Days: 3},
+		Effects: Effects{Stats: Stats{Prowess: -10, Martial: -5}}, Days: 3},
 }
 
 func ConditionByKey(k string) (ConditionDef, bool) {

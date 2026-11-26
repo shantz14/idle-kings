@@ -29,7 +29,7 @@ func (e *Effects) Add(o Effects) {
 	e.VoteWeight += o.VoteWeight
 }
 
-// Describe renders effects like "+1 diplomacy · +3 gold/day".
+// Describe renders effects like "+5 diplomacy · +3 gold/day".
 func (e Effects) Describe() string {
 	var parts []string
 	for _, st := range AllStats {
@@ -188,10 +188,10 @@ var Items = []Item{
 	// possessions
 	{Key: "signet_ring", Name: "Ancestral Signet Ring", Kind: KindPossession, Value: 4, Price: 60,
 		Description: "The seal of your house, older than the Republic.",
-		Effects:     Effects{Stats: Stats{Diplomacy: 1}}},
+		Effects:     Effects{Stats: Stats{Diplomacy: 5}}},
 	{Key: "fathers_sword", Name: "Father's Sword", Kind: KindPossession, Value: 3, Price: 45,
 		Description: "Plain, well kept, and notched from three campaigns.",
-		Effects:     Effects{Stats: Stats{Prowess: 1}}},
+		Effects:     Effects{Stats: Stats{Prowess: 5}}},
 	{Key: "ledger", Name: "Ledger of Debts", Kind: KindPossession, Value: 3, Price: 60,
 		Description: "Half the market owes your family money, and it's all written down.",
 		Effects:     Effects{DailyIncome: 3}},
@@ -209,7 +209,7 @@ var Items = []Item{
 		Effects:     Effects{PartyBonus: 3}},
 	{Key: "warhorse", Name: "Prize Warhorse", Kind: KindPossession, Value: 5, Price: 80,
 		Description: "A tall gray stallion, the envy of every officer in the city.",
-		Effects:     Effects{Stats: Stats{Martial: 1}}},
+		Effects:     Effects{Stats: Stats{Martial: 5}}},
 	{Key: "rudis", Name: "The Wooden Sword of Freedom", Kind: KindPossession, Value: 3, Price: 45,
 		Description: "Given to gladiators who win their freedom. The crowds still recognize it.",
 		Effects:     Effects{PartyBonus: 2}},

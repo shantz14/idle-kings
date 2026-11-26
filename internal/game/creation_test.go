@@ -38,8 +38,8 @@ func TestBuildValidate(t *testing.T) {
 
 func TestBuildFinal(t *testing.T) {
 	st := goodBuild().Final()
-	// base 2 + points 4 + noble 2 + cupbearer 1
-	if st.Stats[Diplomacy] != 9 || st.Stats[Intrigue] != 2+2+1+1 || st.Stats[Martial] != 2 {
+	// (base 2 + points 4 + noble 2 + cupbearer 1) × 5
+	if st.Stats[Diplomacy] != 45 || st.Stats[Intrigue] != (2+2+1+1)*StatScale || st.Stats[Martial] != 10 {
 		t.Fatalf("stats: %v", st.Stats)
 	}
 	if st.Influence != 8 || st.Renown != 6 || st.Wealth != 20 || st.DailyIncome != 8 {
@@ -59,7 +59,7 @@ func TestCatalogueConsistency(t *testing.T) {
 		for _, v := range b.StatBonus {
 			total += v
 		}
-		if total != 3 {
+		if total != 3*StatScale {
 			t.Errorf("%s: stat bonus totals %g", b.Key, total)
 		}
 		if len(b.Summary) > 100 {
@@ -80,7 +80,7 @@ func TestCatalogueConsistency(t *testing.T) {
 		for _, v := range r.StatBonus {
 			total += v
 		}
-		if total != 2 {
+		if total != 2*StatScale {
 			t.Errorf("%s: role bonus totals %g", r.Key, total)
 		}
 	}
@@ -143,5 +143,16 @@ func TestRoleHooks(t *testing.T) {
 	}
 	if len(ActionsFor(CatDiplomacy, "merchant")) == 0 {
 		t.Fatal("ungated actions are for everyone")
+	}
+}
+
+func TestStatScale(t *testing.T) {
+	if got := NewSheet(Stats{Prowess: 10}, 0, 0, 0, 0)[AttrProwess]; got != 2 {
+		t.Fatalf("checks should see shown stats / StatScale, got %v", got)
+	}
+	for st, v := range goodBuild().Final().Stats {
+		if v < BaseStat*StatScale || v != float64(int(v)/StatScale*StatScale) {
+			t.Errorf("%s starts at %v, want a multiple of %d of at least %d", st, v, StatScale, BaseStat*StatScale)
+		}
 	}
 }

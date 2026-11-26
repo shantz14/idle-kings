@@ -53,7 +53,7 @@ var magicHuntEvents = []PartyEvent{
 		Prompt: "Pale lights bob between the trunks, just off the trail. The hounds won't go near them. They seem to be waiting for you.",
 		Choices: []EventChoice{
 			{Key: "follow", Label: "Follow them", Check: chk(20, AttrIntrigue, 6),
-				Success: EventOutcome{Text: "They lead you to a clearing full of game, and then wink out. You come back with the best kill of the day, and a strange calm.", Quality: 14, Delta: Delta{Stats: Stats{Intrigue: 0.2}}},
+				Success: EventOutcome{Text: "They lead you to a clearing full of game, and then wink out. You come back with the best kill of the day, and a strange calm.", Quality: 14, Delta: Delta{Stats: Stats{Intrigue: 1}}},
 				Failure: EventOutcome{Text: "You walk for what feels like an hour. The others say you were gone a day. You don't remember the way back.", Quality: -10, Condition: CondWounded}},
 			{Key: "turn_back", Label: "Turn back to the trail",
 				Success: EventOutcome{Text: "The lights drift away. Your huntsman makes a sign against the evil eye and says nothing.", Quality: 0}},

@@ -19,6 +19,12 @@ const (
 	Prowess     Stat = "prowess"
 )
 
+// StatScale is how many shown stat points make one point in a Check. Stats
+// are stored and shown on the big scale (characters start at 10, legendary
+// gear gives +10 or more); NewSheet divides, so Check weights are per
+// StatScale shown points.
+const StatScale = 5
+
 // AllStats is the display order for stats.
 var AllStats = []Stat{Diplomacy, Martial, Stewardship, Intrigue, Prowess}
 

@@ -117,12 +117,12 @@ var (
 	targetNotice  = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 5}}                 // rolled with disadvantage
 	hostNotice    = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 5}, Difficulty: 20} // also disadvantage, and harder
 
-	hostSuccess   = Delta{Influence: 2, Renown: 0.1, Stats: Stats{Diplomacy: 0.3}}
+	hostSuccess   = Delta{Influence: 2, Renown: 0.1, Stats: Stats{Diplomacy: 1.5}}
 	hostFailure   = Delta{Renown: -0.2}
 	hostFriends   = Delta{Influence: 2}
-	hostBusiness  = Delta{DailyIncome: 2, Stats: Stats{Stewardship: 0.5}}
+	hostBusiness  = Delta{DailyIncome: 2, Stats: Stats{Stewardship: 2.5}}
 	guestFriends  = Delta{Influence: 1}
-	guestBusiness = Delta{DailyIncome: 1, Stats: Stats{Stewardship: 0.25}}
+	guestBusiness = Delta{DailyIncome: 1, Stats: Stats{Stewardship: 1.25}}
 	rumorDamage   = 2.0 // influence lost by the target
 
 	// Guests do better at a good party.
