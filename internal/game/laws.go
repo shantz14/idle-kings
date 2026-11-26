@@ -92,10 +92,7 @@ const (
 	LawInformerRoot      = 15.0 // percent added to Root Out Spies
 	LawDenounceReward    = 25   // gold paid to a denouncer
 	LawDenounceTreasury  = 1.0  // what the reward costs the treasury
-	LawDenounceRenown    = 3.0  // renown the denounced lose
-	LawDenounceOpinion   = -8.  // every senator, toward the denounced
 	LawDenounceGood      = 2.0  // Stern and Incorruptible senators, toward the denouncer
-	LawDenounceDays      = 2    // game days a denunciation stays open
 	LawDenounceInfluence = 0.3  // influence for a denunciation (through ScaleInfluence)
 
 	// Martial Law
@@ -606,7 +603,7 @@ func DeclineCost(ls Laws) Delta {
 }
 
 // IsCrime reports whether a secret of this kind is a crime under the laws,
-// so an informer can denounce it (Informers' Law).
+// so exposing it takes it to the magistrates (see misdeeds.go).
 func IsCrime(kind string, ls Laws) bool {
 	switch kind {
 	case "embezzle", "bandits":
@@ -617,30 +614,4 @@ func IsCrime(kind string, ls Laws) bool {
 		return ls.Has(LawWitchcraftAct)
 	}
 	return false
-}
-
-// CanDenounce reports whether a leaked secret can be denounced: the
-// Informers' Law stands, it's a crime, and the spies learned enough.
-func CanDenounce(kind string, d Detail, ls Laws) bool {
-	return ls.Has(LawInformers) && IsCrime(kind, ls) && d >= Partial
-}
-
-// Denunciation is what denouncing someone does: the accused is shamed
-// before the court, the informer is paid from the treasury.
-type Denunciation struct {
-	Accused  Delta
-	Informer Delta
-	Opinions []OpinionChange
-	Realm    Realm
-}
-
-func Denounce(senators []Senator, accusedID, informerID int64, informerInfluence float64) Denunciation {
-	out := Denunciation{
-		Accused:  Delta{Renown: -LawDenounceRenown},
-		Informer: Delta{Wealth: LawDenounceReward, Influence: ScaleInfluence(LawDenounceInfluence, informerInfluence)},
-		Opinions: []OpinionChange{{CharacterID: accusedID, Delta: LawDenounceOpinion}},
-		Realm:    Realm{AttrTreasury: -LawDenounceTreasury},
-	}
-	out.Opinions = append(out.Opinions, lawOpinions(senators, informerID, LawDenounceGood, TraitStern, TraitIncorruptible)...)
-	return out
 }

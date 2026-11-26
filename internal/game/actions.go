@@ -89,6 +89,10 @@ var Actions = []ActionDef{
 		Description: "Search your own household for other players' agents. Takes 2 hours.",
 	},
 	{
+		Key: KindDossier, Name: "Your Dossier", Category: CatIntrigue,
+		Description: "Everything your spies have caught your rivals doing. Denounce them whenever you like; it doesn't take your action.",
+	},
+	{
 		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Category: CatIntrigue,
 		Description: "Quietly move the Republic's silver into your own purse. Takes 2 hours. If you're caught, everyone will know.",
 	},

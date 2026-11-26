@@ -340,6 +340,10 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 		},
 	}
 	e.Fields = append(e.Fields, ventureSheetField(c), spiesField(b.spyLines(ctx, c)))
+	if dos, err := b.store.Dossier(ctx, c.ID); err == nil && len(dos) > 0 {
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "📁 Dossier",
+			Value: fmt.Sprintf("%d report%s on your rivals, ready to use. Intrigue → Your Dossier.", len(dos), plural(len(dos)))})
+	}
 	if f := conditionsField(c); f != nil {
 		e.Fields = append(e.Fields, f)
 	}

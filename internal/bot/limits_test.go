@@ -261,6 +261,29 @@ func TestIntrigueViewsFitDiscord(t *testing.T) {
 	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
 	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 1000}
 	tgt := store.Character{ID: 999999999, Name: long, FamilyName: long}
+
+	// The dossier, full and empty, a report, and a spy DM with its buttons.
+	var entries []dossierEntry
+	for n := 0; n < 40; n++ {
+		for kind := range game.MisdeedDefs {
+			entries = append(entries, dossierEntry{store.Denunciation{ID: 999999999 + int64(n), Crime: kind,
+				Detail: strings.Repeat("w", 300)}, long + " " + long})
+		}
+	}
+	informers := game.Laws{{Key: game.LawInformers}}
+	checkLimits(t, "dossier", dossierView(entries, informers))
+	checkLimits(t, "dossier empty", dossierView(nil, nil))
+	for kind := range game.MisdeedDefs {
+		for _, ls := range []game.Laws{nil, informers} {
+			tgt.Laws = ls
+			checkLimits(t, "report "+kind, reportView(store.Denunciation{ID: 999999999, Crime: kind, Detail: strings.Repeat("w", 400)}, tgt))
+		}
+	}
+	tgt.Laws = nil
+	checkLimits(t, "spy report", &discordgo.InteractionResponseData{
+		Embeds:     []*discordgo.MessageEmbed{{Title: "🕵️ Word from your spies in House " + long, Description: strings.Repeat("w", 400) + "\n\n" + exposeNote(informers)}},
+		Components: denounceButtons(999999999, long+" "+long),
+	})
 	busy := "You are searching your household for spies. You'll be done <t:9999999999:R>."
 	var lines []spyLine
 	for i := 0; i < 40; i++ {

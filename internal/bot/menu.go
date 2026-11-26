@@ -62,6 +62,8 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			b.update(i, b.rootOutPanel(ctx, c, ""))
 		case game.KindEmbezzle:
 			b.update(i, b.embezzlePanel(ctx, c, ""))
+		case game.KindDossier:
+			b.update(i, b.dossierPanel(ctx, c))
 		case game.KindAid:
 			b.update(i, b.aidPanel(ctx, c, ""))
 		case game.KindCanvass:

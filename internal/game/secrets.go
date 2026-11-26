@@ -117,7 +117,7 @@ func SecretVoteOffer(actor string, other int64, otherName, matter, option string
 // SecretVoteDeal is the actor accepting (or refusing) a vote deal.
 func SecretVoteDeal(actor string, other int64, otherName, matter, option string, price int, accepted bool) Secret {
 	if !accepted {
-		return Secret{Kind: "vote_deal", Skip: []int64{other},
+		return Secret{Kind: "vote_refused", Skip: []int64{other},
 			Vague:   fmt.Sprintf("%s burned a letter unread.", actor),
 			Partial: fmt.Sprintf("%s turned down a vote deal on *%s*.", actor, matter),
 			Full:    fmt.Sprintf("%s turned down **%s**'s vote deal on *%s* (%d gold).", actor, otherName, matter, price),
