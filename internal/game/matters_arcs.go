@@ -292,7 +292,7 @@ var arcMatters = []MatterEvent{
 				Success: MatterOutcome{Text: "The western hills are walled off and the mines abandoned. The dead sleep.",
 					Realm: R{AttrStability: 4}, Sectors: SC{SectorMining: {Health: -0.15}}}},
 			{Key: "temple", Label: "Raise a temple over the barrows", Hint: "Keep watch over him, with prayer.",
-				Leans: L{LeanTradition: 1, LeanPopular: 0.5},
+				Leans: L{LeanFaith: 1.5, LeanTradition: 1, LeanPopular: 0.5},
 				Success: MatterOutcome{Text: "A white temple rises on the King's hill. Its priests never let the lamps go out.",
 					Realm: R{AttrTreasury: -8, AttrStability: 3, AttrPopularity: 2}}},
 			{Key: "plunder", Label: "Plunder the rest of the barrows", Hint: "He's asleep. Take everything.",

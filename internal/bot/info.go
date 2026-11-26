@@ -119,12 +119,11 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 	if err != nil {
 		return &discordgo.InteractionResponseData{Content: "This court has no realm yet."}
 	}
+	// Bars first, in code, so they line up whatever the emoji widths.
 	var trackers strings.Builder
-	trackers.WriteString("```\n")
 	for _, t := range game.Trackers {
-		fmt.Fprintf(&trackers, "%-16s %s %3s\n", t.Name, bar(st.Trackers[t.Key]), game.Num(st.Trackers[t.Key]))
+		fmt.Fprintf(&trackers, "`%s %3s` %s %s\n", bar(st.Trackers[t.Key]), game.Num(st.Trackers[t.Key]), t.Emoji, t.Name)
 	}
-	trackers.WriteString("```")
 
 	status := "The Republic stands."
 	color := colorGold
@@ -162,12 +161,12 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 	var fall []string
 	for _, t := range game.Trackers {
 		if t.Fall != "" {
-			fall = append(fall, t.Name)
+			fall = append(fall, t.Emoji+" "+t.Name)
 		}
 	}
 	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
 		Title:       "The Realm",
-		Description: status + "\n" + trackers.String(),
+		Description: status + "\n\n" + trackers.String(),
 		Color:       color,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Recent decisions", Value: history.String()},
@@ -357,9 +356,13 @@ func (b *Bot) senatorEmbed(ctx context.Context, guildID string, s game.Senator, 
 			traits = append(traits, fmt.Sprintf("**%s**: %s", ti.Name, ti.Desc))
 		}
 	}
+	desc := strings.Join(traits, "\n")
+	if p, ok := game.PersonaByName(s.Name); ok {
+		desc = "*" + p.Bio + "*\n\n" + desc
+	}
 	return &discordgo.MessageEmbed{
 		Title:       "Senator " + s.Name,
-		Description: strings.Join(traits, "\n"),
+		Description: desc,
 		Color:       colorGold,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Influence", Value: game.Num(s.Influence), Inline: true},

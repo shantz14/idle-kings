@@ -13,19 +13,20 @@ const (
 )
 
 type TrackerInfo struct {
-	Key  Attr
-	Name string
+	Key   Attr
+	Name  string
+	Emoji string
 	// Fall is why the realm is lost when this tracker hits 0. Empty means
 	// hitting 0 doesn't end the game.
 	Fall string
 }
 
 var Trackers = []TrackerInfo{
-	{AttrTreasury, "Treasury", "The treasury is empty. The realm is bankrupt."},
-	{AttrMilitary, "Military", "With no army left to stop them, invaders overrun the realm."},
-	{AttrStability, "Stability", "Order collapses. Bandits and rebels overrun the realm."},
-	{AttrForeign, "Foreign opinion", ""},
-	{AttrPopularity, "Popularity", "The people rise up and burn the Senate house."},
+	{AttrTreasury, "Treasury", "💰", "The treasury is empty. The realm is bankrupt."},
+	{AttrMilitary, "Military", "⚔️", "With no army left to stop them, invaders overrun the realm."},
+	{AttrStability, "Stability", "⚖️", "Order collapses. Bandits and rebels overrun the realm."},
+	{AttrForeign, "Foreign opinion", "🌍", ""},
+	{AttrPopularity, "Popularity", "👥", "The people rise up and burn the Senate house."},
 }
 
 const (
@@ -113,7 +114,7 @@ func (r Realm) Describe() string {
 			if v > 0 {
 				s = "+" + s
 			}
-			parts = append(parts, t.Name+" "+s)
+			parts = append(parts, t.Emoji+" "+t.Name+" "+s)
 		}
 	}
 	return strings.Join(parts, " · ")

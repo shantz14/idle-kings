@@ -244,7 +244,7 @@ func billEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.MessageEmb
 func trackersLine(r game.Realm) string {
 	var parts []string
 	for _, t := range game.Trackers {
-		parts = append(parts, fmt.Sprintf("%s **%s**", t.Name, game.Num(r[t.Key])))
+		parts = append(parts, fmt.Sprintf("%s %s **%s**", t.Emoji, t.Name, game.Num(r[t.Key])))
 	}
 	return strings.Join(parts, " · ")
 }

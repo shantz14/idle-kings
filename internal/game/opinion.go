@@ -211,14 +211,14 @@ var Approaches = []Approach{
 	{
 		Key: "flatter", Name: "Flatter", Description: "Praise their speeches and their family. Uses Diplomacy. Traditionalists enjoy it; schemers see through it.",
 		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrRenown: 0.5}},
-		Likes:    map[Trait]float64{TraitConservative: 10, TraitPopulist: 5, TraitScheming: -10, TraitIncorruptible: -5},
+		Likes:    map[Trait]float64{TraitConservative: 10, TraitPopulist: 5, TraitPious: 5, TraitScheming: -10, TraitIncorruptible: -5},
 		Practice: Diplomacy,
 	},
 	{
 		Key: "gift", Name: "Bring a Gift", Description: "A fine gift, chosen with care. Costs gold. Uses Diplomacy and Stewardship. The greedy love it; never try it on the incorruptible.",
 		Check: Check{Base: 35, Weights: map[Attr]float64{AttrDiplomacy: 3, AttrStewardship: 2}},
 		Gift:  true,
-		Likes: map[Trait]float64{TraitGreedy: 20, TraitBigSpender: 10, TraitEconomical: -10},
+		Likes: map[Trait]float64{TraitGreedy: 20, TraitBigSpender: 10, TraitMerchant: 10, TraitEconomical: -10},
 		// Incorruptible senators read any gift as a bribe.
 		Insulted: []Trait{TraitIncorruptible},
 		Practice: Stewardship,
@@ -226,13 +226,13 @@ var Approaches = []Approach{
 	{
 		Key: "gossip", Name: "Share Secrets", Description: "Trade whispers about the rest of the court. Uses Intrigue. Schemers love it; the incorruptible despise it.",
 		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrIntrigue: 5, AttrInfluence: 0.5}},
-		Likes:    map[Trait]float64{TraitScheming: 15, TraitRiskTaker: 5, TraitIncorruptible: -15, TraitConservative: -5},
+		Likes:    map[Trait]float64{TraitScheming: 15, TraitRiskTaker: 5, TraitIncorruptible: -15, TraitConservative: -5, TraitStern: -10, TraitPious: -5},
 		Practice: Intrigue,
 	},
 	{
 		Key: "war", Name: "Talk Strategy", Description: "Talk soldiers, borders and old campaigns. Uses Martial. Hawks love it; doves hate it.",
 		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrMartial: 5, AttrRenown: 0.5}},
-		Likes:    map[Trait]float64{TraitHawk: 15, TraitIsolationist: 5, TraitDove: -15, TraitCosmopolitan: -5},
+		Likes:    map[Trait]float64{TraitHawk: 15, TraitIsolationist: 5, TraitStern: 5, TraitDove: -15, TraitCosmopolitan: -5},
 		Practice: Martial,
 	},
 }

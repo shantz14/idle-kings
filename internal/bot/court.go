@@ -119,6 +119,9 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 	s := *chosen
 	op := ops[s.ID]
 	var desc strings.Builder
+	if p, ok := game.PersonaByName(s.Name); ok {
+		fmt.Fprintf(&desc, "*%s*\n", p.Bio)
+	}
 	fmt.Fprintf(&desc, "%s · influence %s\n**Their opinion of you**\n%s\n**How will you approach them?**\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
 	var btns []discordgo.MessageComponent
 	for _, a := range game.Approaches {

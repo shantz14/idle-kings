@@ -45,19 +45,19 @@ func TestCatalogue(t *testing.T) {
 
 func TestEstateValueResidence(t *testing.T) {
 	// Residence first: the villa counts fully, the townhouse half.
-	villa, _ := ItemByKey("riverside_villa")
+	villa, _ := ItemByKey("bag_end")
 	town, _ := ItemByKey("townhouse")
 	relic, _ := ItemByKey("relic")
-	got := EstateValue([]string{"riverside_villa", "townhouse", "relic"})
+	got := EstateValue([]string{"bag_end", "townhouse", "relic"})
 	if want := villa.Value + town.Value*OtherPropertyShare + relic.Value; got != want {
 		t.Fatalf("value %v, want %v", got, want)
 	}
 	// A property you don't live in gives income but not its party bonus.
-	fx := SumEffects([]string{"townhouse", "riverside_villa", "vineyard_estate"})
+	fx := SumEffects([]string{"townhouse", "bag_end", "arbor_vineyards"})
 	if fx.PartyBonus != 0 || fx.DailyIncome != 3+8 {
 		t.Fatalf("effects %+v", fx)
 	}
-	if fx := SumEffects([]string{"riverside_villa", "townhouse"}); fx.PartyBonus != 2 || fx.DailyIncome != 3 {
+	if fx := SumEffects([]string{"bag_end", "townhouse"}); fx.PartyBonus != 2 || fx.DailyIncome != 3 {
 		t.Fatalf("living in the villa: %+v", fx)
 	}
 }
@@ -71,7 +71,7 @@ func TestEstateScoreDiminishes(t *testing.T) {
 	}
 	// An average courtier in a castle full of art does well, but isn't certain.
 	avg := Stats{Diplomacy: 5}
-	castle := NewSheet(avg, 6, 3, EstateValue([]string{"old_royal_castle", "marble_nymph", "bronze_charioteer"}), 0)
+	castle := NewSheet(avg, 6, 3, EstateValue([]string{"camelot", "venus_de_milo", "winged_victory"}), 0)
 	cottage := NewSheet(avg, 6, 3, EstateValue([]string{"forum_rooms"}), 0)
 	c, h := PartyChance(castle, PartyMinSpend), PartyChance(cottage, PartyMinSpend)
 	if c <= h+30 || c >= MaxChance {
