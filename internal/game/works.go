@@ -88,14 +88,8 @@ type WorkResult struct {
 // you paid, it got built.
 func CompleteWork(w WorkDef, p Person, family string, senators []Senator) WorkResult {
 	res := WorkResult{Delta: Delta{Renown: workOpeningRenown}, Realm: w.Realm.Clone()}
-	for _, s := range senators {
-		for _, t := range w.Pleases {
-			if s.Has(t) {
-				res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: p.ID, Delta: workPleased})
-				break
-			}
-		}
-	}
+	res.Opinions = opinionsFrom(senators, p.ID, workPleased, w.Pleases...)
+
 	title := WorkTitle(family, w)
 	res.Text = withEffects(fmt.Sprintf("%s %s is finished. Your name is carved over it for all to see, and the Senate takes note: +%s Senate vote weight, for good.",
 		w.Emoji, title, Num(w.VoteWeight)), res.Delta)

@@ -300,3 +300,43 @@ func resolveCourt(r Roller, in CourtInput) CourtResult {
 		return CourtResult{Delta: courtBad, Text: fmt.Sprintf("You overstayed your welcome. %s was glad to see you go.", s.Name)}
 	}
 }
+
+// opinionsFrom is delta from every senator with any of traits toward a
+// player (once each, however many of the traits they have).
+func opinionsFrom(senators []Senator, charID int64, delta float64, traits ...Trait) []OpinionChange {
+	var out []OpinionChange
+	for _, s := range senators {
+		for _, t := range traits {
+			if s.Has(t) {
+				out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: charID, Delta: delta})
+				break
+			}
+		}
+	}
+	return out
+}
+
+// TraitReactions is how senators take something a player did: each senator
+// moves by the sum of the reactions for the traits they have. Reactions are
+// added in the order given, so results don't depend on map order.
+func TraitReactions(senators []Senator, charID int64, reactions ...TraitReaction) []OpinionChange {
+	var out []OpinionChange
+	for _, s := range senators {
+		d := 0.0
+		for _, r := range reactions {
+			if s.Has(r.Trait) {
+				d += r.Delta
+			}
+		}
+		if d != 0 {
+			out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: charID, Delta: d})
+		}
+	}
+	return out
+}
+
+// TraitReaction is how senators with one trait take something.
+type TraitReaction struct {
+	Trait Trait
+	Delta float64
+}

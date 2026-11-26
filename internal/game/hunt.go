@@ -166,7 +166,7 @@ type HuntInput struct {
 // ResolveHunt decides everything that happens when a hunt ends. All rolls
 // are hidden. Victims of an accident only hear who did it if they noticed.
 func ResolveHunt(r Roller, in HuntInput) PartyResult {
-	res := PartyResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	res := PartyResult{Ledger: newLedger()}
 	host := in.Host
 
 	success, _ := huntCheck.Roll(r, host.Sheet, in.Quality, Normal)
@@ -182,18 +182,8 @@ func ResolveHunt(r Roller, in HuntInput) PartyResult {
 		}
 		res.notice(host.ID, "%s", withEffects("Your hunt was a triumph.", hd))
 		res.Public = fmt.Sprintf("**%s**'s hunt rode home with a cart full of game.", host.Name)
-		for _, s := range in.Senators {
-			var d float64
-			if s.Has(TraitHawk) {
-				d += huntHawkOpinion
-			}
-			if s.Has(TraitConservative) {
-				d += huntConservativeOpinion
-			}
-			if d != 0 {
-				res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: host.ID, Delta: d})
-			}
-		}
+		res.Opinions = append(res.Opinions, TraitReactions(in.Senators, host.ID,
+			TraitReaction{TraitHawk, huntHawkOpinion}, TraitReaction{TraitConservative, huntConservativeOpinion})...)
 	} else {
 		hd.Merge(huntHostFailure)
 		res.notice(host.ID, "%s", withEffects("Your hunt came home empty-handed.", hd))

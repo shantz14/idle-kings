@@ -169,21 +169,10 @@ func ResolveCircus(r Roller, p Person, gold int, senators []Senator) CircusResul
 	res.Delta = Delta{Influence: ScaleInfluence(CircusInfluence(gold), p.Sheet[AttrInfluence]) * share}
 	res.Delta.Merge(Practice(Stewardship, ok))
 	res.Popularity = CircusPopularity(gold) * share
-	for _, s := range senators {
-		var d float64
-		if s.Has(TraitPopulist) {
-			d += math.Min(circusPopulistMax, circusPopulist+math.Floor(float64(gold)/circusPopulistPer))
-		}
-		if s.Has(TraitBigSpender) {
-			d += circusBigSpender
-		}
-		if s.Has(TraitEconomical) {
-			d += circusEconomical
-		}
-		if d != 0 {
-			res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: p.ID, Delta: d})
-		}
-	}
+	res.Opinions = append(res.Opinions, TraitReactions(senators, p.ID,
+		TraitReaction{TraitPopulist, math.Min(circusPopulistMax, circusPopulist+math.Floor(float64(gold)/circusPopulistPer))},
+		TraitReaction{TraitBigSpender, circusBigSpender},
+		TraitReaction{TraitEconomical, circusEconomical})...)
 	return res
 }
 

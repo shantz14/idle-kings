@@ -81,11 +81,7 @@ func ResolveAid(p Person, t AidTarget, gold int, current float64, senators []Sen
 		Influence: ScaleInfluence(pts*aidInfluence*mult, p.Sheet[AttrInfluence]),
 	}
 	if op := math.Floor(pts / aidOpinionPer); op > 0 {
-		for _, s := range senators {
-			if s.Has(t.Fan) {
-				res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: p.ID, Delta: op})
-			}
-		}
+		res.Opinions = opinionsFrom(senators, p.ID, op, t.Fan)
 	}
 	res.Text = fmt.Sprintf("You gave **%d gold**. %s +%s.", gold, trackerName(t.Tracker), Num(pts))
 	if res.Crisis {

@@ -79,6 +79,11 @@ func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[strin
 	if e, ok := pickMatter(r, realm, all, "", &laws); ok {
 		return e
 	}
+	// Everything was picked lately: allow repeats, but still never reopen a
+	// running arc or break the laws.
+	if e, ok := pickMatter(r, realm, skip, "", &laws); ok {
+		return e
+	}
 	return PickMatter(r, realm, recent)
 }
 

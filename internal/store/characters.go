@@ -107,9 +107,11 @@ func (c Character) Effects() game.Effects {
 }
 
 // Effective is the stats the rules use: base plus estate item bonuses.
-func (c Character) Effective() game.Stats {
+func (c Character) Effective() game.Stats { return c.effectiveWith(c.Effects()) }
+
+func (c Character) effectiveWith(e game.Effects) game.Stats {
 	s := c.Stats.Clone()
-	s.Add(c.Effects().Stats)
+	s.Add(e.Stats)
 	return s
 }
 
@@ -143,12 +145,16 @@ func (c Character) TaxedProperties() []int {
 	return out
 }
 
-func (c Character) Sheet() game.Sheet {
-	return game.NewSheet(c.Effective(), c.Influence, c.Renown, c.EstateValue(), c.Wealth)
+func (c Character) Sheet() game.Sheet { return c.sheetWith(c.Effects()) }
+
+func (c Character) sheetWith(e game.Effects) game.Sheet {
+	return game.NewSheet(c.effectiveWith(e), c.Influence, c.Renown, c.EstateValue(), c.Wealth)
 }
 
+// Person is the character as the rules see them. Effects are summed once.
 func (c Character) Person() game.Person {
-	return game.Person{ID: c.ID, UserID: c.UserID, Name: c.FullName(), Sheet: c.Sheet(), Effects: c.Effects()}
+	e := c.Effects()
+	return game.Person{ID: c.ID, UserID: c.UserID, Name: c.FullName(), Sheet: c.sheetWith(e), Effects: e}
 }
 
 // FamilyTaken reports whether a family name is already used at a court.

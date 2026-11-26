@@ -114,7 +114,7 @@ type SpeechInput struct {
 // ResolveSpeech decides how the speech went. Hecklers are always named:
 // heckling is done in public.
 func ResolveSpeech(r Roller, in SpeechInput) PartyResult {
-	res := PartyResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	res := PartyResult{Ledger: newLedger()}
 	sp := in.Speaker
 	quality := 0.0
 	bestHeckler, bestMargin := "", 0
@@ -160,22 +160,14 @@ func ResolveSpeech(r Roller, in SpeechInput) PartyResult {
 		d = Delta{Influence: ScaleInfluence(speechInfluence, sp.Sheet[AttrInfluence]) * scale, Renown: speechRenown * scale}
 		res.notice(sp.ID, "%s", withEffects(text, d))
 		res.Public = fmt.Sprintf("**%s** spoke in the Forum: *%s*. The crowd roared.", sp.Name, in.Cause.Name)
-		for _, s := range in.Senators {
-			var o float64
-			for _, t := range in.Cause.Pleases {
-				if s.Has(t) {
-					o += causePleased
-				}
-			}
-			for _, t := range in.Cause.Annoys {
-				if s.Has(t) {
-					o += causeAnnoyed
-				}
-			}
-			if o != 0 {
-				res.Opinions = append(res.Opinions, OpinionChange{SenatorID: s.ID, CharacterID: sp.ID, Delta: o})
-			}
+		var reactions []TraitReaction
+		for _, t := range in.Cause.Pleases {
+			reactions = append(reactions, TraitReaction{t, causePleased})
 		}
+		for _, t := range in.Cause.Annoys {
+			reactions = append(reactions, TraitReaction{t, causeAnnoyed})
+		}
+		res.Opinions = append(res.Opinions, TraitReactions(in.Senators, sp.ID, reactions...)...)
 	} else {
 		d = Delta{Influence: speechFailInfl, Renown: speechFailRenown}
 		res.notice(sp.ID, "%s", withEffects("Your speech was a humiliation.", d))

@@ -536,21 +536,7 @@ func BribeExposure(r Roller, briber Person, senators []Senator, ls Laws) (expose
 	if ok, _ := bribeCover.Roll(r, briber.Sheet, 0, Normal); ok {
 		return false, Delta{}, nil
 	}
-	return true, Delta{Renown: -LawBribeExposeRenown}, lawOpinions(senators, briber.ID, LawBribeExposeOp, TraitIncorruptible, TraitStern)
-}
-
-// lawOpinions is delta from every senator with one of traits toward a player.
-func lawOpinions(senators []Senator, charID int64, delta float64, traits ...Trait) []OpinionChange {
-	var out []OpinionChange
-	for _, s := range senators {
-		for _, t := range traits {
-			if s.Has(t) {
-				out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: charID, Delta: delta})
-				break
-			}
-		}
-	}
-	return out
+	return true, Delta{Renown: -LawBribeExposeRenown}, opinionsFrom(senators, briber.ID, LawBribeExposeOp, TraitIncorruptible, TraitStern)
 }
 
 // FranchiseWeight is the vote weight an estate is worth under the Landed
@@ -596,7 +582,7 @@ func ChallengeCost(senators []Senator, challengerID int64, ls Laws) (Delta, []Op
 	if r.ChallengeRenown == 0 && r.ChallengeOpinion == 0 {
 		return Delta{}, nil
 	}
-	return Delta{Renown: -r.ChallengeRenown}, lawOpinions(senators, challengerID, r.ChallengeOpinion, TraitStern)
+	return Delta{Renown: -r.ChallengeRenown}, opinionsFrom(senators, challengerID, r.ChallengeOpinion, TraitStern)
 }
 
 // DeclineCost is what refusing a challenge costs under the Code of Honor.

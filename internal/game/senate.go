@@ -158,8 +158,8 @@ func GenerateSenate(r Roller, n int) []Senator {
 		out = append(out, Senator{
 			Name:      p.Name,
 			Traits:    append([]Trait(nil), p.Traits...),
-			Influence: float64(8 + r.IntN(9)), // 8–16
-			BasePrice: 15 + r.IntN(21),        // 15–35
+			Influence: float64(senatorInfluenceMin + r.IntN(senatorInfluenceSpan)),
+			BasePrice: senatorPriceMin + r.IntN(senatorPriceSpan),
 		})
 	}
 	return out
@@ -247,8 +247,8 @@ func (s Senator) score(v optionView, realm Realm, matterID int64) float64 {
 	}
 	// Every senator cares a little about the realm, most about whatever is low.
 	for a, d := range v.expected {
-		need := (TrackerMax - realm[a]) / 50
-		score += 0.06 * d * need
+		need := (TrackerMax - realm[a]) / realmNeedScale
+		score += realmCare * d * need
 	}
 	score += lawScore(s, v.opt)
 	danger, _ := s.dangerOf(v)
@@ -318,10 +318,10 @@ func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID
 	pref := preferredOf(ev, sc)
 	base := float64(s.BasePrice)
 	if s.Has(TraitGreedy) {
-		base *= 0.5
+		base *= greedyBribeFactor
 	}
 	if pref == optKey {
-		return int(math.Ceil(base / 2)), true
+		return int(math.Ceil(base * agreeBribeFactor)), true
 	}
 	gap := sc[pref] - s.wantScore(sc, optKey, realm, matterID)
 	return int(math.Ceil(base * (1 + gap))), true
@@ -355,17 +355,32 @@ func (s Senator) VoteOffer(ev MatterEvent, voterInfluence float64, realm Realm, 
 			second = sc
 		}
 	}
-	care := math.Min(best-second, 3) // how much winning matters to them
+	care := math.Min(best-second, offerCareMax) // how much winning matters to them
 	mult := 1.0
 	switch {
 	case s.Has(TraitBigSpender):
-		mult = 1.5
+		mult = bigSpenderOffer
 	case s.Has(TraitEconomical), s.Has(TraitGreedy):
-		mult = 0.6
+		mult = thriftyOffer
 	}
 	gold = int(math.Ceil((1 + care) * voterInfluence * VoteOfferRate * mult))
 	return opt, gold, gold > 0
 }
+
+// How senators are made and how they price things. Placeholders to tune.
+const (
+	senatorInfluenceMin, senatorInfluenceSpan = 8, 9   // influence 8–16
+	senatorPriceMin, senatorPriceSpan         = 15, 21 // base bribe price 15–35
+
+	realmNeedScale = 50   // how far below the top a tracker must be to be a need
+	realmCare      = 0.06 // how much every senator cares about the realm's needs
+
+	greedyBribeFactor = 0.5 // the Greedy sell cheap
+	agreeBribeFactor  = 0.5 // paying a senator to vote as they would anyway
+	offerCareMax      = 3.0 // caps how much more a senator pays for a vote they care about
+	bigSpenderOffer   = 1.5
+	thriftyOffer      = 0.6 // Economical and Greedy senators
+)
 
 // VoteOfferRate is gold per point of influence a senator pays for a vote
 // they mildly care about.
@@ -454,16 +469,17 @@ func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws)
 	for _, k := range recent {
 		skip[k] = true
 	}
-	var pool []MatterEvent
+	var pool []int // indices into MatterEvents, so nothing big is copied
 	var weights []float64
 	total := 0.0
-	for _, e := range MatterEvents {
+	for i := range MatterEvents {
+		e := &MatterEvents[i]
 		if e.FollowUpOnly || skip[e.Key] || (avoid != "" && e.Theme == avoid) {
 			continue
 		}
 		w := 1.0
 		if e.Motion != "" {
-			if laws == nil || !MotionAllowed(e, *laws) || (!e.Repeal && laws.Full()) {
+			if laws == nil || !MotionAllowed(*e, *laws) || (!e.Repeal && laws.Full()) {
 				continue
 			}
 			w = motionWeight
@@ -472,21 +488,21 @@ func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws)
 			w += b * (50 - realm[a]) / 50
 		}
 		w = math.Max(w, 0.2)
-		pool = append(pool, e)
+		pool = append(pool, i)
 		weights = append(weights, w)
 		total += w
 	}
 	x := float64(r.IntN(10000)) / 10000 * total
 	for i, w := range weights {
 		if x < w {
-			return pool[i], true
+			return MatterEvents[pool[i]], true
 		}
 		x -= w
 	}
 	if len(pool) == 0 {
 		return MatterEvent{}, false
 	}
-	return pool[len(pool)-1], true
+	return MatterEvents[pool[len(pool)-1]], true
 }
 
 // ---- resolution ----
@@ -548,11 +564,7 @@ type MatterResult struct {
 	Secret bool
 }
 
-func (res *MatterResult) delta(id int64, d Delta) {
-	cur := res.Deltas[id]
-	cur.Merge(d)
-	res.Deltas[id] = cur
-}
+func (res *MatterResult) delta(id int64, d Delta) { addDelta(res.Deltas, id, d) }
 
 // ResolveMatter counts the votes, picks the winner, rolls its outcome and
 // works out what happens to the realm and to each player.
@@ -600,21 +612,9 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		}
 	}
 	res.Winner = winner
-
-	res.Outcome, res.Succeeded = winner.Success, true
-	if winner.Check != nil {
-		if ok, _ := winner.Check.Roll(r, in.Realm.Sheet(), LawCheckMod(in.Laws, ev), Normal); !ok {
-			res.Outcome, res.Succeeded = winner.Failure, false
-		}
-	}
+	res.rollOutcome(r, in)
 	out := res.Outcome
-
-	res.Realm = in.Realm.Clone()
-	res.Realm.Apply(out.Realm)
-	res.Sectors = in.Sectors.Fill().Clone()
-	res.Sectors.Apply(out.Sectors)
-	res.Laws, res.LawChanges = in.Laws.Apply(out.Enact, out.Repeal, in.Now)
-	res.Fallen, res.FallenReason = res.Realm.Fallen()
+	res.applyOutcome(in)
 	// A petition is extra business, not a Senate day: no drift, no daily laws.
 	if !res.Fallen && in.Petitioner == 0 {
 		res.Realm.Apply(res.Realm.Drift())
@@ -626,11 +626,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	}
 
 	for _, p := range in.Players {
-		var d Delta
-		d.Merge(out.All)
-		if rd, ok := out.Roles[p.Role]; ok {
-			d.Merge(rd)
-		}
+		d := out.forPlayer(p)
 		if p.Vote == winner.Key {
 			d.Merge(Delta{Influence: WinningSideInfluence})
 			d.Merge(out.Supporters)
@@ -656,15 +652,53 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	}
 	petitionerResult(&res, in)
 	witchHunt(r, &res, in.Players, res.Laws)
+	res.queueFollowUps(r)
+	return res
+}
 
-	if !res.Fallen {
-		for _, f := range out.FollowUps {
-			if float64(r.IntN(100)) < f.Chance*100 {
-				res.FollowUps = append(res.FollowUps, QueuedEvent{Event: f.Event, Days: f.Days})
-			}
+// rollOutcome rolls the winning option's check, if it has one.
+func (res *MatterResult) rollOutcome(r Roller, in MatterInput) {
+	w := res.Winner
+	res.Outcome, res.Succeeded = w.Success, true
+	if w.Check != nil {
+		if ok, _ := w.Check.Roll(r, in.Realm.Sheet(), LawCheckMod(in.Laws, in.Event), Normal); !ok {
+			res.Outcome, res.Succeeded = w.Failure, false
 		}
 	}
-	return res
+}
+
+// applyOutcome works out the realm, sectors and laws after the outcome.
+func (res *MatterResult) applyOutcome(in MatterInput) {
+	out := res.Outcome
+	res.Realm = in.Realm.Clone()
+	res.Realm.Apply(out.Realm)
+	res.Sectors = in.Sectors.Fill().Clone()
+	res.Sectors.Apply(out.Sectors)
+	res.Laws, res.LawChanges = in.Laws.Apply(out.Enact, out.Repeal, in.Now)
+	res.Fallen, res.FallenReason = res.Realm.Fallen()
+}
+
+// queueFollowUps rolls which follow-ups the outcome queues. A fallen realm
+// has no tomorrow.
+func (res *MatterResult) queueFollowUps(r Roller) {
+	if res.Fallen {
+		return
+	}
+	for _, f := range res.Outcome.FollowUps {
+		if float64(r.IntN(100)) < f.Chance*100 {
+			res.FollowUps = append(res.FollowUps, QueuedEvent{Event: f.Event, Days: f.Days})
+		}
+	}
+}
+
+// forPlayer is what an outcome does to every player in a role.
+func (out MatterOutcome) forPlayer(p Player) Delta {
+	var d Delta
+	d.Merge(out.All)
+	if rd, ok := out.Roles[p.Role]; ok {
+		d.Merge(rd)
+	}
+	return d
 }
 
 // witchHunt fines owners of magic items under the Witchcraft Act, once per
@@ -698,36 +732,15 @@ func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
 		return res
 	}
 	res.Winner = ev.Options[0]
-	res.Outcome, res.Succeeded = res.Winner.Success, true
-	if res.Winner.Check != nil {
-		if ok, _ := res.Winner.Check.Roll(r, in.Realm.Sheet(), LawCheckMod(in.Laws, ev), Normal); !ok {
-			res.Outcome, res.Succeeded = res.Winner.Failure, false
-		}
-	}
+	res.rollOutcome(r, in)
+	res.applyOutcome(in)
 	out := res.Outcome
-	res.Realm = in.Realm.Clone()
-	res.Realm.Apply(out.Realm)
-	res.Sectors = in.Sectors.Fill().Clone()
-	res.Sectors.Apply(out.Sectors)
-	res.Laws, res.LawChanges = in.Laws.Apply(out.Enact, out.Repeal, in.Now)
-	res.Fallen, res.FallenReason = res.Realm.Fallen()
 	for _, p := range in.Players {
-		var d Delta
-		d.Merge(out.All)
-		if rd, ok := out.Roles[p.Role]; ok {
-			d.Merge(rd)
-		}
-		if desc := d.Describe(); desc != "" {
+		if d := out.forPlayer(p); d.Describe() != "" {
 			res.Deltas[p.ID] = d
-			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("%s For you: %s", out.Text, desc))
+			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("%s For you: %s", out.Text, d.Describe()))
 		}
 	}
-	if !res.Fallen {
-		for _, f := range out.FollowUps {
-			if float64(r.IntN(100)) < f.Chance*100 {
-				res.FollowUps = append(res.FollowUps, QueuedEvent{Event: f.Event, Days: f.Days})
-			}
-		}
-	}
+	res.queueFollowUps(r)
 	return res
 }

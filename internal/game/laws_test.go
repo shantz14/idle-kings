@@ -393,12 +393,12 @@ func TestSlanderFine(t *testing.T) {
 	host := Person{ID: 1, Name: "Host", Sheet: Sheet{}}
 	target := Person{ID: 2, Name: "Target", Sheet: Sheet{AttrIntrigue: 100}}
 	liar := Attendee{Person: Person{ID: 3, Name: "Liar"}, Goal: GoalSpreadRumors, Target: &target}
-	res := PartyResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	res := PartyResult{Ledger: newLedger()}
 	resolveRumor(zero{}, &res, host, liar, lawsOf(LawSlander))
 	if res.Deltas[3].Wealth != -LawSlanderFine || res.Deltas[2].Wealth != LawSlanderFine {
 		t.Fatalf("a named slanderer pays: %v", res.Deltas)
 	}
-	res = PartyResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	res = PartyResult{Ledger: newLedger()}
 	resolveRumor(zero{}, &res, host, liar, nil)
 	if res.Deltas[3].Wealth != 0 {
 		t.Fatal("no law, no fine")

@@ -134,23 +134,16 @@ type DuelResult struct {
 	Winner, Loser Person
 	Yielded       bool
 	Wounded       bool // the loser
-	Deltas        map[int64]Delta
-	Opinions      []OpinionChange
-	Conditions    []ConditionChange
-	Notices       map[int64][]string
-	Public        string
-	Realm         Realm // the court's cut of the bets, under the Code of Honor
+	Ledger
+	Public string
+	Realm  Realm // the court's cut of the bets, under the Code of Honor
 }
 
 // ResolveDuel fights the bout. All rolls are hidden.
 func ResolveDuel(r Roller, in DuelInput) DuelResult {
 	cs, ds := orGuard(in.ChallengerStance), orGuard(in.DefenderStance)
-	res := DuelResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
-	add := func(id int64, d Delta) {
-		cur := res.Deltas[id]
-		cur.Merge(d)
-		res.Deltas[id] = cur
-	}
+	res := DuelResult{Ledger: newLedger()}
+	add := res.delta
 
 	challengerWins, margin := false, 0
 	switch {

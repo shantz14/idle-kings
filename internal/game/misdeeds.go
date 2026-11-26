@@ -88,7 +88,7 @@ func Denounce(senators []Senator, kind string, accusedID, informerID int64, info
 		out.Paid = true
 		out.Informer = Delta{Wealth: LawDenounceReward, Influence: ScaleInfluence(LawDenounceInfluence, informerInfluence)}
 		out.Realm = Realm{AttrTreasury: -LawDenounceTreasury}
-		out.Opinions = lawOpinions(senators, informerID, LawDenounceGood, TraitStern, TraitIncorruptible)
+		out.Opinions = opinionsFrom(senators, informerID, LawDenounceGood, TraitStern, TraitIncorruptible)
 	}
 	out.Accused = Delta{Renown: -exposeRenown * sev}
 	out.Opinions = append(out.Opinions, misdeedOpinions(senators, m, accusedID, exposeOpinion*sev)...)

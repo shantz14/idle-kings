@@ -354,22 +354,37 @@ type PartyInput struct {
 
 type PartyResult struct {
 	Success bool
-	Deltas  map[int64]Delta    // applied to characters; may include hidden losses
-	Notices map[int64][]string // private messages per character
-	Public  string             // announced to the court
+	Ledger
+	Public string // announced to the court
 	// Opinions are changes with senators (SenatorID 0 = every senator).
+	Conditions []ConditionChange // e.g. wounds from a hunting accident
+}
+
+// Ledger is what an action does to the players: their deltas (which may
+// include losses they never hear about), private notices, senators'
+// opinions and conditions.
+type Ledger struct {
+	Deltas     map[int64]Delta
+	Notices    map[int64][]string
 	Opinions   []OpinionChange
 	Conditions []ConditionChange // e.g. wounds from a hunting accident
 }
 
-func (r *PartyResult) delta(id int64, d Delta) {
-	cur := r.Deltas[id]
-	cur.Merge(d)
-	r.Deltas[id] = cur
+func newLedger() Ledger {
+	return Ledger{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
 }
 
-func (r *PartyResult) notice(id int64, format string, args ...any) {
-	r.Notices[id] = append(r.Notices[id], fmt.Sprintf(format, args...))
+func (l *Ledger) delta(id int64, d Delta) { addDelta(l.Deltas, id, d) }
+
+func (l *Ledger) notice(id int64, format string, args ...any) {
+	l.Notices[id] = append(l.Notices[id], fmt.Sprintf(format, args...))
+}
+
+// addDelta merges d into a character's delta.
+func addDelta(m map[int64]Delta, id int64, d Delta) {
+	cur := m[id]
+	cur.Merge(d)
+	m[id] = cur
 }
 
 func withEffects(text string, d Delta) string {
@@ -383,7 +398,7 @@ func withEffects(text string, d Delta) string {
 // are hidden; only notices and the public line reach players. Players only
 // hear about rumors against them if they noticed them.
 func ResolveParty(r Roller, in PartyInput) PartyResult {
-	res := PartyResult{Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	res := PartyResult{Ledger: newLedger()}
 	host := in.Host
 
 	// Host.
