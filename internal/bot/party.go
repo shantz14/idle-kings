@@ -14,6 +14,11 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["party"] = (*Bot).onParty
+	modalRoutes["party"] = (*Bot).onPartyModal
+}
+
 // Party custom IDs:
 //   party:host:<goal>                 host picks a goal; shows the budget picker
 //   party:spend:<goal>:<gold>         host picks a preset budget and starts the party
@@ -192,7 +197,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 // attendCheck loads the party and the caller's character and validates.
 func (b *Bot) attendCheck(ctx context.Context, i *discordgo.InteractionCreate, activityID int64) (store.Activity, store.Character, string) {
 	a, err := b.store.GetActivity(ctx, activityID)
-	if err != nil {
+	if err != nil || a.Kind != game.KindParty {
 		return a, store.Character{}, "That party doesn't exist."
 	}
 	c, err := b.store.GetCharacter(ctx, a.GuildID, userOf(i).ID)
@@ -300,13 +305,8 @@ func (b *Bot) eventWhere(ctx context.Context, activityID int64) string {
 	if err != nil {
 		return "At your party"
 	}
-	switch a.Kind {
-	case game.KindHunt:
-		return "On your hunt"
-	case game.KindJourney:
-		return "On the road"
-	case game.KindDuel:
-		return "On the dueling ground"
+	if d, ok := activityDefs[a.Kind]; ok && d.eventWhere != "" {
+		return d.eventWhere
 	}
 	return "At your party"
 }
@@ -473,15 +473,20 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 		slog.Error("participants", "err", err)
 		return
 	}
+	targets := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		if p.TargetID != 0 {
+			targets = append(targets, p.TargetID)
+		}
+	}
+	targeted, _ := b.store.CharactersByIDs(ctx, targets)
 	for _, p := range parts {
 		att := game.Attendee{Person: p.Character.Person(), Goal: game.Goal(p.Goal)}
 		users[p.Character.ID] = p.Character.UserID
-		if p.TargetID != 0 {
-			if t, err := b.store.GetCharacterByID(ctx, p.TargetID); err == nil {
-				tp := t.Person()
-				att.Target = &tp
-				users[t.ID] = t.UserID
-			}
+		if t, ok := targeted[p.TargetID]; ok && p.TargetID != 0 {
+			tp := t.Person()
+			att.Target = &tp
+			users[t.ID] = t.UserID
 		}
 		in.Attendees = append(in.Attendees, att)
 	}

@@ -13,6 +13,21 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindDuel, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.duelPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveDuel,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return b.duelLine(ctx, a)
+		},
+		eventWhere: "On the dueling ground",
+	})
+	componentRoutes["duel"] = (*Bot).onDuel
+	modalRoutes["duel"] = (*Bot).onDuelModal
+}
+
 // Duel custom IDs:
 //   duel:who                           (user select) challenger picks an opponent → wager panel
 //   duel:wager:<defender>:<gold>       issue the challenge with a preset wager
@@ -212,6 +227,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	case c.Laws.Has(game.LawHonor):
 		refusing = "Under the Code of Honor, refusing, or not answering, is a disgrace."
 	}
+	b.deferUpdate(i) // the DM and the announcement come before the answer
 	_, dmErr := b.dm(t.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "You have been challenged to a duel",
@@ -543,9 +559,13 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 	}
 
 	users := map[int64]string{c.ID: c.UserID, t.ID: t.UserID}
+	bettors := make([]int64, 0, len(bets))
 	for _, bt := range bets {
-		if p, err := b.store.GetCharacterByID(ctx, bt.CharacterID); err == nil {
-			users[p.ID] = p.UserID
+		bettors = append(bettors, bt.CharacterID)
+	}
+	if names, err := b.store.CharacterNames(ctx, bettors); err == nil {
+		for id, n := range names {
+			users[id] = n.UserID
 		}
 	}
 	title := fmt.Sprintf("Duel: %s vs %s", c.FullName(), t.FullName())

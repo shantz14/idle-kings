@@ -14,6 +14,19 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindPetition, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.petitionPanel(ctx, c, "", "")
+		},
+		resolve: (*Bot).resolvePetition,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are lobbying the Senate's clerks. You'll know <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["petition"] = (*Bot).onPetition
+}
+
 // Petition the Senate custom IDs:
 //   petition:pick        (select) a petition chosen
 //   petition:go:<key>    start lobbying for it (key like "pass:grain_dole")

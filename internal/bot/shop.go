@@ -12,6 +12,10 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["shop"] = (*Bot).onShop
+}
+
 // Shop custom IDs:
 //   shop:open:<tab>     the shop, on a tab (props | goods)
 //   shop:pick:<tab>     (select) an item → its detail view
@@ -61,12 +65,16 @@ func (b *Bot) loadShop(ctx context.Context, guildID string) (shopState, error) {
 	if st.owners, err = b.store.ItemOwners(ctx, guildID); err != nil {
 		return st, err
 	}
-	chars, err := b.store.CharactersInCourt(ctx, guildID)
+	ids := make([]int64, 0, len(st.owners))
+	for _, id := range st.owners {
+		ids = append(ids, id)
+	}
+	names, err := b.store.CharacterNames(ctx, ids)
 	if err != nil {
 		return st, err
 	}
-	for _, c := range chars {
-		st.houses[c.ID] = "House " + c.FamilyName
+	for id, n := range names {
+		st.houses[id] = "House " + n.Family
 	}
 	return st, nil
 }

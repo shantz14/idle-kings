@@ -15,6 +15,10 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["senate"] = (*Bot).onSenate
+}
+
 // Senate custom IDs:
 //   senate:vote:<matter>:<option>
 //   senate:bribe:<matter>                     pick a senator to bribe
@@ -483,24 +487,37 @@ func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.Int
 	return ephemeral(&discordgo.InteractionResponseData{Embeds: embeds, Components: comps})
 }
 
-// share is a vote weight's portion of the whole Senate (senators plus
-// players), in percent.
-func (b *Bot) share(ctx context.Context, guildID string, influence float64) float64 {
+// senateTotal is the Senate's whole vote weight: every senator and player.
+func (b *Bot) senateTotal(ctx context.Context, guildID string) float64 {
+	sen, _ := b.store.Senators(ctx, guildID)
+	chars, _ := b.store.CharactersInCourt(ctx, guildID)
+	return senateTotalOf(sen, chars)
+}
+
+// senateTotalOf is senateTotal for senators and players already loaded.
+func senateTotalOf(sen []game.Senator, chars []store.Character) float64 {
 	total := 0.0
-	if sen, err := b.store.Senators(ctx, guildID); err == nil {
-		for _, s := range sen {
-			total += s.Influence
-		}
+	for _, s := range sen {
+		total += s.Influence
 	}
-	if chars, err := b.store.CharactersInCourt(ctx, guildID); err == nil {
-		for _, c := range chars {
-			total += c.VoteWeight()
-		}
+	for _, c := range chars {
+		total += c.VoteWeight()
 	}
+	return total
+}
+
+// percentOf is weight as a percentage of the Senate's total.
+func percentOf(weight, total float64) float64 {
 	if total == 0 {
 		return 0
 	}
-	return 100 * influence / total
+	return 100 * weight / total
+}
+
+// share is one vote weight's percentage of the Senate. In a loop, use
+// senateTotal once and percentOf instead.
+func (b *Bot) share(ctx context.Context, guildID string, weight float64) float64 {
+	return percentOf(weight, b.senateTotal(ctx, guildID))
 }
 
 func (b *Bot) onRoster(ctx context.Context, i *discordgo.InteractionCreate) {
@@ -516,18 +533,19 @@ func (b *Bot) onRoster(ctx context.Context, i *discordgo.InteractionCreate) {
 	chars, _ := b.store.CharactersInCourt(ctx, c.GuildID)
 	sort.Slice(chars, func(a, b int) bool { return chars[a].VoteWeight() > chars[b].VoteWeight() })
 	ops, _ := b.store.Opinions(ctx, c.ID)
+	total := senateTotalOf(sen, chars)
 
 	var sb strings.Builder
 	sb.WriteString("**Senators** (and their opinion of you)\n")
 	for _, s := range sen {
 		fmt.Fprintf(&sb, "%s **%s**: %s · influence %s (%s%%)\n", opinionTag(ops[s.ID]), s.Name, s.TraitNames(), game.Num(s.Influence),
-			game.Num(b.share(ctx, c.GuildID, s.Influence)))
+			game.Num(percentOf(s.Influence, total)))
 	}
 	sb.WriteString("\n**Players**\n")
 	for _, p := range chars {
 		role, _ := game.RoleByKey(p.Role)
 		fmt.Fprintf(&sb, "%s **%s** (%s): influence %s (%s%%)\n", p.Crest.Emoji(), p.FullName(), role.Name, game.Num(p.Influence),
-			game.Num(b.share(ctx, c.GuildID, p.VoteWeight())))
+			game.Num(percentOf(p.VoteWeight(), total)))
 	}
 	var traits strings.Builder
 	seen := map[game.Trait]bool{}

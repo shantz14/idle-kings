@@ -11,6 +11,15 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindDossier, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.dossierPanel(ctx, c)
+		},
+	})
+	componentRoutes["dossier"] = (*Bot).onDossier
+}
+
 // Dossier custom IDs:
 //   dossier:pick     (select) a report chosen → its page, with Denounce
 //   dossier:home     back to the list
@@ -58,17 +67,18 @@ func (b *Bot) dossierPanel(ctx context.Context, c store.Character) *discordgo.In
 	if err != nil {
 		return &discordgo.InteractionResponseData{Content: "Your dossier is locked away somewhere. Try again later."}
 	}
-	names := map[int64]string{}
+	ids := make([]int64, 0, len(reports))
+	for _, d := range reports {
+		ids = append(ids, d.ActorID)
+	}
+	names, _ := b.store.CharacterNames(ctx, ids)
 	var entries []dossierEntry
 	for _, d := range reports {
-		if _, ok := names[d.ActorID]; !ok {
-			name := "someone who has left court"
-			if a, err := b.store.GetCharacterByID(ctx, d.ActorID); err == nil {
-				name = a.FullName()
-			}
-			names[d.ActorID] = name
+		name := "someone who has left court"
+		if n, ok := names[d.ActorID]; ok {
+			name = n.FullName
 		}
-		entries = append(entries, dossierEntry{d, names[d.ActorID]})
+		entries = append(entries, dossierEntry{d, name})
 	}
 	return dossierView(entries, c.Laws)
 }

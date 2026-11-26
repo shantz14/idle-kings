@@ -13,6 +13,20 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindHunt, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.huntPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveHunt,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are leading a hunt. It ends <t:%d:R>.", a.EndsAt.Unix())
+		},
+		eventWhere: "On your hunt",
+	})
+	componentRoutes["hunt"] = (*Bot).onHunt
+}
+
 // Hunt custom IDs:
 //   hunt:host:<goal>              host picks a goal and rides out
 //   hunt:join:<hunt>              public "Join the hunt" button
@@ -270,15 +284,20 @@ func (b *Bot) resolveHunt(ctx context.Context, a store.Activity, now time.Time) 
 
 	in := game.HuntInput{Host: host.Person(), Goal: game.Goal(a.Goal), Quality: ev.quality, Senators: sen}
 	users := map[int64]string{host.ID: host.UserID}
+	targets := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		if p.TargetID != 0 {
+			targets = append(targets, p.TargetID)
+		}
+	}
+	targeted, _ := b.store.CharactersByIDs(ctx, targets)
 	for _, p := range parts {
 		rider := game.HuntRider{Person: p.Character.Person(), Goal: game.Goal(p.Goal)}
 		users[p.Character.ID] = p.Character.UserID
-		if p.TargetID != 0 {
-			if t, err := b.store.GetCharacterByID(ctx, p.TargetID); err == nil {
-				tp := t.Person()
-				rider.Target = &tp
-				users[t.ID] = t.UserID
-			}
+		if t, ok := targeted[p.TargetID]; ok && p.TargetID != 0 {
+			tp := t.Person()
+			rider.Target = &tp
+			users[t.ID] = t.UserID
 		}
 		in.Riders = append(in.Riders, rider)
 	}

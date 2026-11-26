@@ -16,24 +16,46 @@ import (
 // private action. Call it after the action has succeeded. It is best effort:
 // errors are logged and never stop the action. A misdeed the spies learn
 // enough about is filed in the spymaster's dossier, to denounce now or later.
+//
+// It runs in the background (DMs are slow), so the caller can answer the
+// player at once.
 func (b *Bot) leak(ctx context.Context, actor store.Character, s game.Secret) {
+	b.background(ctx, "leak", func(ctx context.Context) { b.leakNow(ctx, actor, s) })
+}
+
+func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret) {
 	nets, err := b.store.SpyNetworksOn(ctx, actor.ID)
 	if err != nil {
 		slog.Error("leak networks", "err", err)
 		return
 	}
+	// Roll every network first, then look up only the owners who heard.
+	type heard struct {
+		owner  int64
+		detail game.Detail
+	}
+	var hits []heard
+	var owners []int64
 	for _, n := range nets {
 		if n.OwnerID == actor.ID || slices.Contains(s.Skip, n.OwnerID) {
 			continue
 		}
-		d, ok := game.RollLeak(b.rng, n.Value, actor.Laws)
+		if d, ok := game.RollLeak(b.rng, n.Value, actor.Laws); ok {
+			hits = append(hits, heard{n.OwnerID, d})
+			owners = append(owners, n.OwnerID)
+		}
+	}
+	names, err := b.store.CharacterNames(ctx, owners)
+	if err != nil {
+		slog.Error("leak owners", "err", err)
+		return
+	}
+	for _, h := range hits {
+		o, ok := names[h.owner]
 		if !ok {
 			continue
 		}
-		o, err := b.store.GetCharacterByID(ctx, n.OwnerID)
-		if err != nil {
-			continue
-		}
+		d := h.detail
 		msg := &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "🕵️ Word from your spies in " + actor.House(),
 			Description: s.Text(d),

@@ -12,6 +12,30 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindCanvass, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.canvassPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveCanvass,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are out canvassing the districts. You'll be back <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	registerActivity(game.KindCircus, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.circusPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveCircus,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("The city is feasting at your expense. It ends <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["canvass"] = (*Bot).onCanvass
+	componentRoutes["circus"] = (*Bot).onCircus
+	modalRoutes["circus"] = (*Bot).onCircusModal
+}
+
 // Canvass the Districts custom IDs:
 //   canvass:go                 start canvassing
 //

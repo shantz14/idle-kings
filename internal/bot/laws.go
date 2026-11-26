@@ -13,6 +13,10 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["law"] = (*Bot).onLaw
+}
+
 // Law custom IDs:
 //   law:denounce:<denunciation>   expose a misdeed from your dossier
 //   law:whisper:<denunciation>    spread it quietly instead; only the culprit hears

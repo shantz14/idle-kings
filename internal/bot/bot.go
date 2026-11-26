@@ -25,6 +25,11 @@ type Bot struct {
 	courtFor  time.Duration     // = t.Court
 	investFor time.Duration     // = t.Invest
 	deals     dealDrafts        // estate offers being put together
+	dmChans   sync.Map          // user ID → DM channel ID, so each DM is one call
+	bg        sync.WaitGroup    // background work (see background)
+	deferred  sync.Map          // interaction IDs acknowledged by deferUpdate
+	// Retry counts for rows the tick keeps failing to resolve.
+	activityRetries, eventRetries retryGuard
 }
 
 // lockedRand makes one RNG safe for concurrent handlers.
@@ -60,6 +65,7 @@ func (b *Bot) Run(ctx context.Context) error {
 		return fmt.Errorf("open discord session: %w", err)
 	}
 	defer b.s.Close()
+	defer b.bg.Wait() // let background DMs finish before the session closes
 
 	// Global so they also work in DMs with the bot.
 	if _, err := b.s.ApplicationCommandBulkOverwrite(b.s.State.User.ID, "", commands()); err != nil {
@@ -79,61 +85,52 @@ func (b *Bot) Run(ctx context.Context) error {
 	}
 }
 
-func (b *Bot) tick(ctx context.Context) {
+// tickTimeout bounds one tick, so a stuck Discord call can't stall the loop.
+const tickTimeout = 2 * time.Minute
+
+func (b *Bot) tick(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, tickTimeout)
+	defer cancel()
+	defer recoverPanic("tick")
+	defer b.activityRetries.endTick()
+	defer b.eventRetries.endTick()
 	now := time.Now()
 	if due, err := b.store.DueEvents(ctx, now); err != nil {
 		slog.Error("due events", "err", err)
 	} else {
 		for _, e := range due {
-			b.fireEvent(ctx, e, now)
+			func() {
+				defer recoverPanic("fire event", "id", e.ID)
+				b.fireEvent(ctx, e, now)
+			}()
 		}
 	}
 	if expired, err := b.store.ExpiredEvents(ctx, now); err != nil {
 		slog.Error("expired events", "err", err)
 	} else {
 		for _, e := range expired {
-			b.expireEvent(ctx, e, now)
+			if !b.eventRetries.try(e.ID) {
+				slog.Warn("abandoned event", "id", e.ID)
+				_ = b.store.ResolveEvent(ctx, e.ID, "", game.EventOutcome{}, now)
+				continue
+			}
+			func() {
+				defer recoverPanic("expire event", "id", e.ID)
+				b.expireEvent(ctx, e, now)
+			}()
 		}
 	}
 	if ended, err := b.store.EndedActivities(ctx, now); err != nil {
 		slog.Error("ended activities", "err", err)
 	} else {
 		for _, a := range ended {
-			switch a.Kind {
-			case game.KindParty:
-				b.resolveParty(ctx, a, now)
-			case game.KindCourt:
-				b.resolveCourt(ctx, a, now)
-			case game.KindInvest:
-				b.resolveInvest(ctx, a, now)
-			case game.KindDuel:
-				b.resolveDuel(ctx, a, now)
-			case game.KindHunt:
-				b.resolveHunt(ctx, a, now)
-			case game.KindJourney:
-				b.resolveJourney(ctx, a, now)
-			case game.KindPlantSpies:
-				b.resolvePlant(ctx, a, now)
-			case game.KindRootOut:
-				b.resolveRootOut(ctx, a, now)
-			case game.KindEmbezzle:
-				b.resolveEmbezzle(ctx, a, now)
-			case game.KindCanvass:
-				b.resolveCanvass(ctx, a, now)
-			case game.KindSpeech:
-				b.resolveSpeech(ctx, a, now)
-			case game.KindCircus:
-				b.resolveCircus(ctx, a, now)
-			case game.KindWork:
-				b.resolveWork(ctx, a, now)
-			case game.KindPetition:
-				b.resolvePetition(ctx, a, now)
-			default:
-				slog.Error("unknown activity kind", "kind", a.Kind, "id", a.ID)
-			}
+			b.resolveActivity(ctx, a, now)
 		}
 	}
-	b.senateTick(ctx, now)
+	func() {
+		defer recoverPanic("senate tick")
+		b.senateTick(ctx, now)
+	}()
 	if err := b.store.PayIncome(ctx, now); err != nil {
 		slog.Error("pay income", "err", err)
 	}
@@ -141,14 +138,28 @@ func (b *Bot) tick(ctx context.Context) {
 
 // dm sends a private message; players with closed DMs just miss it.
 func (b *Bot) dm(userID string, m *discordgo.MessageSend) (*discordgo.Message, error) {
-	ch, err := b.s.UserChannelCreate(userID)
+	chID, err := b.dmChannel(userID)
 	if err != nil {
 		slog.Warn("open dm", "user", userID, "err", err)
 		return nil, err
 	}
-	msg, err := b.s.ChannelMessageSendComplex(ch.ID, m)
+	msg, err := b.s.ChannelMessageSendComplex(chID, m)
 	if err != nil {
+		b.dmChans.Delete(userID) // the channel may be gone; reopen next time
 		slog.Warn("send dm", "user", userID, "err", err)
 	}
 	return msg, err
+}
+
+// dmChannel opens (once) the DM channel with a user.
+func (b *Bot) dmChannel(userID string) (string, error) {
+	if id, ok := b.dmChans.Load(userID); ok {
+		return id.(string), nil
+	}
+	ch, err := b.s.UserChannelCreate(userID)
+	if err != nil {
+		return "", err
+	}
+	b.dmChans.Store(userID, ch.ID)
+	return ch.ID, nil
 }

@@ -13,6 +13,19 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindEmbezzle, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.embezzlePanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveEmbezzle,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are cooking the treasury's books. You'll be done <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["embezzle"] = (*Bot).onEmbezzle
+}
+
 // Embezzle custom IDs:
 //   embezzle:go:<size>   start embezzling
 

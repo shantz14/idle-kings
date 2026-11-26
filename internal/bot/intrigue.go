@@ -13,6 +13,32 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindPlantSpies, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.plantPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolvePlant,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			name := "another house"
+			if t, err := b.store.GetCharacterByID(ctx, a.TargetID); err == nil {
+				name = t.FullName() + "'s house"
+			}
+			return fmt.Sprintf("Your agent is working their way into %s. You'll hear <t:%d:R>.", name, a.EndsAt.Unix())
+		},
+	})
+	registerActivity(game.KindRootOut, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.rootOutPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveRootOut,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are searching your household for spies. You'll be done <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["spy"] = (*Bot).onSpy
+}
+
 // Intrigue (spy network) custom IDs:
 //   spy:who                    (user select) target chosen → purse panel
 //   spy:go:<target>:<purse>    start planting spies
@@ -66,14 +92,19 @@ func (b *Bot) spyLines(ctx context.Context, c store.Character) []spyLine {
 	if err != nil {
 		slog.Error("spy networks", "err", err)
 	}
+	ids := make([]int64, 0, len(nets))
+	for _, n := range nets {
+		ids = append(ids, n.TargetID)
+	}
+	names, _ := b.store.CharacterNames(ctx, ids)
 	var lines []spyLine
 	for _, n := range nets {
 		if game.TierIndex(n.Value) == 0 {
 			continue
 		}
-		if t, err := b.store.GetCharacterByID(ctx, n.TargetID); err == nil {
+		if t, ok := names[n.TargetID]; ok {
 			tier := game.SpyTierOf(n.Value)
-			lines = append(lines, spyLine{Name: t.FullName(), Tier: tier.Name, Flavor: fmt.Sprintf(tier.Flavor, t.FullName())})
+			lines = append(lines, spyLine{Name: t.FullName, Tier: tier.Name, Flavor: fmt.Sprintf(tier.Flavor, t.FullName)})
 		}
 	}
 	return lines
@@ -326,11 +357,16 @@ func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Tim
 		slog.Error("spy networks", "err", err)
 		return
 	}
+	ids := make([]int64, 0, len(nets))
+	for _, n := range nets {
+		ids = append(ids, n.OwnerID)
+	}
+	loaded, _ := b.store.CharactersByIDs(ctx, ids)
 	owners := map[int64]store.Character{}
 	in := game.RootInput{Player: c.Person(), Laws: c.Laws}
 	for _, n := range nets {
-		o, err := b.store.GetCharacterByID(ctx, n.OwnerID)
-		if err != nil {
+		o, ok := loaded[n.OwnerID]
+		if !ok {
 			continue
 		}
 		owners[o.ID] = o

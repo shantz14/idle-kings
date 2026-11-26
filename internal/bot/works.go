@@ -14,6 +14,23 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindWork, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.worksPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveWork,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			name := "a public work"
+			if w, ok := game.WorkByKey(a.Goal); ok {
+				name = "your " + strings.ToLower(w.Name)
+			}
+			return fmt.Sprintf("Builders are at work on %s. It opens <t:%d:R>.", name, a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["work"] = (*Bot).onWork
+}
+
 // Public works custom IDs:
 //   work:build:<work>   pay for a public work and break ground
 

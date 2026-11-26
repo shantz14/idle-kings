@@ -14,6 +14,24 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindInvest, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.investPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveInvest,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			name := "a venture"
+			if d, ok := game.SectorByKey(game.SectorKey(a.Goal)); ok {
+				name = d.Name
+			}
+			return fmt.Sprintf("You are negotiating a stake in %s. The deal is struck <t:%d:R>.", name, a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["invest"] = (*Bot).onInvest
+	modalRoutes["invest"] = (*Bot).onInvestModal
+}
+
 // Invest in a Venture custom IDs:
 //   invest:pick                    (select) sector chosen → amount panel
 //   invest:spend:<sector>:<gold>   invest a preset amount

@@ -14,6 +14,13 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	// The vote-trade price modals live under the "senate" prefix.
+	modalRoutes["senate"] = func(b *Bot, ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
+		b.onTradeModal(ctx, i, parts)
+	}
+}
+
 // Vote deal custom IDs:
 //   senate:sell:<matter>                         sell panel (senator offers + player picker)
 //   senate:sellai:<matter>:<senator>             sell to a senator

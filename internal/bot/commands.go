@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -78,6 +77,7 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 	if userOf(i) == nil {
 		return
 	}
+	defer recoverPanic("interaction", "type", i.Type.String())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -112,76 +112,9 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			}
 		}
 	case discordgo.InteractionMessageComponent:
-		id := i.MessageComponentData().CustomID
-		parts := strings.Split(id, ":")
-		switch parts[0] {
-		case "cc":
-			b.onCreator(ctx, i, parts[1:])
-		case "info":
-			b.onInfo(ctx, i, parts[1:])
-		case "menu":
-			b.onMenu(ctx, i, parts[1:])
-		case "party":
-			b.onParty(ctx, i, parts[1:])
-		case "court":
-			b.onCourt(ctx, i, parts[1:])
-		case "duel":
-			b.onDuel(ctx, i, parts[1:])
-		case "hunt":
-			b.onHunt(ctx, i, parts[1:])
-		case "journey":
-			b.onJourney(ctx, i, parts[1:])
-		case "invest":
-			b.onInvest(ctx, i, parts[1:])
-		case "canvass":
-			b.onCanvass(ctx, i, parts[1:])
-		case "speech":
-			b.onSpeech(ctx, i, parts[1:])
-		case "circus":
-			b.onCircus(ctx, i, parts[1:])
-		case "work":
-			b.onWork(ctx, i, parts[1:])
-		case "spy":
-			b.onSpy(ctx, i, parts[1:])
-		case "embezzle":
-			b.onEmbezzle(ctx, i, parts[1:])
-		case "aid":
-			b.onAid(ctx, i, parts[1:])
-		case "estate":
-			b.onEstate(ctx, i, parts[1:])
-		case "shop":
-			b.onShop(ctx, i, parts[1:])
-		case "deal":
-			b.onDeal(ctx, i, parts[1:])
-		case "senate":
-			b.onSenate(ctx, i, parts[1:])
-		case "petition":
-			b.onPetition(ctx, i, parts[1:])
-		case "law":
-			b.onLaw(ctx, i, parts[1:])
-		case "dossier":
-			b.onDossier(ctx, i, parts[1:])
-		}
+		b.dispatch(ctx, i, componentRoutes, i.MessageComponentData().CustomID)
 	case discordgo.InteractionModalSubmit:
-		parts := strings.Split(i.ModalSubmitData().CustomID, ":")
-		switch parts[0] {
-		case "cc":
-			b.onCreatorModal(ctx, i, parts[1:])
-		case "senate":
-			b.onTradeModal(ctx, i, parts[1:])
-		case "party":
-			b.onPartyModal(ctx, i, parts[1:])
-		case "duel":
-			b.onDuelModal(ctx, i, parts[1:])
-		case "invest":
-			b.onInvestModal(ctx, i, parts[1:])
-		case "circus":
-			b.onCircusModal(ctx, i, parts[1:])
-		case "deal":
-			b.onDealModal(ctx, i, parts[1:])
-		case "aid":
-			b.onAidModal(ctx, i, parts[1:])
-		}
+		b.dispatch(ctx, i, modalRoutes, i.ModalSubmitData().CustomID)
 	}
 }
 
@@ -300,6 +233,20 @@ func ephemeral(d *discordgo.InteractionResponseData) *discordgo.InteractionRespo
 	return d
 }
 
+// deferUpdate acknowledges a component click at once, for handlers about
+// to do slow work (DMs, announcements) before they can answer: Discord
+// wants an answer within 3 seconds. The handler's next update or respond
+// then edits the message or posts a follow-up instead.
+func (b *Bot) deferUpdate(i *discordgo.InteractionCreate) {
+	if err := b.s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	}); err != nil {
+		slog.Error("defer response", "err", err)
+		return
+	}
+	b.deferred.Store(i.ID, true)
+}
+
 func (b *Bot) send(i *discordgo.InteractionCreate, t discordgo.InteractionResponseType, d *discordgo.InteractionResponseData) {
 	// Send empty lists rather than null so Discord clears them.
 	if d.Embeds == nil {
@@ -308,8 +255,29 @@ func (b *Bot) send(i *discordgo.InteractionCreate, t discordgo.InteractionRespon
 	if d.Components == nil {
 		d.Components = []discordgo.MessageComponent{}
 	}
+	if _, ok := b.deferred.LoadAndDelete(i.ID); ok {
+		b.sendDeferred(i, t, d)
+		return
+	}
 	if err := b.s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: t, Data: d}); err != nil {
 		slog.Error("respond", "err", err)
+	}
+}
+
+// sendDeferred answers an interaction already acknowledged by deferUpdate.
+func (b *Bot) sendDeferred(i *discordgo.InteractionCreate, t discordgo.InteractionResponseType, d *discordgo.InteractionResponseData) {
+	var err error
+	if t == discordgo.InteractionResponseUpdateMessage {
+		_, err = b.s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: &d.Content, Embeds: &d.Embeds, Components: &d.Components,
+		})
+	} else {
+		_, err = b.s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: d.Content, Embeds: d.Embeds, Components: d.Components, Flags: d.Flags,
+		})
+	}
+	if err != nil {
+		slog.Error("respond after defer", "err", err)
 	}
 }
 

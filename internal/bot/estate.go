@@ -11,6 +11,10 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["estate"] = (*Bot).onEstate
+}
+
 // Estate custom IDs:
 //   estate:view               the estate page
 //   estate:move               (select) move into a property

@@ -10,6 +10,20 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindParty, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.partyPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveParty,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are hosting a party. It ends <t:%d:R>.", a.EndsAt.Unix())
+		},
+		eventWhere: "At your party",
+	})
+	componentRoutes["menu"] = (*Bot).onMenu
+}
+
 // Menu custom IDs:
 //   menu:home            main panel
 //   menu:cat:<category>  actions in a category
@@ -43,40 +57,10 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 	case parts[0] == "cat" && len(parts) > 1:
 		b.update(i, categoryPanel(game.Category(parts[1]), c.Role))
 	case parts[0] == "act" && len(parts) > 1:
-		switch parts[1] {
-		case game.KindParty:
-			b.update(i, b.partyPanel(ctx, c, ""))
-		case game.KindCourt:
-			b.update(i, b.courtPanel(ctx, c, 0, ""))
-		case game.KindDuel:
-			b.update(i, b.duelPanel(ctx, c, ""))
-		case game.KindHunt:
-			b.update(i, b.huntPanel(ctx, c, ""))
-		case game.KindJourney:
-			b.update(i, b.journeyPanel(ctx, c, ""))
-		case game.KindInvest:
-			b.update(i, b.investPanel(ctx, c, ""))
-		case game.KindPlantSpies:
-			b.update(i, b.plantPanel(ctx, c, ""))
-		case game.KindRootOut:
-			b.update(i, b.rootOutPanel(ctx, c, ""))
-		case game.KindEmbezzle:
-			b.update(i, b.embezzlePanel(ctx, c, ""))
-		case game.KindDossier:
-			b.update(i, b.dossierPanel(ctx, c))
-		case game.KindAid:
-			b.update(i, b.aidPanel(ctx, c, ""))
-		case game.KindCanvass:
-			b.update(i, b.canvassPanel(ctx, c, ""))
-		case game.KindSpeech:
-			b.update(i, b.speechPanel(ctx, c, ""))
-		case game.KindCircus:
-			b.update(i, b.circusPanel(ctx, c, ""))
-		case game.KindWork:
-			b.update(i, b.worksPanel(ctx, c, ""))
-		case game.KindPetition:
-			b.update(i, b.petitionPanel(ctx, c, "", ""))
+		if d, ok := activityDefs[parts[1]]; ok && d.panel != nil {
+			b.update(i, d.panel(b, ctx, c))
 		}
+
 	}
 }
 

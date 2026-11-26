@@ -534,3 +534,16 @@ func (s *Store) fillMonuments(ctx context.Context, chars []*Character) error {
 	}
 	return rows.Err()
 }
+
+// AbandonActivity marks an activity and its open events resolved without
+// applying anything, for rows that can never be resolved properly.
+func (s *Store) AbandonActivity(ctx context.Context, activityID int64, now time.Time) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE activity_events SET resolved_at = ? WHERE activity_id = ? AND resolved_at IS NULL`,
+			now.Unix(), activityID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
+		return err
+	})
+}

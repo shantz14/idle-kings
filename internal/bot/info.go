@@ -14,6 +14,10 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["info"] = (*Bot).onInfo
+}
+
 // Info page custom IDs:
 //   info:help:<page>     help pages
 //   info:profile         (select) open a player's profile
@@ -160,7 +164,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 	if history.Len() == 0 {
 		history.WriteString("The Senate hasn't decided anything yet.")
 	}
-	chars, _ := b.store.CharactersInCourt(ctx, guildID)
+	players, _ := b.store.CountCharacters(ctx, guildID)
 	sen, _ := b.store.Senators(ctx, guildID)
 	chronicle := b.chronicle(ctx, guildID)
 
@@ -179,7 +183,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 			{Name: "📜 Chronicle", Value: chronicle},
 			lawsField(st.Laws),
 			{Name: "Industries", Value: industriesBlock(st)},
-			{Name: "The court", Value: fmt.Sprintf("%d players · %d senators", len(chars), len(sen)), Inline: true},
+			{Name: "The court", Value: fmt.Sprintf("%d players · %d senators", players, len(sen)), Inline: true},
 			{Name: "If any of these reach 0, everyone loses", Value: strings.Join(fall, ", "), Inline: true},
 		},
 	}}}
@@ -193,6 +197,8 @@ func (b *Bot) playersPage(ctx context.Context, guildID string) *discordgo.Intera
 		return &discordgo.InteractionResponseData{Content: "Nobody has joined the court yet."}
 	}
 	sort.Slice(chars, func(a, c int) bool { return chars[a].VoteWeight() > chars[c].VoteWeight() })
+	sen, _ := b.store.Senators(ctx, guildID)
+	total := senateTotalOf(sen, chars)
 	var sb strings.Builder
 	var opts []discordgo.SelectMenuOption
 	for n, c := range chars {
@@ -200,7 +206,7 @@ func (b *Bot) playersPage(ctx context.Context, guildID string) *discordgo.Intera
 		bg, _ := game.BackgroundByKey(c.Background)
 		fmt.Fprintf(&sb, "**%d.** %s **%s** · %s\nInfluence %s (%s%% of the Senate) · Renown %s · Estate %s\n\n",
 			n+1, c.Crest.Emoji(), c.FullName(), role.Name, game.Num(c.Influence),
-			game.Num(b.share(ctx, guildID, c.VoteWeight())), game.Num(c.Renown), game.Num(c.EstateValue()))
+			game.Num(percentOf(c.VoteWeight(), total)), game.Num(c.Renown), game.Num(c.EstateValue()))
 		if len(opts) < 25 {
 			opts = append(opts, discordgo.SelectMenuOption{Label: truncate(c.FullName(), 100), Value: fmt.Sprint(c.ID),
 				Description: truncate(role.Name+" · "+bg.Name, 100)})

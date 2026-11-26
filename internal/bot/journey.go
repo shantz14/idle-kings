@@ -13,6 +13,24 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindJourney, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.journeyPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveJourney,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			place := "the road"
+			if d, ok := game.JourneyDestByKey(a.Goal); ok {
+				place = d.Place
+			}
+			return fmt.Sprintf("You are travelling to %s. You'll be home <t:%d:R>.", place, a.EndsAt.Unix())
+		},
+		eventWhere: "On the road",
+	})
+	componentRoutes["journey"] = (*Bot).onJourney
+}
+
 // Journey custom IDs:
 //   journey:go:<dest>              set out
 //   journey:hire:<journey>         public "Hire bandits" button → private band panel

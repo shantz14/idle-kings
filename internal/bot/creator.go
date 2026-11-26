@@ -12,6 +12,11 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["cc"] = (*Bot).onCreator
+	modalRoutes["cc"] = (*Bot).onCreatorModal
+}
+
 // Character creator custom IDs (one ephemeral popup, updated in place):
 //   cc:start                 Join button on the /start message
 //   cc:editnames             open the names modal again

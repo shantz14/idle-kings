@@ -14,6 +14,18 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+// checkRouted fails if a component's custom ID has no route to handle it.
+func checkRouted(t *testing.T, where, customID, url string) {
+	t.Helper()
+	if url != "" {
+		return // link buttons have no custom ID
+	}
+	prefix, _, _ := strings.Cut(customID, ":")
+	if componentRoutes[prefix] == nil {
+		t.Errorf("%s: no route for custom ID %q", where, customID)
+	}
+}
+
 // checkLimits fails on anything Discord would reject.
 func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseData) {
 	t.Helper()
@@ -34,6 +46,7 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 		for _, x := range r.Components {
 			switch v := x.(type) {
 			case discordgo.Button:
+				checkRouted(t, where, v.CustomID, v.URL)
 				if v.CustomID != "" && ids[v.CustomID] {
 					t.Errorf("%s: duplicate custom ID %q", where, v.CustomID)
 				}
@@ -42,6 +55,7 @@ func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseDat
 					t.Errorf("%s: button %q / %q", where, v.Label, v.CustomID)
 				}
 			case discordgo.SelectMenu:
+				checkRouted(t, where, v.CustomID, "")
 				if len(r.Components) != 1 {
 					t.Errorf("%s: select must be alone in its row", where)
 				}

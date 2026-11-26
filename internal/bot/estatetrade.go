@@ -14,6 +14,11 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	componentRoutes["deal"] = (*Bot).onDeal
+	modalRoutes["deal"] = (*Bot).onDealModal
+}
+
 // Estate deal custom IDs:
 //   deal:start              pick a player to deal with
 //   deal:who                (user select) player chosen → the deal composer
@@ -300,6 +305,7 @@ func (b *Bot) onDealSend(ctx context.Context, i *discordgo.InteractionCreate, c 
 		return
 	}
 	give, want := names(c, dr.Give), names(other, dr.Want)
+	b.deferUpdate(i) // the DM comes before the answer
 	if _, err := b.dm(other.UserID, offerMessage(o, c, other, give, want)); err != nil {
 		_ = b.store.DeclineEstateOffer(ctx, o.ID)
 		b.update(i, dealView(c, other, dr, other.FullName()+" isn't accepting DMs, so I couldn't deliver the offer."))

@@ -12,6 +12,16 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindAid, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.aidPanel(ctx, c, "")
+		},
+	})
+	componentRoutes["aid"] = (*Bot).onAid
+	modalRoutes["aid"] = (*Bot).onAidModal
+}
+
 // Aid the Realm custom IDs:
 //   aid:t:<target>               amounts for one tracker
 //   aid:give:<target>:<gold>     give a preset amount

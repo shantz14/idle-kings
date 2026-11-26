@@ -13,6 +13,25 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindCourt, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.courtPanel(ctx, c, 0, "")
+		},
+		resolve: (*Bot).resolveCourt,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			name := "a senator"
+			if sen, err := b.store.Senators(ctx, a.GuildID); err == nil {
+				if s, ok := findSenator(sen, a.TargetID); ok {
+					name = "Senator " + s.Name
+				}
+			}
+			return fmt.Sprintf("You are calling on %s. You'll be back <t:%d:R>.", name, a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["court"] = (*Bot).onCourt
+}
+
 // Court a Senator custom IDs:
 //   court:who                       (select) senator chosen → approaches
 //   court:go:<senator>:<approach>   start courting
@@ -241,57 +260,8 @@ func (b *Bot) resolveCourt(ctx context.Context, a store.Activity, now time.Time)
 
 // activityLine describes what a character is busy doing.
 func (b *Bot) activityLine(ctx context.Context, a store.Activity) string {
-	switch a.Kind {
-	case game.KindParty:
-		return fmt.Sprintf("You are hosting a party. It ends <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindCourt:
-		name := "a senator"
-		if sen, err := b.store.Senators(ctx, a.GuildID); err == nil {
-			if s, ok := findSenator(sen, a.TargetID); ok {
-				name = "Senator " + s.Name
-			}
-		}
-		return fmt.Sprintf("You are calling on %s. You'll be back <t:%d:R>.", name, a.EndsAt.Unix())
-	case game.KindDuel:
-		return b.duelLine(ctx, a)
-	case game.KindHunt:
-		return fmt.Sprintf("You are leading a hunt. It ends <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindJourney:
-		place := "the road"
-		if d, ok := game.JourneyDestByKey(a.Goal); ok {
-			place = d.Place
-		}
-		return fmt.Sprintf("You are travelling to %s. You'll be home <t:%d:R>.", place, a.EndsAt.Unix())
-	case game.KindInvest:
-		name := "a venture"
-		if d, ok := game.SectorByKey(game.SectorKey(a.Goal)); ok {
-			name = d.Name
-		}
-		return fmt.Sprintf("You are negotiating a stake in %s. The deal is struck <t:%d:R>.", name, a.EndsAt.Unix())
-	case game.KindPlantSpies:
-		name := "another house"
-		if t, err := b.store.GetCharacterByID(ctx, a.TargetID); err == nil {
-			name = t.FullName() + "'s house"
-		}
-		return fmt.Sprintf("Your agent is working their way into %s. You'll hear <t:%d:R>.", name, a.EndsAt.Unix())
-	case game.KindEmbezzle:
-		return fmt.Sprintf("You are cooking the treasury's books. You'll be done <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindRootOut:
-		return fmt.Sprintf("You are searching your household for spies. You'll be done <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindCanvass:
-		return fmt.Sprintf("You are out canvassing the districts. You'll be back <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindSpeech:
-		return fmt.Sprintf("You are speaking in the Forum. You'll finish <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindCircus:
-		return fmt.Sprintf("The city is feasting at your expense. It ends <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindPetition:
-		return fmt.Sprintf("You are lobbying the Senate's clerks. You'll know <t:%d:R>.", a.EndsAt.Unix())
-	case game.KindWork:
-		name := "a public work"
-		if w, ok := game.WorkByKey(a.Goal); ok {
-			name = "your " + strings.ToLower(w.Name)
-		}
-		return fmt.Sprintf("Builders are at work on %s. It opens <t:%d:R>.", name, a.EndsAt.Unix())
+	if d, ok := activityDefs[a.Kind]; ok && d.busy != nil {
+		return d.busy(b, ctx, a)
 	}
 	return fmt.Sprintf("You are busy until <t:%d:R>.", a.EndsAt.Unix())
 }

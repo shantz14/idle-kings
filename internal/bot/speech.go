@@ -13,6 +13,19 @@ import (
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
+func init() {
+	registerActivity(game.KindSpeech, activityDef{
+		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
+			return b.speechPanel(ctx, c, "")
+		},
+		resolve: (*Bot).resolveSpeech,
+		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
+			return fmt.Sprintf("You are speaking in the Forum. You'll finish <t:%d:R>.", a.EndsAt.Unix())
+		},
+	})
+	componentRoutes["speech"] = (*Bot).onSpeech
+}
+
 // Speech custom IDs:
 //   speech:cause:<cause>         speaker picks a cause and takes the stand
 //   speech:attend:<speech>       public "Attend the speech" button
