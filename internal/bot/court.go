@@ -265,6 +265,8 @@ func (b *Bot) activityLine(ctx context.Context, a store.Activity) string {
 			name = t.FullName() + "'s house"
 		}
 		return fmt.Sprintf("Your agent is working their way into %s. You'll hear <t:%d:R>.", name, a.EndsAt.Unix())
+	case game.KindEmbezzle:
+		return fmt.Sprintf("You are cooking the treasury's books. You'll be done <t:%d:R>.", a.EndsAt.Unix())
 	case game.KindRootOut:
 		return fmt.Sprintf("You are searching your household for spies. You'll be done <t:%d:R>.", a.EndsAt.Unix())
 	case game.KindCanvass:

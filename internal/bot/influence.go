@@ -212,12 +212,14 @@ func (b *Bot) resolveCircus(ctx context.Context, a store.Activity, now time.Time
 		Realm:    game.Realm{game.AttrPopularity: res.Popularity},
 		Opinions: res.Opinions,
 	}
+	before, _ := b.realmBefore(ctx, a.GuildID)
 	if err := b.store.ApplyResult(ctx, a.ID, out, now); err != nil {
 		if !errors.Is(err, store.ErrEnded) {
 			slog.Error("apply circus", "err", err)
 		}
 		return
 	}
+	b.afterRealmChange(ctx, a.GuildID, before)
 	color := colorGreen
 	if !res.Success {
 		color = colorRed

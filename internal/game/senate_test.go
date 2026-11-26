@@ -19,7 +19,10 @@ func TestMatterCatalogue(t *testing.T) {
 		if _, ok := e.Option(e.Default); !ok {
 			t.Errorf("%s: default %q is not an option", e.Key, e.Default)
 		}
-		if len(e.Options) < 2 || len(e.Options) > 4 {
+		switch {
+		case e.Auto && (len(e.Options) != 1 || !e.FollowUpOnly):
+			t.Errorf("%s: an auto event needs exactly one option and must be follow-up only", e.Key)
+		case !e.Auto && (len(e.Options) < 2 || len(e.Options) > 4):
 			t.Errorf("%s: %d options", e.Key, len(e.Options))
 		}
 		keys := map[string]bool{}

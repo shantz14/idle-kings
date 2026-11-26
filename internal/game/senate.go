@@ -58,6 +58,7 @@ const (
 	TraitCosmopolitan  Trait = "cosmopolitan"
 	TraitGreedy        Trait = "greedy"
 	TraitIncorruptible Trait = "incorruptible"
+	TraitReckless      Trait = "reckless"
 )
 
 type TraitInfo struct {
@@ -70,7 +71,7 @@ type TraitInfo struct {
 
 var TraitList = []TraitInfo{
 	{TraitConservative, "Conservative", "Favors the old ways and dislikes gambles.",
-		map[Lean]float64{LeanTradition: 2, LeanRisk: -1.5}, []Trait{TraitRiskTaker}},
+		map[Lean]float64{LeanTradition: 2, LeanRisk: -1.5}, []Trait{TraitRiskTaker, TraitReckless}},
 	{TraitRiskTaker, "Risk-taker", "Loves a bold gamble.",
 		map[Lean]float64{LeanRisk: 2, LeanTradition: -0.5}, []Trait{TraitConservative}},
 	{TraitEconomical, "Economical", "Hates spending the treasury's money.",
@@ -93,6 +94,8 @@ var TraitList = []TraitInfo{
 		map[Lean]float64{LeanProfit: 1.5}, []Trait{TraitIncorruptible}},
 	{TraitIncorruptible, "Incorruptible", "Cannot be bribed and despises scheming.",
 		map[Lean]float64{LeanScheme: -1.5}, []Trait{TraitGreedy, TraitScheming}},
+	{TraitReckless, "Reckless", "Will gamble the realm on a good chance.",
+		map[Lean]float64{LeanRisk: 1.5, LeanMilitary: 0.5}, []Trait{TraitConservative}},
 }
 
 func TraitByKey(t Trait) (TraitInfo, bool) {
@@ -210,8 +213,17 @@ func (s Senator) Score(opt MatterOption, realm Realm, matterID int64) float64 {
 		need := (TrackerMax - realm[a]) / 50
 		score += 0.06 * d * need
 	}
-	danger, _ := opt.RealmDanger(realm)
+	danger, _ := s.danger(opt, realm)
 	return score - danger + noise(matterID, s.ID, opt.Key)
+}
+
+// danger is how much an option frightens this senator, and whether they
+// think it could end the realm.
+func (s Senator) danger(opt MatterOption, realm Realm) (float64, bool) {
+	if s.Has(TraitReckless) {
+		return opt.RecklessDanger(realm)
+	}
+	return opt.RealmDanger(realm)
 }
 
 // Preferred is the option the senator votes for unless bribed.
@@ -247,7 +259,7 @@ func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID
 		return 0, false
 	}
 	if o, ok := ev.Option(optKey); ok {
-		if _, fatal := o.RealmDanger(realm); fatal { // no price is worth the realm
+		if _, fatal := s.danger(o, realm); fatal { // no price is worth the realm
 			return 0, false
 		}
 	}
@@ -469,6 +481,9 @@ type MatterResult struct {
 func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	ev := in.Event
 	res := MatterResult{Tally: map[string]float64{}, Deltas: map[int64]Delta{}, Notices: map[int64][]string{}}
+	if ev.Auto {
+		return resolveAuto(r, in, res)
+	}
 
 	senVotes := map[int64]string{}
 	for _, s := range in.Senators {
@@ -553,6 +568,48 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		}
 	}
 
+	if !res.Fallen {
+		for _, f := range out.FollowUps {
+			if float64(r.IntN(100)) < f.Chance*100 {
+				res.FollowUps = append(res.FollowUps, QueuedEvent{Event: f.Event, Days: f.Days})
+			}
+		}
+	}
+	return res
+}
+
+// resolveAuto applies an Auto event's one option: no vote, no opinions, and
+// no day passes (no drift), since it isn't the Senate's daily matter.
+func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
+	ev := in.Event
+	if len(ev.Options) == 0 {
+		res.Realm, res.Sectors = in.Realm.Clone(), in.Sectors.Fill().Clone()
+		return res
+	}
+	res.Winner = ev.Options[0]
+	res.Outcome, res.Succeeded = res.Winner.Success, true
+	if res.Winner.Check != nil {
+		if ok, _ := res.Winner.Check.Roll(r, in.Realm.Sheet(), 0, Normal); !ok {
+			res.Outcome, res.Succeeded = res.Winner.Failure, false
+		}
+	}
+	out := res.Outcome
+	res.Realm = in.Realm.Clone()
+	res.Realm.Apply(out.Realm)
+	res.Sectors = in.Sectors.Fill().Clone()
+	res.Sectors.Apply(out.Sectors)
+	res.Fallen, res.FallenReason = res.Realm.Fallen()
+	for _, p := range in.Players {
+		var d Delta
+		d.Merge(out.All)
+		if rd, ok := out.Roles[p.Role]; ok {
+			d.Merge(rd)
+		}
+		if desc := d.Describe(); desc != "" {
+			res.Deltas[p.ID] = d
+			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("%s For you: %s", out.Text, desc))
+		}
+	}
 	if !res.Fallen {
 		for _, f := range out.FollowUps {
 			if float64(r.IntN(100)) < f.Chance*100 {

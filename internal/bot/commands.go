@@ -141,6 +141,10 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onWork(ctx, i, parts[1:])
 		case "spy":
 			b.onSpy(ctx, i, parts[1:])
+		case "embezzle":
+			b.onEmbezzle(ctx, i, parts[1:])
+		case "aid":
+			b.onAid(ctx, i, parts[1:])
 		case "estate":
 			b.onEstate(ctx, i, parts[1:])
 		case "shop":
@@ -167,6 +171,8 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onCircusModal(ctx, i, parts[1:])
 		case "deal":
 			b.onDealModal(ctx, i, parts[1:])
+		case "aid":
+			b.onAidModal(ctx, i, parts[1:])
 		}
 	}
 }

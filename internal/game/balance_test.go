@@ -29,32 +29,58 @@ func TestBalance(t *testing.T) {
 		}
 		realm := StartingRealm()
 		sectors := StartingSectors()
-		var queue []QueuedEvent
+		type queued struct {
+			key string
+			due int
+		}
+		var queue []queued
 		var recent []string
 		fell := false
-		for d := 0; d < days; d++ {
+		resolve := func(d int, ev MatterEvent) bool {
+			res := ResolveMatter(r, MatterInput{MatterID: int64(g*1000 + d), Event: ev, Realm: realm, Sectors: sectors, Senators: sen})
+			wins[ev.Key+"/"+res.Winner.Key]++
+			realm, sectors = res.Realm, res.Sectors
+			for _, f := range res.FollowUps {
+				queue = append(queue, queued{f.Event, d + max(f.Days, 1)})
+			}
+			if res.Fallen {
+				falls++
+				fallDay += d
+				reasons[res.FallenReason]++
+				fell = true
+			}
+			return res.Fallen
+		}
+		for d := 0; d < days && !fell; d++ {
+			// Bills come due on their day, on top of the daily matter.
+			var rest []queued
+			for _, q := range queue {
+				if e, _ := MatterByKey(q.key); e.Auto && q.due <= d && !fell {
+					resolve(d, e)
+					continue
+				}
+				rest = append(rest, q)
+			}
+			queue = rest
+			if fell {
+				break
+			}
 			var ev MatterEvent
-			if len(queue) > 0 && FollowUpAllowed(queue[0].Event, recent) {
-				ev, _ = MatterByKey(queue[0].Event)
-				queue = queue[1:]
-			} else {
+			for i, q := range queue {
+				if q.due <= d && FollowUpAllowed(q.key, recent) {
+					ev, _ = MatterByKey(q.key)
+					queue = append(queue[:i:i], queue[i+1:]...)
+					break
+				}
+			}
+			if ev.Key == "" {
 				ev = PickMatter(r, realm, recent)
 			}
 			recent = append(recent, ev.Key)
 			if len(recent) > MatterCooldown {
 				recent = recent[1:]
 			}
-			res := ResolveMatter(r, MatterInput{MatterID: int64(g*1000 + d), Event: ev, Realm: realm, Sectors: sectors, Senators: sen})
-			wins[ev.Key+"/"+res.Winner.Key]++
-			realm, sectors = res.Realm, res.Sectors
-			queue = append(queue, res.FollowUps...)
-			if res.Fallen {
-				falls++
-				fallDay += d
-				reasons[res.FallenReason]++
-				fell = true
-				break
-			}
+			resolve(d, ev)
 		}
 		if !fell {
 			for k, v := range realm {

@@ -422,6 +422,11 @@ var helpPages = []struct{ title, body string }{
 		"**Opinion**: every senator has an opinion of you, from -100 to +100. Voting with them, paying them, selling them your vote, good parties and courting raise it; " +
 		"voting against them, dull parties and rumors lower it, and it fades a little each day. Senators who like you take smaller bribes, pay more for your vote, " +
 		"and may follow your lead on a close vote. Those who hate you won't deal with you at all, and may vote against you out of spite."},
+	{"Keeping the realm alive", "If the treasury, the army, order or the people's mood reaches **0**, the realm falls and **everyone loses**.\n\n" +
+		"The senators won't vote for anything that could end the realm outright, but they only judge what a vote does today. " +
+		"Cheap-now options, like loans and promises, bring **bills that come due** days later, and the hints say so. **Reckless** senators will gamble the realm on a good chance, and can be bribed into it.\n\n" +
+		"Some options pay those who vote for them at the realm's expense. Under each option you'll see how it moves the realm's industries (▲ up, ▼ down, *lasting* for a permanent change).\n\n" +
+		"**Embezzle from the Treasury** (Intrigue) fills your purse from the realm's. **Aid the Realm** (Monetary) does the opposite, and the court rewards it most when the realm is in trouble. The announcements channel warns when the realm is in danger."},
 	{"Commands", "`/court`: your actions menu\n`/senate`: today's matter and voting\n`/character`: your full sheet\n`/estate`: your properties and possessions\n`/shop`: buy houses and treasures\n" +
 		"`/realm`: the realm's trackers, industries and recent decisions\n`/players`: everyone at court\n`/profile`: a player's profile\n`/join`: create your character\n`/help`: this guide\n\n" +
 		"Add `public: True` to `/realm`, `/players` or `/profile` to post it for everyone."},

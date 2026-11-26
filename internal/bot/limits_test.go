@@ -332,3 +332,25 @@ func TestSheetAndChronicleFitDiscord(t *testing.T) {
 	checkLimits(t, "chronicle", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x",
 		Fields: []*discordgo.MessageEmbedField{{Name: "Chronicle", Value: chronicleText(entries)}, {Name: "empty", Value: chronicleText(nil)}}}}})
 }
+
+func TestPerilViewsFitDiscord(t *testing.T) {
+	busy := "You are cooking the treasury's books. You'll be done <t:9999999999:R>."
+	checkLimits(t, "embezzle", embezzleView(2*time.Hour, "", "a note"))
+	checkLimits(t, "embezzle busy", embezzleView(2*time.Hour, busy, ""))
+	st := store.RealmState{Status: "alive", Trackers: game.StartingRealm()}
+	checkLimits(t, "aid", aidView(st, "a note"))
+	checkLimits(t, "aid fallen", aidView(store.RealmState{Status: "fallen", Trackers: game.StartingRealm()}, ""))
+	c := store.Character{Wealth: 100}
+	for _, tgt := range game.AidTargets {
+		checkLimits(t, "aid "+tgt.Key, aidAmountView(c, tgt, 10, "a note"))
+	}
+	for _, cat := range game.Categories {
+		checkLimits(t, "category "+string(cat.Key), categoryPanel(cat.Key, "scribe"))
+	}
+	for _, ev := range game.MatterEvents {
+		if ev.Auto {
+			res := game.ResolveMatter(rand.New(rand.NewPCG(1, 1)), game.MatterInput{Event: ev, Realm: game.StartingRealm()})
+			checkLimits(t, "bill "+ev.Key, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{billEmbed(ev, res)}})
+		}
+	}
+}

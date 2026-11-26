@@ -427,13 +427,18 @@ func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, 
 }
 
 // applyRealm adds a change to a court's trackers, clamped to their range.
+// If that ends the realm, the realm and court are marked fallen. A fallen
+// realm doesn't change.
 func applyRealm(ctx context.Context, tx *sql.Tx, guildID string, d game.Realm) error {
-	var raw string
-	err := tx.QueryRowContext(ctx, `SELECT trackers FROM realms WHERE guild_id = ?`, guildID).Scan(&raw)
+	var raw, status string
+	err := tx.QueryRowContext(ctx, `SELECT trackers, status FROM realms WHERE guild_id = ?`, guildID).Scan(&raw, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // no realm yet: nothing to change
 	} else if err != nil {
 		return err
+	}
+	if status != "alive" {
+		return nil
 	}
 	r := game.Realm{}
 	if err := json.Unmarshal([]byte(raw), &r); err != nil {
@@ -441,8 +446,53 @@ func applyRealm(ctx context.Context, tx *sql.Tx, guildID string, d game.Realm) e
 	}
 	r.Apply(d)
 	b, _ := json.Marshal(r)
-	_, err = tx.ExecContext(ctx, `UPDATE realms SET trackers = ? WHERE guild_id = ?`, string(b), guildID)
-	return err
+	if _, err = tx.ExecContext(ctx, `UPDATE realms SET trackers = ? WHERE guild_id = ?`, string(b), guildID); err != nil {
+		return err
+	}
+	if fell, why := r.Fallen(); fell {
+		if _, err := tx.ExecContext(ctx, `UPDATE realms SET status = 'fallen', fallen_reason = ? WHERE guild_id = ?`, why, guildID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = 'fallen' WHERE guild_id = ?`, guildID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ApplyAid takes a gift's gold from the character and applies its effects
+// at once; there's no activity. It fails if they can't afford it or the
+// realm has fallen.
+func (s *Store) ApplyAid(ctx context.Context, charID int64, guildID string, gold int, realm game.Realm, d game.Delta, ops []game.OpinionChange) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var status string
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM realms WHERE guild_id = ?`, guildID).Scan(&status); err != nil {
+		return err
+	}
+	if status != "alive" {
+		return ErrEnded
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, gold, charID, gold)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("you need %d gold for that", gold)
+	}
+	if err := applyRealm(ctx, tx, guildID, realm); err != nil {
+		return err
+	}
+	if err := applyDelta(ctx, tx, charID, d); err != nil {
+		return err
+	}
+	if err := changeOpinions(ctx, tx, ops); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // fillMonuments loads each character's finished public works.

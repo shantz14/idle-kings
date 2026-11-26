@@ -13,6 +13,9 @@ type MatterEvent struct {
 	Theme Theme
 	// FollowUpOnly events only happen as consequences of earlier votes.
 	FollowUpOnly bool
+	// Auto events are not voted on: their one option happens as soon as
+	// they come up (a bill that comes due). They are always FollowUpOnly.
+	Auto bool
 	// Bias makes the event more likely when a tracker is below 50 (positive)
 	// or above 50 (negative).
 	Bias map[Attr]float64
@@ -92,9 +95,10 @@ func (o MatterOption) ExpectedRealm(realm Realm) Realm {
 }
 
 // Realm danger: senators won't vote to end the realm, and shy away from
-// draining a tracker that is already low.
+// draining a tracker that is already low. They only see what a vote does
+// now, never the bills and follow-ups it brings later.
 const (
-	dangerZone   = 15.0 // worst-case value below this worries senators
+	dangerZone   = 5.0  // worst-case value below this worries senators
 	dangerWeight = 0.3  // score lost per point below the zone
 	fatalPenalty = 25.0 // outweighs any trait, opinion or noise
 )
@@ -102,20 +106,35 @@ const (
 // RealmDanger judges an option by its worst case (success or failure) on
 // every tracker that can end the realm. fatal is true if it could.
 func (o MatterOption) RealmDanger(realm Realm) (penalty float64, fatal bool) {
+	worst := Realm{}
 	for _, t := range Trackers {
-		if t.Fall == "" {
+		w := math.Min(o.Success.Realm[t.Key], 0)
+		if o.Check != nil {
+			w = math.Min(w, o.Failure.Realm[t.Key])
+		}
+		worst[t.Key] = w
+	}
+	return danger(realm, worst)
+}
+
+// RecklessDanger is how a reckless senator sees it: by the expected result,
+// so a gamble that will probably come off doesn't scare them.
+func (o MatterOption) RecklessDanger(realm Realm) (penalty float64, fatal bool) {
+	return danger(realm, o.ExpectedRealm(realm))
+}
+
+func danger(realm, change Realm) (penalty float64, fatal bool) {
+	for _, t := range Trackers {
+		d := change[t.Key]
+		if t.Fall == "" || d >= 0 {
 			continue
 		}
-		worst := math.Min(o.Success.Realm[t.Key], 0)
-		if o.Check != nil {
-			worst = math.Min(worst, o.Failure.Realm[t.Key])
-		}
-		after := realm[t.Key] + worst
+		after := realm[t.Key] + d
 		switch {
-		case worst < 0 && after <= TrackerMin:
+		case after <= TrackerMin:
 			fatal = true
 			penalty += fatalPenalty
-		case worst < 0 && after < dangerZone:
+		case after < dangerZone:
 			penalty += (dangerZone - after) * dangerWeight
 		}
 	}
@@ -299,6 +318,10 @@ var MatterEvents = []MatterEvent{
 				Success: MatterOutcome{Text: "Foreign grain ships arrive in time.", Sectors: SC{SectorTrade: {Health: 0.1}, SectorAgriculture: {Health: -0.05}},
 					Realm: R{AttrTreasury: -8, AttrForeign: 4, AttrPopularity: 4},
 					Roles: roles("emissary", D{Influence: 1}, "merchant", D{Wealth: 10})}},
+			{Key: "seed", Label: "Sell the seed grain abroad", Hint: "Good silver now. But what will the farmers plant in spring? Bad for farms.",
+				Leans: L{LeanForeign: 0.5},
+				Success: MatterOutcome{Text: "The seed grain sails for Kesh, and silver comes back.", Sectors: SC{SectorAgriculture: {Health: -0.15}},
+					Realm: R{AttrTreasury: 8, AttrPopularity: -2}, FollowUps: []FollowUp{{"bill_spring", 1, 4}}}},
 			{Key: "market", Label: "Let the market sort it out", Hint: "Costs nothing. Grain sellers will do well.",
 				Leans: L{LeanTradition: 0.5, LeanPopular: -1.5},
 				Success: MatterOutcome{Text: "Prices soar. The grain merchants grow rich.", Sectors: SC{SectorAgriculture: {Health: 0.2}},
@@ -422,6 +445,10 @@ var MatterEvents = []MatterEvent{
 					Realm: R{AttrMilitary: -10, AttrStability: 2}},
 				Failure: MatterOutcome{Text: "The Lances turn bandit.", Sectors: SC{SectorTrade: {Health: -0.15}, SectorBlackMarket: {Health: 0.1}},
 					Realm: R{AttrMilitary: -12, AttrStability: -8}, FollowUps: []FollowUp{{"bandit_lord", 0.5, 2}}}},
+			{Key: "promise", Label: "Promise payment next month", Hint: "Costs nothing today. They will come to collect.",
+				Leans: L{LeanScheme: 0.5},
+				Success: MatterOutcome{Text: "The Lances accept a sealed promise, and sharpen their swords.",
+					FollowUps: []FollowUp{{"bill_lances", 1, 3}}}},
 			{Key: "poison", Label: "Poison their captain", Hint: "A new captain might be more reasonable.",
 				Leans: L{LeanScheme: 2.5}, Check: chk(35, AttrStability, 0.3),
 				Success: MatterOutcome{Text: "The new captain is far more reasonable.",
@@ -457,8 +484,9 @@ var MatterEvents = []MatterEvent{
 				Leans: L{LeanMilitary: 1, LeanTradition: 1},
 				Success: MatterOutcome{Text: "New walls rise, taller than the old.", Sectors: SC{SectorMining: {Health: 0.15}, SectorTimber: {Health: 0.1}},
 					Realm: R{AttrTreasury: -18, AttrMilitary: 8, AttrStability: 3}, Roles: roles("officer", D{Renown: 0.3})}},
-			{Key: "patch", Label: "Patch the worst of it", Hint: "Cheap, and good enough for now.",
-				Success: MatterOutcome{Text: "The worst cracks are filled.", Sectors: SC{SectorTimber: {Health: 0.1}}, Realm: R{AttrTreasury: -6, AttrMilitary: 2}}},
+			{Key: "patch", Label: "Patch the worst of it", Hint: "Cheap, and good enough for now. For now.",
+				Success: MatterOutcome{Text: "The worst cracks are filled.", Sectors: SC{SectorTimber: {Health: 0.1}}, Realm: R{AttrTreasury: -6, AttrMilitary: 2},
+					FollowUps: []FollowUp{{"bill_walls", 0.5, 3}}}},
 			{Key: "leave", Label: "They've stood this long", Hint: "Costs nothing.",
 				Leans:   L{LeanTradition: 0.5},
 				Success: MatterOutcome{Text: "The walls keep cracking.", Realm: R{AttrMilitary: -3}}},
@@ -480,6 +508,10 @@ var MatterEvents = []MatterEvent{
 				Success: MatterOutcome{Text: "The great houses pay, and the people cheer.", Sectors: SC{SectorLuxury: {Health: -0.1}, SectorTrade: {Health: -0.05}},
 					Realm: R{AttrTreasury: 14, AttrPopularity: 4, AttrStability: -2}, All: D{Wealth: -8},
 					Roles: roles("merchant", D{Wealth: -7})}},
+			{Key: "borrow", Label: "Borrow from the Kesh bankers", Hint: "Gold now, and no one pays a coin today. The bankers will want it back, with interest.",
+				Leans: L{LeanForeign: 0.5},
+				Success: MatterOutcome{Text: "Kesh gold fills the treasury. The bankers smile.",
+					Realm: R{AttrTreasury: 15}, FollowUps: []FollowUp{{"bill_bankers", 1, 3}}}},
 			{Key: "keep", Label: "Keep taxes as they are", Hint: "Nothing changes.",
 				Leans:   L{LeanTradition: 1},
 				Success: MatterOutcome{Text: "Taxes stay as they are."}},
@@ -499,6 +531,10 @@ var MatterEvents = []MatterEvent{
 				Success: MatterOutcome{Text: "A group of great families buys the rights.", Sectors: SC{SectorMining: {Capacity: 9}},
 					Realm: R{AttrTreasury: 10, AttrPopularity: -2}, Supporters: D{Wealth: 5},
 					Roles: roles("merchant", D{DailyIncome: 3})}},
+			{Key: "friends", Label: "Grant the mine to our friends", Hint: "The treasury gets nothing. Those who vote for it get a cut. (You profit if you vote for this.)",
+				Leans: L{LeanScheme: 1.5},
+				Success: MatterOutcome{Text: "The mine goes to a few grateful families, for a song.", Sectors: SC{SectorMining: {Capacity: 5}},
+					Realm: R{AttrTreasury: -6, AttrPopularity: -3}, Supporters: D{Wealth: 25}}},
 			{Key: "leave", Label: "Leave the hills alone", Hint: "The silver isn't going anywhere.",
 				Leans:   L{LeanTradition: 1},
 				Success: MatterOutcome{Text: "The silver stays in the ground."}},
@@ -536,6 +572,10 @@ var MatterEvents = []MatterEvent{
 					Realm: R{AttrTreasury: -18, AttrPopularity: 12, AttrStability: 3}, Supporters: D{Renown: 0.5}}},
 			{Key: "modest", Label: "Modest games", Hint: "A little fun for a little money.",
 				Success: MatterOutcome{Text: "A pleasant afternoon in the arena.", Realm: R{AttrTreasury: -6, AttrPopularity: 5}}},
+			{Key: "houses", Label: "Let the great houses run the games", Hint: "The treasury pays; those who vote for it run the games, and keep the takings. (You profit if you vote for this.)",
+				Leans: L{LeanScheme: 1, LeanPopular: 0.5},
+				Success: MatterOutcome{Text: "The games are fine, and the families who ran them finer still.", Sectors: SC{SectorLuxury: {Health: 0.05}},
+					Realm: R{AttrTreasury: -10, AttrPopularity: 5}, Supporters: D{Wealth: 10, Influence: 1}}},
 			{Key: "none", Label: "No games this year", Hint: "Save the money.",
 				Leans:   L{LeanPopular: -0.5},
 				Success: MatterOutcome{Text: "The arena stays empty, and the people notice.", Realm: R{AttrPopularity: -4}}},

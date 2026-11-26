@@ -114,6 +114,8 @@ func (b *Bot) tick(ctx context.Context) {
 				b.resolvePlant(ctx, a, now)
 			case game.KindRootOut:
 				b.resolveRootOut(ctx, a, now)
+			case game.KindEmbezzle:
+				b.resolveEmbezzle(ctx, a, now)
 			case game.KindCanvass:
 				b.resolveCanvass(ctx, a, now)
 			case game.KindSpeech:

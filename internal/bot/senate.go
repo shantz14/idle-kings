@@ -113,12 +113,16 @@ func (b *Bot) openMatter(ctx context.Context, court store.Court, st store.RealmS
 		}
 		ev = game.PickMatterAvoiding(b.rng, st.Trackers, recent, game.ActiveArcs(queued))
 	}
-	m, err := b.store.CreateMatter(ctx, court.GuildID, ev.Key, qid, now, now.Add(b.senate.VoteWindow), now.Add(b.senate.Interval))
+	closes, next := now.Add(b.senate.VoteWindow), now.Add(b.senate.Interval)
+	if ev.Auto { // a bill comes due: no vote, and it doesn't take the day's matter
+		closes, next = now, now
+	}
+	m, err := b.store.CreateMatter(ctx, court.GuildID, ev.Key, qid, now, closes, next)
 	if err != nil {
 		slog.Error("create matter", "err", err)
 		return
 	}
-	if court.AnnouncementsChannelID == "" {
+	if court.AnnouncementsChannelID == "" || ev.Auto {
 		return
 	}
 	msg, err := b.s.ChannelMessageSendComplex(court.AnnouncementsChannelID, &discordgo.MessageSend{
@@ -165,11 +169,15 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	res := game.ResolveMatter(b.rng, in)
 	ventureNotices(chars, res)
 
+	decay := game.OpinionDecay
+	if ev.Auto { // not a Senate day
+		decay = 0
+	}
 	err = b.store.ResolveMatter(ctx, m, store.MatterResolution{
 		Summary: map[string]any{"winner": res.Winner.Key, "succeeded": res.Succeeded, "tally": res.Tally},
 		Realm:   res.Realm, Sectors: res.Sectors, Fallen: res.Fallen, FallenReason: res.FallenReason,
 		Deltas: res.Deltas, FollowUps: res.FollowUps, DayLength: b.senate.Interval,
-		Opinions: res.Opinions, OpinionDecay: game.OpinionDecay,
+		Opinions: res.Opinions, OpinionDecay: decay,
 	}, now)
 	if err != nil {
 		if !errors.Is(err, store.ErrEnded) {
@@ -196,6 +204,9 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		return
 	}
 	result := decisionEmbed(ev, res)
+	if ev.Auto {
+		result = billEmbed(ev, res)
+	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, result)
 	if m.MessageID != "" {
 		closed := matterEmbed(m, ev, st.Trackers)
@@ -205,15 +216,26 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		_, _ = b.s.ChannelMessageEditComplex(&discordgo.MessageEdit{Channel: m.ChannelID, ID: m.MessageID, Embeds: &embeds, Components: &empty})
 	}
 	if res.Fallen {
-		fall := &discordgo.MessageEmbed{
-			Title:       "The realm has fallen",
-			Description: res.FallenReason + "\n\n**All players have lost.**",
-			Color:       colorRed,
-		}
-		_, _ = b.s.ChannelMessageSendEmbed(channel, fall)
-		for _, uid := range users {
-			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{fall}})
-		}
+		b.announceFall(ctx, m.GuildID, channel, res.FallenReason)
+		return
+	}
+	b.postWarnings(channel, game.RealmWarnings(st.Trackers, res.Realm))
+}
+
+// billEmbed announces an Auto event: a bill coming due, with no vote.
+func billEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.MessageEmbed {
+	desc := ev.Prompt + "\n\n" + res.Outcome.Text
+	if s := res.Outcome.Realm.Describe(); s != "" {
+		desc += "\n\n" + s
+	}
+	if s := game.DescribeChanges(res.Outcome.Sectors); s != "" {
+		desc += "\n" + s
+	}
+	return &discordgo.MessageEmbed{
+		Title:       "The bill comes due: " + ev.Title,
+		Description: desc,
+		Color:       colorRed,
+		Fields:      []*discordgo.MessageEmbedField{{Name: "The realm", Value: trackersLine(res.Realm)}},
 	}
 }
 
@@ -235,6 +257,9 @@ func matterEmbed(m store.Matter, ev game.MatterEvent, r game.Realm) *discordgo.M
 	sb.WriteString(ev.Prompt + "\n")
 	for _, o := range ev.Options {
 		fmt.Fprintf(&sb, "\n**%s**: %s", o.Label, o.Hint)
+		if s := game.DescribeArrows(game.SectorPreview(o)); s != "" {
+			sb.WriteString("\n*" + s + "*")
+		}
 	}
 	return &discordgo.MessageEmbed{
 		Title:       "The Senate convenes: " + ev.Title,

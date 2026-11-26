@@ -80,6 +80,14 @@ var Actions = []ActionDef{
 		Key: KindRootOut, Name: "Root Out Spies", Category: CatIntrigue,
 		Description: "Search your own household for other players' agents. Takes 2 hours.",
 	},
+	{
+		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Category: CatIntrigue,
+		Description: "Quietly move the Republic's silver into your own purse. Takes 2 hours. If you're caught, everyone will know.",
+	},
+	{
+		Key: KindAid, Name: "Aid the Realm", Category: CatMonetary,
+		Description: "Pay from your own purse for the treasury, the army or the city watch. Instant. The court honors those who give when the realm is in need.",
+	},
 }
 
 // ActionsFor lists the actions in a category that a role can take.

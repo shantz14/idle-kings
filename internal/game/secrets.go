@@ -211,3 +211,12 @@ func SecretCanvass(actor string) Secret {
 		Full:    fmt.Sprintf("%s is canvassing the districts, building support for the Senate.", actor),
 	}
 }
+
+func SecretEmbezzle(actor string, gold int) Secret {
+	return Secret{
+		Kind:    "embezzle",
+		Vague:   fmt.Sprintf("%s has been spending more freely than their income explains.", actor),
+		Partial: fmt.Sprintf("%s has had their hand in the treasury.", actor),
+		Full:    fmt.Sprintf("%s stole **%d gold** from the treasury.", actor, gold),
+	}
+}
