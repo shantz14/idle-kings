@@ -113,7 +113,7 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 	}
 	offers := game.BestVoteOffers(ev, sen, c.VoteWeight(), st.Trackers, m.ID, ops)
 	var sb strings.Builder
-	if st.Laws.Has(game.LawSecretBallot) {
+	if st.Laws.Rules().SecretBallot {
 		// Nobody can check a secret vote: senators won't pay for one, and
 		// a player who buys one has only your word.
 		offers = nil
@@ -166,7 +166,7 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 		return
 	}
 	opt, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, ops[s.ID])
-	if !ok || st.Laws.Has(game.LawSecretBallot) {
+	if !ok || st.Laws.Rules().SecretBallot {
 		b.update(i, &discordgo.InteractionResponseData{Content: s.Name + " isn't buying.", Embeds: []*discordgo.MessageEmbed{}})
 		return
 	}
@@ -407,7 +407,7 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 	defer b.leak(ctx, them, game.SecretVoteDeal(them.FullName(), me.ID, me.FullName(), ev.Title, optionLabel(ev, o.Option), o.Price, true))
 	// Under the Secret Ballot a sold vote isn't locked: the deal runs on trust.
 	trust := ""
-	if me.Laws.Has(game.LawSecretBallot) {
+	if me.Laws.Rules().SecretBallot {
 		trust = " The ballot is secret, so this is a promise, not a lock."
 	}
 	if o.Kind == store.OfferSell { // I bought their vote

@@ -17,18 +17,21 @@ type MisdeedDef struct {
 	Severity float64 // 1 = the worst
 	Offended []Trait // senators who take it twice as badly
 	Needs    LawKey  // only shameful while this law stands ("" = always)
+	// AlwaysCrime makes it a crime under any laws; otherwise only the laws'
+	// Effects.Crimes do (see Rules.IsCrime).
+	AlwaysCrime bool
 }
 
 var MisdeedDefs = map[string]MisdeedDef{
-	"embezzle":  {Word: "stealing from the treasury", Severity: 1, Offended: []Trait{TraitIncorruptible, TraitEconomical}},
-	"bandits":   {Word: "paying bandits to rob a traveller", Severity: 1, Offended: []Trait{TraitStern}},
-	"bribe":     {Word: "bribing a senator", Severity: 0.6, Offended: []Trait{TraitIncorruptible}},
-	"sold_vote": {Word: "selling votes to senators", Severity: 0.5, Offended: []Trait{TraitIncorruptible, TraitStern}},
-	"vote_deal": {Word: "trading votes for gold", Severity: 0.4, Offended: []Trait{TraitIncorruptible}},
-	"rumor":     {Word: "spreading lies about another house", Severity: 0.4, Offended: []Trait{TraitStern}},
-	"plant":     {Word: "spying on another house", Severity: 0.3, Offended: []Trait{TraitStern}},
-	"whisper":   {Word: "spreading scandal about another house", Severity: 0.3, Offended: []Trait{TraitStern}},
-	"magic":     {Word: "dealing in enchanted goods", Severity: 0.6, Offended: []Trait{TraitPious, TraitConservative}, Needs: LawWitchcraftAct},
+	SecretKindEmbezzle: {Word: "stealing from the treasury", Severity: 1, Offended: []Trait{TraitIncorruptible, TraitEconomical}, AlwaysCrime: true},
+	SecretKindBandits:  {Word: "paying bandits to rob a traveller", Severity: 1, Offended: []Trait{TraitStern}, AlwaysCrime: true},
+	SecretKindBribe:    {Word: "bribing a senator", Severity: 0.6, Offended: []Trait{TraitIncorruptible}},
+	SecretKindSoldVote: {Word: "selling votes to senators", Severity: 0.5, Offended: []Trait{TraitIncorruptible, TraitStern}},
+	SecretKindVoteDeal: {Word: "trading votes for gold", Severity: 0.4, Offended: []Trait{TraitIncorruptible}},
+	SecretKindRumor:    {Word: "spreading lies about another house", Severity: 0.4, Offended: []Trait{TraitStern}},
+	SecretKindPlant:    {Word: "spying on another house", Severity: 0.3, Offended: []Trait{TraitStern}},
+	SecretKindWhisper:  {Word: "spreading scandal about another house", Severity: 0.3, Offended: []Trait{TraitStern}},
+	SecretKindMagic:    {Word: "dealing in enchanted goods", Severity: 0.6, Offended: []Trait{TraitPious, TraitConservative}, Needs: LawWitchcraftAct},
 }
 
 const (
@@ -80,7 +83,7 @@ func Denounce(senators []Senator, kind string, accusedID, informerID int64, info
 		sev = 0.3
 	}
 	out := Denunciation{Crime: IsCrime(kind, ls)}
-	if ls.Has(LawInformers) {
+	if ls.Rules().PaysInformers {
 		sev *= informersBoost
 		out.Paid = true
 		out.Informer = Delta{Wealth: LawDenounceReward, Influence: ScaleInfluence(LawDenounceInfluence, informerInfluence)}

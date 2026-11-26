@@ -244,8 +244,9 @@ func VentureIncome(s SectorState, realm Realm, laws Laws, mine, totals Stakes) f
 // every other for less; otherwise stakes count as they are.
 func EffectiveStakes(laws Laws, by map[int64]Stakes) (map[int64]Stakes, Stakes) {
 	out, totals := map[int64]Stakes{}, Stakes{}
+	rules := laws.Rules()
 	leader := map[SectorKey]int64{}
-	if laws.Has(LawMonopolies) {
+	if rules.Monopolies() {
 		best := map[SectorKey]float64{}
 		for id, st := range by {
 			for k, v := range st {
@@ -260,11 +261,11 @@ func EffectiveStakes(laws Laws, by map[int64]Stakes) (map[int64]Stakes, Stakes) 
 		eff := Stakes{}
 		for k, v := range st {
 			switch {
-			case !laws.Has(LawMonopolies):
+			case !rules.Monopolies():
 			case leader[k] == id:
-				v *= LawMonopolyLeader
+				v *= mulFactor(1, rules.MonopolyLeader)
 			default:
-				v *= LawMonopolyRest
+				v *= mulFactor(1, rules.MonopolyRest)
 			}
 			eff[k] = v
 			totals[k] += v

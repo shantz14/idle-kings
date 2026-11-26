@@ -514,7 +514,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	if ev.Auto {
 		return resolveAuto(r, in, res)
 	}
-	secret := in.Laws.Has(LawSecretBallot)
+	secret := in.Laws.Rules().SecretBallot
 	res.Secret = secret
 
 	senVotes := map[int64]string{}
@@ -585,8 +585,8 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("The Senate voted to **%s**. For you: %s", strings.ToLower(winner.Label), desc))
 		}
 		_, voted := ev.Option(p.Vote)
-		if !voted && res.Laws.Has(LawAbstainers) {
-			g := Delta{Influence: ScaleInfluence(LawAbstainInfluence, p.Sheet[AttrInfluence])}
+		if abstain := res.Laws.Rules().AbstainInfluence; !voted && abstain != 0 {
+			g := Delta{Influence: ScaleInfluence(abstain, p.Sheet[AttrInfluence])}
 			res.delta(p.ID, g)
 			res.Notices[p.ID] = append(res.Notices[p.ID], "You kept out of the vote, and the court respects your restraint. ("+g.Describe()+")")
 		}
@@ -615,7 +615,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 // witchHunt fines owners of magic items under the Witchcraft Act, once per
 // Senate day.
 func witchHunt(r Roller, res *MatterResult, players []Player, ls Laws) {
-	if !ls.Has(LawWitchcraftAct) {
+	if !ls.Rules().WitchHunt {
 		return
 	}
 	for _, p := range players {

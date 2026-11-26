@@ -144,8 +144,8 @@ func (it Item) SellBack() int { return int(float64(it.Price) * SellBackRate) }
 // SellBackUnder is SellBack under the laws: under the Witchcraft Act,
 // nervous owners get more for magic items.
 func (it Item) SellBackUnder(ls Laws) int {
-	if it.Magic && ls.Has(LawWitchcraftAct) {
-		return int(float64(it.Price) * LawWitchSellBack)
+	if f := ls.Rules().MagicSellBack; it.Magic && f != 0 {
+		return int(float64(it.Price) * f)
 	}
 	return it.SellBack()
 }
@@ -153,8 +153,8 @@ func (it Item) SellBackUnder(ls Laws) int {
 // PriceUnder is what the shop charges under the laws (Debased Coinage
 // raises every price).
 func (it Item) PriceUnder(ls Laws) int {
-	if ls.Has(LawDebasement) {
-		return int(float64(it.Price)*LawDebasedPrices + 0.5)
+	if f := ls.Rules().ShopPrices; f != 0 {
+		return int(float64(it.Price)*f + 0.5)
 	}
 	return it.Price
 }

@@ -179,8 +179,8 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 	if !res.Yielded && w.Sheet[AttrProwess] < l.Sheet[AttrProwess] {
 		gain += duelUpsetRenown
 	}
-	if in.Laws.Has(LawHonor) {
-		gain *= LawHonorRenown
+	if f := in.Laws.Rules().DuelWinRenown; f != 0 {
+		gain *= f
 	}
 	add(w.ID, Delta{Renown: gain, Wealth: 2 * in.Wager})
 	add(l.ID, Delta{Renown: -loss})
@@ -219,10 +219,7 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 
 	// Bets.
 	payouts := BetPayouts(in.Bets, w.ID)
-	cut := 0.0
-	if in.Laws.Has(LawHonor) {
-		cut = LawHonorBetCut
-	}
+	cut := in.Laws.Rules().BetCut
 	kept := 0
 	for _, b := range in.Bets {
 		got := payouts[b.CharacterID]
@@ -337,7 +334,8 @@ func BetPayouts(bets []Bet, winnerID int64) map[int64]int {
 // Ban on Dueling nobody minds; under the Code of Honor the Stern and the
 // Conservative join the Hawks.
 func DeclineOpinions(senators []Senator, defenderID int64, ls Laws) []OpinionChange {
-	if ls.Has(LawDuelBan) {
+	rules := ls.Rules()
+	if rules.NoDeclineShame {
 		return nil
 	}
 	var out []OpinionChange
@@ -346,8 +344,8 @@ func DeclineOpinions(senators []Senator, defenderID int64, ls Laws) []OpinionCha
 		if s.Has(TraitHawk) {
 			d += duelHawkDecline
 		}
-		if ls.Has(LawHonor) && (s.Has(TraitHawk) || s.Has(TraitStern) || s.Has(TraitConservative)) {
-			d += LawHonorDeclineOpinion
+		if rules.DeclineOpinion != 0 && (s.Has(TraitHawk) || s.Has(TraitStern) || s.Has(TraitConservative)) {
+			d += rules.DeclineOpinion
 		}
 		if d != 0 {
 			out = append(out, OpinionChange{SenatorID: s.ID, CharacterID: defenderID, Delta: d})

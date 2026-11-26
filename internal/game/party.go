@@ -451,21 +451,19 @@ func resolveRumor(r Roller, res *PartyResult, host Person, a Attendee, ls Laws) 
 	// Target's own (disadvantaged) chance to notice, then the host's harder
 	// one. If the target is the host, their own roll covers it. The Law of
 	// Slander makes everyone readier to notice.
-	slander := 0.0
-	if ls.Has(LawSlander) {
-		slander = LawSlanderNotice
-	}
+	rules := ls.Rules()
+	slander := rules.RumorNotice
 	tSaw, tm := targetNotice.Roll(r, t.Sheet, t.Effects.RumorNotice+slander, Disadvantage)
 	hSaw, hm := false, 0
 	if t.ID != host.ID {
 		hSaw, hm = hostNotice.Roll(r, host.Sheet, host.Effects.RumorNotice+slander, Disadvantage)
 	}
 	// Under the Law of Slander, a rumor-monger who is named pays their victim.
-	if ls.Has(LawSlander) && ((tSaw && tm >= noticeNamed) || (hSaw && hm >= noticeNamed)) {
-		res.delta(a.ID, Delta{Wealth: -LawSlanderFine})
-		res.delta(t.ID, Delta{Wealth: LawSlanderFine})
-		res.notice(a.ID, "You were named as a slanderer at %s's party, and the law makes you pay %s. (-%d gold)", host.Name, t.Name, LawSlanderFine)
-		res.notice(t.ID, "Under the Law of Slander, %s must pay you for their lies. (+%d gold)", a.Name, LawSlanderFine)
+	if fine := rules.SlanderFine; fine != 0 && ((tSaw && tm >= noticeNamed) || (hSaw && hm >= noticeNamed)) {
+		res.delta(a.ID, Delta{Wealth: -fine})
+		res.delta(t.ID, Delta{Wealth: fine})
+		res.notice(a.ID, "You were named as a slanderer at %s's party, and the law makes you pay %s. (-%d gold)", host.Name, t.Name, fine)
+		res.notice(t.ID, "Under the Law of Slander, %s must pay you for their lies. (+%d gold)", a.Name, fine)
 	}
 	cancelled := (tSaw && tm >= noticeCancel) || (hSaw && hm >= noticeCancel)
 	stuck := landed && !cancelled

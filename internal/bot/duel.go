@@ -373,7 +373,7 @@ func (b *Bot) declineOutcome(ctx context.Context, guildID string, defenderID int
 	sen, _ := b.store.Senators(ctx, guildID)
 	st, _ := b.store.GetRealm(ctx, guildID)
 	d := game.Delta{Renown: -game.DuelDeclineRenown}
-	if st.Laws.Has(game.LawDuelBan) { // no shame in obeying the law
+	if st.Laws.Rules().NoDeclineShame { // no shame in obeying the law
 		d = game.Delta{}
 	}
 	d.Merge(game.DeclineCost(st.Laws))

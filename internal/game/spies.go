@@ -229,9 +229,7 @@ func ResolveRootOut(r Roller, in RootInput) RootResult {
 			continue
 		}
 		mod := RootMod(in.Player, n)
-		if in.Laws.Has(LawInformers) {
-			mod += LawInformerRoot
-		}
+		mod += in.Laws.Rules().RootBonus
 		ok, margin := rootOutCheck.Roll(r, in.Player.Sheet, mod, Normal)
 		if !ok {
 			continue

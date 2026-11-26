@@ -245,7 +245,7 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 	if fresh, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 		c = fresh
 	}
-	if it.Magic && c.Laws.Has(game.LawWitchcraftAct) { // a crime, and spies may hear of it
+	if it.Magic && game.IsMisdeed(game.SecretKindMagic, c.Laws) { // a misdeed now, and spies may hear of it
 		defer b.leak(ctx, c, game.SecretMagic(c.FullName(), it.Name))
 	}
 	text := fmt.Sprintf("**%s** is yours.", it.Name)

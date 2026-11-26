@@ -38,6 +38,29 @@ func (s Secret) Text(d Detail) string {
 	return s.Vague
 }
 
+// Secret kinds, the keys of MisdeedDefs and the dossier's crimes.
+const (
+	SecretKindBribe       = "bribe"
+	SecretKindBandits     = "bandits"
+	SecretKindSoldVote    = "sold_vote"
+	SecretKindVoteOffer   = "vote_offer"
+	SecretKindVoteRefused = "vote_refused"
+	SecretKindVoteDeal    = "vote_deal"
+	SecretKindVote        = "vote"
+	SecretKindCourt       = "court"
+	SecretKindCourtResult = "court_result"
+	SecretKindRumor       = "rumor"
+	SecretKindWhisper     = "whisper"
+	SecretKindPlant       = "plant"
+	SecretKindRootOut     = "rootout"
+	SecretKindInvest      = "invest"
+	SecretKindEstateOffer = "estate_offer"
+	SecretKindEstateDeal  = "estate_deal"
+	SecretKindCanvass     = "canvass"
+	SecretKindEmbezzle    = "embezzle"
+	SecretKindMagic       = "magic"
+)
+
 // LeakChance is the percent chance that a network at this level reports a
 // secret: about 5% at Low, 55% at Extremely High.
 func LeakChance(level float64) int {
@@ -47,9 +70,10 @@ func LeakChance(level float64) int {
 // RollLeak decides whether a network reports a secret, and how much of it.
 // Under the Informers' Law spies report more often, and tell more.
 func RollLeak(r Roller, level float64, ls Laws) (Detail, bool) {
+	rules := ls.Rules()
 	chance := LeakChance(level)
-	if ls.Has(LawInformers) {
-		chance = int(float64(chance) * LawInformerLeak)
+	if rules.LeakChance != 0 {
+		chance = int(float64(chance) * rules.LeakChance)
 	}
 	if level <= 0 || r.IntN(100) >= chance {
 		return Vague, false
@@ -62,9 +86,7 @@ func RollLeak(r Roller, level float64, ls Laws) (Detail, bool) {
 	case n < level*1.2:
 		d = Partial
 	}
-	if ls.Has(LawInformers) && d < Full {
-		d++
-	}
+	d = min(Full, d+Detail(rules.LeakDetail))
 	return d, true
 }
 
@@ -73,7 +95,7 @@ func RollLeak(r Roller, level float64, ls Laws) (Detail, bool) {
 
 func SecretBribe(actor, senator, matter, option string, gold int) Secret {
 	return Secret{
-		Kind:    "bribe",
+		Kind:    SecretKindBribe,
 		Vague:   fmt.Sprintf("%s's steward was seen carrying a heavy purse toward the Senate house.", actor),
 		Partial: fmt.Sprintf("%s has bribed a senator over *%s*.", actor, matter),
 		Full:    fmt.Sprintf("%s paid **Senator %s** %d gold to vote **%s** on *%s*.", actor, senator, gold, option, matter),
@@ -83,7 +105,7 @@ func SecretBribe(actor, senator, matter, option string, gold int) Secret {
 // SecretHiredBandits is paying bandits to rob a traveller.
 func SecretHiredBandits(actor, traveler, band string, gold int) Secret {
 	return Secret{
-		Kind:    "bandits",
+		Kind:    SecretKindBandits,
 		Vague:   fmt.Sprintf("%s's men were seen drinking with rough company in a roadside tavern.", actor),
 		Partial: fmt.Sprintf("%s has paid bandits to waylay someone on the road.", actor),
 		Full:    fmt.Sprintf("%s paid %s %d gold to rob **%s** on the road home.", actor, band, gold, traveler),
@@ -92,7 +114,7 @@ func SecretHiredBandits(actor, traveler, band string, gold int) Secret {
 
 func SecretSoldToSenator(actor, senator, matter, option string, gold int) Secret {
 	return Secret{
-		Kind:    "sold_vote",
+		Kind:    SecretKindSoldVote,
 		Vague:   fmt.Sprintf("%s came home from the Senate richer than they left.", actor),
 		Partial: fmt.Sprintf("%s has sold their vote on *%s* to a senator.", actor, matter),
 		Full:    fmt.Sprintf("%s sold their vote on *%s* to **Senator %s** for %d gold. They must vote **%s**.", actor, matter, senator, gold, option),
@@ -102,7 +124,7 @@ func SecretSoldToSenator(actor, senator, matter, option string, gold int) Secret
 // SecretVoteOffer is a vote deal offered to another player. buying is true
 // when the actor offers to pay for the other's vote.
 func SecretVoteOffer(actor string, other int64, otherName, matter, option string, price int, buying bool) Secret {
-	s := Secret{Kind: "vote_offer", Skip: []int64{other},
+	s := Secret{Kind: SecretKindVoteOffer, Skip: []int64{other},
 		Vague: fmt.Sprintf("%s sent a sealed letter to another house about the Senate's business.", actor)}
 	if buying {
 		s.Partial = fmt.Sprintf("%s is trying to buy another player's vote on *%s*.", actor, matter)
@@ -117,13 +139,13 @@ func SecretVoteOffer(actor string, other int64, otherName, matter, option string
 // SecretVoteDeal is the actor accepting (or refusing) a vote deal.
 func SecretVoteDeal(actor string, other int64, otherName, matter, option string, price int, accepted bool) Secret {
 	if !accepted {
-		return Secret{Kind: "vote_refused", Skip: []int64{other},
+		return Secret{Kind: SecretKindVoteRefused, Skip: []int64{other},
 			Vague:   fmt.Sprintf("%s burned a letter unread.", actor),
 			Partial: fmt.Sprintf("%s turned down a vote deal on *%s*.", actor, matter),
 			Full:    fmt.Sprintf("%s turned down **%s**'s vote deal on *%s* (%d gold).", actor, otherName, matter, price),
 		}
 	}
-	return Secret{Kind: "vote_deal", Skip: []int64{other},
+	return Secret{Kind: SecretKindVoteDeal, Skip: []int64{other},
 		Vague:   fmt.Sprintf("Gold changed hands between %s and another house.", actor),
 		Partial: fmt.Sprintf("%s struck a vote deal with another player on *%s*.", actor, matter),
 		Full:    fmt.Sprintf("%s struck a deal with **%s** on *%s*: %d gold for a vote for **%s**.", actor, otherName, matter, price, option),
@@ -132,7 +154,7 @@ func SecretVoteDeal(actor string, other int64, otherName, matter, option string,
 
 func SecretVote(actor, matter, option string) Secret {
 	return Secret{
-		Kind:    "vote",
+		Kind:    SecretKindVote,
 		Vague:   fmt.Sprintf("%s has cast their vote on *%s*.", actor, matter),
 		Partial: fmt.Sprintf("%s has cast their vote on *%s*, and seemed pleased with it.", actor, matter),
 		Full:    fmt.Sprintf("%s voted **%s** on *%s*.", actor, option, matter),
@@ -141,7 +163,7 @@ func SecretVote(actor, matter, option string) Secret {
 
 func SecretCourt(actor, senator, approach string) Secret {
 	return Secret{
-		Kind:    "court",
+		Kind:    SecretKindCourt,
 		Vague:   fmt.Sprintf("%s has gone out calling on someone of importance.", actor),
 		Partial: fmt.Sprintf("%s is calling on a senator.", actor),
 		Full:    fmt.Sprintf("%s is calling on **Senator %s** (%s).", actor, senator, approach),
@@ -158,7 +180,7 @@ func SecretCourtResult(actor, senator string, warmed, cooled bool) Secret {
 		mood = "the senator was glad to see them go"
 	}
 	return Secret{
-		Kind:    "court_result",
+		Kind:    SecretKindCourtResult,
 		Vague:   fmt.Sprintf("%s came home from a visit.", actor),
 		Partial: fmt.Sprintf("%s came home from calling on a senator; %s.", actor, mood),
 		Full:    fmt.Sprintf("%s called on **Senator %s**, and %s.", actor, senator, mood),
@@ -167,7 +189,7 @@ func SecretCourtResult(actor, senator string, warmed, cooled bool) Secret {
 
 func SecretRumor(actor string, victim int64, victimName string) Secret {
 	return Secret{
-		Kind: "rumor", Skip: []int64{victim},
+		Kind: SecretKindRumor, Skip: []int64{victim},
 		Vague:   fmt.Sprintf("%s has been whispering in corners at a party.", actor),
 		Partial: fmt.Sprintf("%s is going to a party to spread rumors about someone.", actor),
 		Full:    fmt.Sprintf("%s is going to a party to spread rumors about **%s**.", actor, victimName),
@@ -178,7 +200,7 @@ func SecretRumor(actor string, victim int64, victimName string) Secret {
 // isn't skipped: if they have spies on the whisperer, they may learn who.
 func SecretWhisper(actor, victimName, word string) Secret {
 	return Secret{
-		Kind:    "whisper",
+		Kind:    SecretKindWhisper,
 		Vague:   fmt.Sprintf("%s has been seen gossiping in the bathhouses.", actor),
 		Partial: fmt.Sprintf("%s is spreading a story about another house.", actor),
 		Full:    fmt.Sprintf("%s is spreading the story that **%s** has been %s.", actor, victimName, word),
@@ -187,7 +209,7 @@ func SecretWhisper(actor, victimName, word string) Secret {
 
 func SecretPlant(actor string, victim int64, victimName string) Secret {
 	return Secret{
-		Kind:    "plant",
+		Kind:    SecretKindPlant,
 		Vague:   fmt.Sprintf("%s met with some unsavoury characters in the lower city.", actor),
 		Partial: fmt.Sprintf("%s is trying to plant spies in another player's court.", actor),
 		Full:    fmt.Sprintf("%s is trying to plant spies in **%s**'s court.", actor, victimName),
@@ -196,7 +218,7 @@ func SecretPlant(actor string, victim int64, victimName string) Secret {
 
 func SecretRootOut(actor string) Secret {
 	return Secret{
-		Kind:    "rootout",
+		Kind:    SecretKindRootOut,
 		Vague:   fmt.Sprintf("%s's household seems tense, and the servants are being watched.", actor),
 		Partial: fmt.Sprintf("%s suspects there are spies in their house.", actor),
 		Full:    fmt.Sprintf("%s is questioning their servants, hunting for spies. Your agents there should keep their heads down.", actor),
@@ -206,7 +228,7 @@ func SecretRootOut(actor string) Secret {
 // SecretInvest is money put into a secret sector (public ones are on the profile).
 func SecretInvest(actor, sector string, gold int) Secret {
 	return Secret{
-		Kind:    "invest",
+		Kind:    SecretKindInvest,
 		Vague:   fmt.Sprintf("%s's men have been seen in the lower city, where honest money doesn't go.", actor),
 		Partial: fmt.Sprintf("%s has quietly bought into one of the lower city's rackets.", actor),
 		Full:    fmt.Sprintf("%s put %d gold into **%s**.", actor, gold, sector),
@@ -216,7 +238,7 @@ func SecretInvest(actor, sector string, gold int) Secret {
 // SecretEstateOffer is an estate deal offered to another player. summary
 // describes it, e.g. "the Riverside Villa for 500 gold".
 func SecretEstateOffer(actor string, other int64, otherName, summary string) Secret {
-	return Secret{Kind: "estate_offer", Skip: []int64{other},
+	return Secret{Kind: SecretKindEstateOffer, Skip: []int64{other},
 		Vague:   fmt.Sprintf("%s's steward has been seen with an appraiser.", actor),
 		Partial: fmt.Sprintf("%s is trying to strike a deal over their estate with another house.", actor),
 		Full:    fmt.Sprintf("%s offered **%s** a deal: %s.", actor, otherName, summary),
@@ -225,7 +247,7 @@ func SecretEstateOffer(actor string, other int64, otherName, summary string) Sec
 
 // SecretEstateDeal is the actor accepting an estate deal.
 func SecretEstateDeal(actor string, other int64, otherName, summary string) Secret {
-	return Secret{Kind: "estate_deal", Skip: []int64{other},
+	return Secret{Kind: SecretKindEstateDeal, Skip: []int64{other},
 		Vague:   fmt.Sprintf("Carts have been moving between %s's estate and another house's.", actor),
 		Partial: fmt.Sprintf("%s has made a deal with another house over their estates.", actor),
 		Full:    fmt.Sprintf("%s accepted **%s**'s deal: %s.", actor, otherName, summary),
@@ -235,7 +257,7 @@ func SecretEstateDeal(actor string, other int64, otherName, summary string) Secr
 // SecretCanvass is a day spent working the districts for support.
 func SecretCanvass(actor string) Secret {
 	return Secret{
-		Kind:    "canvass",
+		Kind:    SecretKindCanvass,
 		Vague:   fmt.Sprintf("%s has been seen out in the city a great deal.", actor),
 		Partial: fmt.Sprintf("%s is shaking hands in the districts.", actor),
 		Full:    fmt.Sprintf("%s is canvassing the districts, building support for the Senate.", actor),
@@ -244,7 +266,7 @@ func SecretCanvass(actor string) Secret {
 
 func SecretEmbezzle(actor string, gold int) Secret {
 	return Secret{
-		Kind:    "embezzle",
+		Kind:    SecretKindEmbezzle,
 		Vague:   fmt.Sprintf("%s has been spending more freely than their income explains.", actor),
 		Partial: fmt.Sprintf("%s has had their hand in the treasury.", actor),
 		Full:    fmt.Sprintf("%s stole **%d gold** from the treasury.", actor, gold),
@@ -254,7 +276,7 @@ func SecretEmbezzle(actor string, gold int) Secret {
 // SecretMagic is buying an enchanted item while the Witchcraft Act stands.
 func SecretMagic(actor, item string) Secret {
 	return Secret{
-		Kind:    "magic",
+		Kind:    SecretKindMagic,
 		Vague:   fmt.Sprintf("Something heavy and carefully wrapped was carried into %s's house after dark.", actor),
 		Partial: fmt.Sprintf("%s has bought something enchanted, in spite of the Witchcraft Act.", actor),
 		Full:    fmt.Sprintf("%s bought **%s**, in spite of the Witchcraft Act.", actor, item),
