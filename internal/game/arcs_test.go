@@ -157,7 +157,7 @@ func TestChronicle(t *testing.T) {
 			t.Fatal("empty line")
 		}
 	}
-	if l := (MatterEvent{Arc: "barrow_king", Chapter: 3}).ArcLabel(); l != "💀 The Barrow King · Chapter 3 of 5" {
+	if l := (MatterEvent{Arc: "barrow_king", Chapter: 3}).ArcLabel(); l != "💀 Acererak, the Barrow King · Chapter 3 of 5" {
 		t.Fatalf("label %q", l)
 	}
 }

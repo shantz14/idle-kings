@@ -20,15 +20,15 @@ type ArcDef struct {
 }
 
 var Arcs = []ArcDef{
-	{Key: "ashwood_witch", Name: "The Witch of the Ashwood", Emoji: "🌲", Chapters: 4, Strict: true},
+	{Key: "ashwood_witch", Name: "Baba Yaga of the Ashwood", Emoji: "🌲", Chapters: 4, Strict: true},
 	{Key: "fallen_star", Name: "The Fallen Star", Emoji: "☄️", Chapters: 4, Strict: true},
-	{Key: "barrow_king", Name: "The Barrow King", Emoji: "💀", Chapters: 5, Strict: true},
+	{Key: "barrow_king", Name: "Acererak, the Barrow King", Emoji: "💀", Chapters: 5, Strict: true},
 	{Key: "elixir", Name: "The Elixir of Youth", Emoji: "⚗️", Chapters: 3, Strict: true},
 
-	{Key: "northern_tribes", Name: "The Northern Tribes", Emoji: "🪓", Chapters: 3},
+	{Key: "northern_tribes", Name: "The Dothraki", Emoji: "🪓", Chapters: 3},
 	{Key: "eastern_road", Name: "The King of the Eastern Road", Emoji: "🗡️", Chapters: 2},
 	{Key: "hungry_year", Name: "The Hungry Year", Emoji: "🌾", Chapters: 2},
-	{Key: "black_lances", Name: "The Black Lances", Emoji: "🛡️", Chapters: 2},
+	{Key: "black_lances", Name: "The Golden Company", Emoji: "🛡️", Chapters: 2},
 	{Key: "plague", Name: "The Plague", Emoji: "🐀", Chapters: 2},
 	{Key: "gladiators", Name: "The Gladiators' Revolt", Emoji: "⚔️", Chapters: 2},
 	{Key: "pirates", Name: "The Pirates of the Teeth", Emoji: "🏴‍☠️", Chapters: 2},

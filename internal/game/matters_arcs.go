@@ -14,7 +14,7 @@ var arcMatters = []MatterEvent{
 	{
 		Key: "witch_crows", Title: "Crows over the Ashwood", Arc: "ashwood_witch", Chapter: 1, Theme: ThemeSorcery,
 		Bias:    map[Attr]float64{AttrPopularity: 0.2},
-		Prompt:  "The villages by the Ashwood say a witch has moved into the old wood. Their crops are fine, so far, but the crows have come by the thousand, and they watch.",
+		Prompt:  "The villages by the Ashwood say Baba Yaga has moved into the old wood, hut on chicken legs and all. Their crops are fine, so far, but the crows have come by the thousand, and they watch.",
 		Default: "ignore",
 		Options: []MatterOption{
 			{Key: "burn", Label: "Send soldiers to burn her out", Hint: "Fire answers witchcraft.",
@@ -32,7 +32,7 @@ var arcMatters = []MatterEvent{
 	},
 	{
 		Key: "witch_bargain", Title: "The Witch's Bargain", Arc: "ashwood_witch", Chapter: 2, Theme: ThemeSorcery, FollowUpOnly: true,
-		Prompt:  "No rain has fallen on the eastern farms in a month. The witch of the Ashwood sends word: she will bring the rain, for a seat at the Senate's table, or a tithe of silver.",
+		Prompt:  "No rain has fallen on the eastern farms in a month. Baba Yaga sends word from the Ashwood: she will bring the rain, for a seat at the Senate's table, or a tithe of silver.",
 		Default: "refuse",
 		Options: []MatterOption{
 			{Key: "seat", Label: "Give her a seat at the table", Hint: "A witch in the Senate house. The rain, though.",
@@ -97,7 +97,7 @@ var arcMatters = []MatterEvent{
 	},
 	{
 		Key: "witch_settles", Title: "The Ashwood Settles", Arc: "ashwood_witch", Chapter: 4, Theme: ThemeSorcery, FollowUpOnly: true,
-		Prompt:  "The witch comes to the Senate house herself, in a cloak of black feathers. Whatever has passed between her and the Republic, it must end today. How?",
+		Prompt:  "Baba Yaga comes to the Senate house herself, riding in her mortar. Whatever has passed between her and the Republic, it must end today. How?",
 		Default: "exile",
 		Options: []MatterOption{
 			{Key: "seer", Label: "Make her the court seer", Hint: "Keep her close, and use her.",
@@ -219,7 +219,7 @@ var arcMatters = []MatterEvent{
 	},
 	{
 		Key: "barrow_herald", Title: "The Barrow King's Herald", Arc: "barrow_king", Chapter: 3, Theme: ThemeOmens, FollowUpOnly: true,
-		Prompt:  "At noon, a dead man in green bronze walks into the Forum, through the crowd, and up the Senate steps. In a dry voice and an ancient tongue, he speaks: the Barrow King wakes. He demands a tithe of gold each new moon, or he will take a tithe of blood.",
+		Prompt:  "At noon, a dead man in green bronze walks into the Forum, through the crowd, and up the Senate steps. In a dry voice and an ancient tongue, he speaks: Acererak, the Barrow King, wakes. He demands a tithe of gold each new moon, or he will take a tithe of blood.",
 		Default: "refuse",
 		Options: []MatterOption{
 			{Key: "pay", Label: "Pay the tithe", Hint: "Gold is cheaper than blood.",
@@ -360,7 +360,7 @@ var arcMatters = []MatterEvent{
 					Realm: R{AttrStability: -6, AttrPopularity: -3}, Sectors: SC{SectorAlchemy: {Health: 0.1}}}},
 			{Key: "exile", Label: "Exile him", Hint: "Let another realm deal with him.",
 				Leans: L{LeanForeign: -0.5},
-				Success: MatterOutcome{Text: "He sails for Kesh with his notebooks. The Keshi ambassador sends the Senate a very warm letter.",
+				Success: MatterOutcome{Text: "He sails for Carthage with his notebooks. The Carthaginian ambassador sends the Senate a very warm letter.",
 					Realm: R{AttrForeign: 2}, Sectors: SC{SectorAlchemy: {Health: -0.05}}}},
 		},
 	},

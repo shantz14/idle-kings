@@ -99,7 +99,7 @@ var magicMatters = []MatterEvent{
 	},
 	{
 		Key: "sorcerer_citizen", Title: "A Sorcerer Seeks Citizenship", Theme: ThemeSorcery,
-		Prompt:  "A foreign sorcerer in a coat of crow feathers asks to become a citizen. He offers the Republic his services in return. The priests are horrified; the alchemists are fascinated.",
+		Prompt:  "A Red Wizard of Thay, crimson-robed and tattooed from scalp to chin, asks to become a citizen. He offers the Republic his services in return. The priests are horrified; the alchemists are fascinated.",
 		Default: "banish",
 		Options: []MatterOption{
 			{Key: "grant", Label: "Make him a citizen", Hint: "His knowledge stays here, with us.",
