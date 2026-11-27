@@ -118,7 +118,7 @@ func (b *Bot) investState(ctx context.Context, c store.Character) (store.RealmSt
 func (b *Bot) investPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
 	st, busy, err := b.investState(ctx, c)
 	if err != nil {
-		return &discordgo.InteractionResponseData{Content: "The realm isn't ready yet. Ask the admin to /start the game."}
+		return noteView("The realm isn't ready yet. Ask the admin to `/start` the game.", colorMuted)
 	}
 	return investView(c, st, game.SectorKey(""), busy, note, b.investFor)
 }
@@ -126,7 +126,7 @@ func (b *Bot) investPanel(ctx context.Context, c store.Character, note string) *
 func (b *Bot) investAmountPanel(ctx context.Context, c store.Character, key game.SectorKey, note string) *discordgo.InteractionResponseData {
 	st, busy, err := b.investState(ctx, c)
 	if err != nil {
-		return &discordgo.InteractionResponseData{Content: "The realm isn't ready yet."}
+		return noteView("The realm isn't ready yet.", colorMuted)
 	}
 	return investView(c, st, key, busy, note, b.investFor)
 }
@@ -134,20 +134,16 @@ func (b *Bot) investAmountPanel(ctx context.Context, c store.Character, key game
 // investView is the sector picker, plus the amount buttons once a sector is
 // chosen. Revenue isn't a roll, so it's shown; the deal odds never are.
 func investView(c store.Character, st store.RealmState, key game.SectorKey, busy, note string, dur time.Duration) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Put gold into one of the realm's industries. Your money grows the sector, and buys you a share of what it earns every day. ")
-	fmt.Fprintf(&sb, "How big a share depends on how well you negotiate. It takes %s to strike the deal.\n\n", humanDuration(dur))
-	sb.WriteString("What happens in the Senate moves these industries, and your income with them.")
-	if c.VentureIncome > 0 {
-		fmt.Fprintf(&sb, "\n\nYour ventures earn you **%s gold/day**.", game.Num(c.VentureIncome))
+	intro := "Put gold into one of the realm's industries. It grows the sector and buys you a share of what it earns every day; " +
+		"how big a share depends on how well you negotiate."
+	e := actionEmbed(game.KindInvest, withNote(busyNote(busy, note), intro))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Deal takes", humanDuration(dur)),
+		fact("Your ventures", game.Num(c.VentureIncome)+" gold/day"),
+		fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)),
 	}
-	if busy != "" {
-		sb.WriteString("\n\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
-	embeds := []*discordgo.MessageEmbed{{Title: "Invest in a Venture", Description: sb.String(), Color: colorPanel}}
+	e.Footer = footer(emojiSenate + " What the Senate decides moves these industries, and your income with them.")
+	embeds := []*discordgo.MessageEmbed{e}
 
 	var opts []discordgo.SelectMenuOption
 	for _, d := range game.SectorDefs {
@@ -168,21 +164,23 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 	if !ok {
 		return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(back))}
 	}
-	var desc strings.Builder
-	fmt.Fprintf(&desc, "%s\n\nIt earns **%s gold/day** and is **%s**.", d.Description,
-		game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws)), st.Sectors.Condition(d, st.Trackers, st.Laws))
+	card := &discordgo.MessageEmbed{Title: d.Emoji + " " + d.Name, Description: d.Description, Color: colorPanel,
+		Fields: []*discordgo.MessageEmbedField{
+			fact("Earns", game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws))+" gold/day"),
+			fact("Condition", st.Sectors.Condition(d, st.Trackers, st.Laws)),
+		}}
 	if v, ok := c.Ventures[d.Key]; ok {
-		fmt.Fprintf(&desc, "\nYou own **%s** of it, worth **%s gold/day** to you.", pct(v.Share), game.Num(v.Income))
+		card.Fields = append(card.Fields, fact("You own", fmt.Sprintf("%s · %s gold/day", pct(v.Share), game.Num(v.Income))))
 	}
-	fmt.Fprintf(&desc, "\n\nYou have **%d gold**. Invest anything from %d to %d.", c.Wealth, game.InvestMin, game.InvestMax)
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: d.Emoji + " " + d.Name, Description: desc.String(), Color: colorPanel})
+	card.Footer = footer(fmt.Sprintf("Invest anything from %d to %d gold.", game.InvestMin, game.InvestMax))
+	embeds = append(embeds, card)
 
 	var btns []discordgo.MessageComponent
 	for _, g := range game.InvestPresets {
 		btns = append(btns, button(fmt.Sprintf("%d gold", g), fmt.Sprintf("invest:spend:%s:%d", d.Key, g),
 			discordgo.SuccessButton, busy != "" || c.Wealth < g))
 	}
-	btns = append(btns, button("Custom amount", "invest:custom:"+string(d.Key), discordgo.PrimaryButton, busy != "" || c.Wealth < game.InvestMin))
+	btns = append(btns, withEmoji(button("Custom amount", "invest:custom:"+string(d.Key), discordgo.PrimaryButton, busy != "" || c.Wealth < game.InvestMin), "✏️"))
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(btns...), row(back))}
 }
 
@@ -214,15 +212,8 @@ func (b *Bot) onInvestGo(ctx context.Context, i *discordgo.InteractionCreate, c 
 		b.update(i, b.investAmountPanel(ctx, c, key, err.Error()))
 		return
 	}
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{
-			Title: "Investing in " + d.Name,
-			Description: fmt.Sprintf("You put **%d gold** into %s %s. The deal will be struck <t:%d:R>, and I'll DM you what you got for it.",
-				gold, d.Emoji, d.Name, ends.Unix()),
-			Color: colorGood,
-		}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	b.update(i, startedView("📈 Investing in "+d.Name, fmt.Sprintf("You put gold into %s %s. I'll DM you what you got for it.", d.Emoji, d.Name),
+		fact("Invested", fmt.Sprintf("%d gold", gold)), fact("Deal struck", relTime(ends))))
 }
 
 // ---- resolving ----
@@ -254,7 +245,7 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 
 	desc := res.Text
 	if res.Exposed {
-		desc += fmt.Sprintf(" (%s)", game.ExposedDelta.Describe())
+		desc = withDelta(desc, game.ExposedDelta)
 	}
 	if after, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 		if v, ok := after.Ventures[d.Key]; ok {
@@ -277,7 +268,7 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 
 	if res.Exposed {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
-			Title:       "A scandal in the lower city",
+			Title:       "📢 A scandal in the lower city",
 			Description: fmt.Sprintf("Word is that **%s** has been putting money into smuggling rings and gambling dens.", c.FullName()),
 			Color:       colorBad,
 		})

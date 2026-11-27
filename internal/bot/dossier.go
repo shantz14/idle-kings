@@ -65,7 +65,7 @@ type dossierEntry struct {
 func (b *Bot) dossierPanel(ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
 	reports, err := b.store.Dossier(ctx, c.ID)
 	if err != nil {
-		return &discordgo.InteractionResponseData{Content: "Your dossier is locked away somewhere. Try again later."}
+		return noteView("📁 Your dossier is locked away somewhere. Try again later.", colorMuted)
 	}
 	ids := make([]int64, 0, len(reports))
 	for _, d := range reports {
@@ -85,12 +85,12 @@ func (b *Bot) dossierPanel(ctx context.Context, c store.Character) *discordgo.In
 
 func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	sb.WriteString("Everything your spies have caught your rivals doing. Reports keep forever: denounce them publicly, whisper it around quietly, or save it for when it hurts most. ")
+	sb.WriteString("Everything your spies have caught your rivals doing. Reports keep forever: denounce them publicly, whisper it around quietly, or save it for when it hurts most.\n\n")
+	foot := "📢 A denunciation shames them before the court. Under the Informers' Law it would hit harder, and pay."
 	if ls.Has(game.LawInformers) {
-		sb.WriteString("While the Informers' Law stands, a denunciation hits harder and the treasury pays you for it.\n\n")
-	} else {
-		sb.WriteString("A denunciation shames them before the court. Under the Informers' Law it would hit harder, and pay.\n\n")
+		foot = "📢 While the Informers' Law stands, a denunciation hits harder and the treasury pays you for it."
 	}
+	sb.WriteString("**Reports**\n")
 	comps := []discordgo.MessageComponent{}
 	if len(entries) == 0 {
 		sb.WriteString("Your spies haven't brought you anything worth using yet.")
@@ -116,26 +116,29 @@ func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionRes
 		desc = desc[:3999] + "…"
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "📁 Your Dossier", Description: desc, Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "📁 Your Dossier", Description: desc, Color: colorSecret, Footer: footer(foot + " Using a report doesn't take your action.")}},
 		Components: comps,
 	}
 }
 
 func reportView(d store.Denunciation, accused store.Character) *discordgo.InteractionResponseData {
-	force := "Denouncing them shames them before the whole court, though nobody will pay you for it."
+	force := "Shames them before the whole court, though nobody will pay you for it."
 	if accused.Laws.Has(game.LawInformers) {
-		force = "Under the Informers' Law a denunciation hits them hard, and the treasury pays you for it."
+		force = "Under the Informers' Law it hits them hard, and the treasury pays you for it."
 	}
-	force += " Or whisper it around: softer, and nothing is posted. They'll only hear that someone is talking, unless their spies are watching you."
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title:       fmt.Sprintf("📁 %s: %s", accused.FullName(), game.MisdeedWord(d.Crime)),
-			Description: fmt.Sprintf("%s\n\n*Your spies reported this <t:%d:R>.* %s", d.Detail, d.CreatedAt.Unix(), force),
-			Color:       colorPanel,
+			Description: fmt.Sprintf("%s\n\n*Your spies reported this %s.*", quote(d.Detail), relTime(d.CreatedAt)),
+			Color:       colorSecret,
+			Fields: []*discordgo.MessageEmbedField{
+				{Name: "📢 Denounce", Value: force},
+				{Name: "🗣️ Whisper", Value: "Softer, and nothing is posted. They'll only hear that someone is talking, unless their spies are watching you."},
+			},
 		}},
 		Components: []discordgo.MessageComponent{row(
-			button(truncate("Denounce "+accused.FullName(), 80), fmt.Sprintf("law:denounce:%d", d.ID), discordgo.DangerButton, false),
-			button("Whisper it", fmt.Sprintf("law:whisper:%d", d.ID), discordgo.PrimaryButton, false),
+			withEmoji(button(truncate("Denounce "+accused.FullName(), 80), fmt.Sprintf("law:denounce:%d", d.ID), discordgo.DangerButton, false), "📢"),
+			withEmoji(button("Whisper it", fmt.Sprintf("law:whisper:%d", d.ID), discordgo.PrimaryButton, false), "🗣️"),
 			backTo("dossier:home"),
 		)},
 	}

@@ -33,6 +33,7 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 	type heard struct {
 		owner  int64
 		detail game.Detail
+		level  float64
 	}
 	var hits []heard
 	var owners []int64
@@ -41,7 +42,7 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 			continue
 		}
 		if d, ok := game.RollLeak(b.rng, n.Value, actor.Laws); ok {
-			hits = append(hits, heard{n.OwnerID, d})
+			hits = append(hits, heard{n.OwnerID, d, n.Value})
 			owners = append(owners, n.OwnerID)
 		}
 	}
@@ -59,7 +60,8 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 		msg := &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "🕵️ Word from your spies in " + actor.House(),
 			Description: s.Text(d),
-			Color:       colorPanel,
+			Color:       colorSecret,
+			Footer:      footer(fmt.Sprintf("Your network in %s: %s", actor.House(), game.SpyTierOf(h.level).Name)),
 		}}}
 		if game.CanExpose(s.Kind, d, actor.Laws) {
 			id, err := b.store.CreateDenunciation(ctx, store.Denunciation{
@@ -68,7 +70,7 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 			if err != nil {
 				slog.Error("denunciation", "err", err)
 			} else {
-				msg.Embeds[0].Description += "\n\n" + exposeNote(actor.Laws)
+				msg.Embeds[0].Description = quote(msg.Embeds[0].Description) + "\n\n📁 " + exposeNote(actor.Laws)
 				msg.Components = denounceButtons(id, actor.FullName())
 			}
 		}
@@ -79,15 +81,15 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 // exposeNote is what a report in the dossier could do, under the laws now.
 func exposeNote(ls game.Laws) string {
 	if ls.Has(game.LawInformers) {
-		return "That is worth exposing, and the Informers' Law pays for reports like this. It's filed in your dossier: denounce them publicly, whisper it around and let it spread, or keep it for when it hurts most."
+		return "**Worth exposing**, and the Informers' Law pays for reports like this. It's filed in your dossier: denounce them publicly, whisper it around, or keep it for when it hurts most."
 	}
-	return "That is worth exposing. It's filed in your dossier: denounce them publicly, whisper it around and let it spread, or keep it for when it hurts most. (Under the Informers' Law a denunciation would hit harder, and pay.)"
+	return "**Worth exposing.** It's filed in your dossier: denounce them publicly, whisper it around, or keep it for when it hurts most.\n*Under the Informers' Law a denunciation would hit harder, and pay.*"
 }
 
 func denounceButtons(id int64, name string) []discordgo.MessageComponent {
 	return []discordgo.MessageComponent{row(
-		button(truncate("Denounce "+name, 80), fmt.Sprintf("law:denounce:%d", id), discordgo.DangerButton, false),
-		button("Whisper it", fmt.Sprintf("law:whisper:%d", id), discordgo.PrimaryButton, false),
-		button("Keep it for later", fmt.Sprintf("law:keep:%d", id), discordgo.SecondaryButton, false),
+		withEmoji(button(truncate("Denounce "+name, 80), fmt.Sprintf("law:denounce:%d", id), discordgo.DangerButton, false), "📢"),
+		withEmoji(button("Whisper it", fmt.Sprintf("law:whisper:%d", id), discordgo.PrimaryButton, false), "🗣️"),
+		withEmoji(button("Keep it for later", fmt.Sprintf("law:keep:%d", id), discordgo.SecondaryButton, false), "📁"),
 	)}
 }

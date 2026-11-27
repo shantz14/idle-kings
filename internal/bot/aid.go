@@ -63,29 +63,26 @@ func (b *Bot) onAidModal(ctx context.Context, i *discordgo.InteractionCreate, pa
 func (b *Bot) aidPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
 	st, err := b.store.GetRealm(ctx, c.GuildID)
 	if err != nil {
-		return &discordgo.InteractionResponseData{Content: "The Senate hasn't met yet."}
+		return noteView("The Senate hasn't met yet.", colorMuted)
 	}
 	return aidView(st, note)
 }
 
 func aidView(st store.RealmState, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	sb.WriteString("Pay from your own purse to shore up the Republic. It happens at once, and doesn't keep you from other business.\n\n")
-	sb.WriteString("The court honors generosity, all the more when the realm is in trouble. Large gifts are announced.\n\n")
-	sb.WriteString("**The realm**\n" + trackersLine(st.Trackers))
+	desc := "Pay from your own purse to shore up the Republic. The court honors generosity, all the more when the realm is in trouble."
 	if !st.Alive() {
-		sb.WriteString("\n\nThe realm has fallen. There is nothing left to save.")
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
+		note = joinNotes("🔥 The realm has fallen. There is nothing left to save.", note)
 	}
 	var btns []discordgo.MessageComponent
 	for _, t := range game.AidTargets {
 		btns = append(btns, button(t.Name, "aid:t:"+t.Key, discordgo.SuccessButton, !st.Alive()))
 	}
 	btns = append(btns, backButton(game.KindAid))
+	e := actionEmbed(game.KindAid, withNote(note, desc))
+	e.Fields = []*discordgo.MessageEmbedField{realmField(st.Trackers)}
+	e.Footer = footer("Instant, and doesn't use your action. Large gifts are announced.")
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Aid the Realm", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -102,19 +99,17 @@ func (b *Bot) aidAmountPanel(ctx context.Context, c store.Character, key, note s
 func aidAmountView(c store.Character, t game.AidTarget, current float64, note string) *discordgo.InteractionResponseData {
 	desc := fmt.Sprintf("The realm's %s stands at **%s**.", strings.ToLower(trackerLabel(t.Tracker)), game.Num(current))
 	if current < game.AidCrisis {
-		desc += " It's in trouble: a gift now will be remembered."
+		desc += " ⚠️ It's in trouble: a gift now will be remembered."
 	}
-	desc += fmt.Sprintf("\n\nHow much will you give? You have **%d gold**.", c.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	desc = withNote(note, desc+"\n\nHow much will you give?")
 	var btns []discordgo.MessageComponent
 	for _, g := range game.AidAmounts {
 		btns = append(btns, button(fmt.Sprintf("%d gold", g), fmt.Sprintf("aid:give:%s:%d", t.Key, g), discordgo.SuccessButton, g > c.Wealth))
 	}
-	btns = append(btns, button("Other amount", "aid:custom:"+t.Key, discordgo.PrimaryButton, c.Wealth < game.AidMin))
+	btns = append(btns, withEmoji(button("Other amount", "aid:custom:"+t.Key, discordgo.PrimaryButton, c.Wealth < game.AidMin), "✏️"))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🤲 " + t.Name, Description: desc, Color: colorPanel,
+			Fields: []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))}}},
 		Components: []discordgo.MessageComponent{row(btns...),
 			row(backTo("menu:act:" + game.KindAid))},
 	}
@@ -150,17 +145,13 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 		b.update(i, b.aidAmountPanel(ctx, c, key, err.Error()))
 		return
 	}
-	desc := res.Text
-	if d := res.Delta.Describe(); d != "" {
-		desc += fmt.Sprintf(" (%s)", d)
-	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorGood}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "🤲 " + t.Name, Description: withDelta(res.Text, res.Delta), Color: colorGood}},
 		Components: []discordgo.MessageComponent{row(backTo("menu:act:" + game.KindAid))},
 	})
 	if res.Public != "" {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
-			Title: "A gift to the Republic", Description: res.Public, Color: colorGood,
+			Title: "🤲 A gift to the Republic", Description: res.Public, Color: colorGood,
 		})
 	}
 	b.afterRealmChange(ctx, c.GuildID, before)

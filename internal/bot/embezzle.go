@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -50,11 +49,7 @@ func (b *Bot) onEmbezzle(ctx context.Context, i *discordgo.InteractionCreate, pa
 		b.update(i, b.embezzlePanel(ctx, c, err.Error()))
 		return
 	}
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Embezzling",
-			Description: fmt.Sprintf("You start cooking the treasury's books. I'll DM you <t:%d:R>.", ends.Unix()), Color: colorGood}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	b.update(i, startedView("🪙 Cooking the books", "You start moving the treasury's silver, quietly. I'll DM you how it went.", fact("You'll know", relTime(ends))))
 }
 
 func (b *Bot) embezzlePanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
@@ -62,23 +57,19 @@ func (b *Bot) embezzlePanel(ctx context.Context, c store.Character, note string)
 }
 
 func embezzleView(d time.Duration, busy, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Move some of the Republic's silver into your own purse. It takes %s. Stewardship and Intrigue keep the ledgers straight.\n\n", humanDuration(d))
-	sb.WriteString("The more you take, the likelier you are to be caught. If you are, the silver goes back, the whole court hears of it, and the Senate turns against you.\n\n")
-	sb.WriteString("Every coin you take is a coin the realm doesn't have. **If the treasury empties, everyone loses, you too.**")
-	if busy != "" {
-		sb.WriteString("\n\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
+	desc := "Move some of the Republic's silver into your own purse. Stewardship and Intrigue keep the ledgers straight. " +
+		"The more you take, the likelier you are to be caught: then the silver goes back, the whole court hears of it, and the Senate turns against you."
 	var btns []discordgo.MessageComponent
 	for _, s := range game.EmbezzleSizes {
 		btns = append(btns, button(fmt.Sprintf("%s (~%d gold)", s.Name, s.Gold()), "embezzle:go:"+s.Key, discordgo.DangerButton, busy != ""))
 	}
 	btns = append(btns, backButton(game.KindEmbezzle))
+	e := actionEmbed(game.KindEmbezzle, withNote(busyNote(busy, note), desc))
+	e.Color = colorSecret
+	e.Fields = []*discordgo.MessageEmbedField{fact("Takes", humanDuration(d)), fact("Seen by", "🔒 Private, unless you're caught")}
+	e.Footer = footer("💀 Every coin you take is one the realm doesn't have. If the treasury empties, everyone loses, you too.")
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Embezzle from the Treasury", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -110,16 +101,10 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 	case res.Caught:
 		color = colorBad
 	}
-	desc := res.Text
-	if d := res.Delta.Describe(); d != "" {
-		desc += fmt.Sprintf(" (%s)", d)
-	}
-	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "The treasury's books", Description: desc, Color: color,
-	}}})
+	b.dmNote(c.UserID, "🪙 The treasury's books", withDelta(res.Text, res.Delta), color)
 	if res.Caught {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
-			Title: "A thief in the treasury", Description: res.Public, Color: colorBad,
+			Title: "📢 A thief in the treasury", Description: res.Public, Color: colorBad,
 		})
 	}
 	if res.Success {
