@@ -67,27 +67,22 @@ func (b *Bot) huntPanel(ctx context.Context, c store.Character, note string) *di
 }
 
 func huntView(dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Ride out into the royal forest for %s with horses and hounds. Costs **%d gold**.\n", humanDuration(dur), game.HuntCost)
-	sb.WriteString("Its success depends most on your prowess, then your martial skill, your renown and your estate. ")
-	sb.WriteString("The forest is full of surprises; I'll DM you when one comes. Riders get hurt out there, by accident or otherwise.\n")
-	sb.WriteString("The court is told, and others may ride with you.\n\n**Choose your goal:**\n")
-	for _, g := range game.HuntHostGoals {
-		fmt.Fprintf(&sb, "**%s** — %s\n", g.Name, g.Description)
-	}
-	if busy != "" {
-		sb.WriteString("\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
+	desc := "Ride out with horses and hounds. It goes best with prowess, then martial skill, renown and a fine estate. " +
+		"Riders get hurt out there, by accident or otherwise.\n\n**Choose your goal**\n" + goalList(game.HuntHostGoals)
 	var btns []discordgo.MessageComponent
 	for _, g := range game.HuntHostGoals {
 		btns = append(btns, button(g.Name, "hunt:host:"+string(g.Key), discordgo.SuccessButton, busy != ""))
 	}
 	btns = append(btns, backButton(game.KindHunt))
+	e := actionEmbed(game.KindHunt, withNote(busyNote(busy, note), desc))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Cost", fmt.Sprintf("%d gold", game.HuntCost)),
+		fact("Lasts", humanDuration(dur)),
+		fact("Riders", "📣 Anyone may join"),
+	}
+	e.Footer = footer("🔔 The forest is full of surprises. I'll DM you when one comes.")
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Hunt in the Royal Forest", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -130,20 +125,16 @@ func (b *Bot) onHostHunt(ctx context.Context, i *discordgo.InteractionCreate, go
 		return
 	}
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%s rides out to hunt", c.FullName()),
-		Description: fmt.Sprintf("Horns sound at House %s. The hunt returns <t:%d:R>.", c.FamilyName, ends.Unix()),
+		Title:       fmt.Sprintf("🦌 %s rides out to hunt", c.FullName()),
+		Description: fmt.Sprintf("Horns sound at House %s. Saddle up and ride along.", c.FamilyName),
 		Color:       colorPanel,
-	}, []discordgo.MessageComponent{row(button("Join the hunt", fmt.Sprintf("hunt:join:%d", a.ID), discordgo.SuccessButton, false))})
+		Fields:      []*discordgo.MessageEmbedField{fact("Returns", relTime(ends))},
+	}, []discordgo.MessageComponent{row(withEmoji(button("Join the hunt", fmt.Sprintf("hunt:join:%d", a.ID), discordgo.SuccessButton, false), "🐎"))})
 
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{
-			Title: "The hunt is on",
-			Description: fmt.Sprintf("Goal: **%s**. You spent **%d gold**. You'll be back <t:%d:R>.%s\nWatch your DMs: I'll message you when something happens in the forest.",
-				game.HuntGoalName(goal), game.HuntCost, ends.Unix(), where),
-			Color: colorGood,
-		}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	v := startedView("🦌 The hunt is on", where,
+		fact("Goal", game.HuntGoalName(goal)), fact("Spent", fmt.Sprintf("%d gold", game.HuntCost)), fact("Back", relTime(ends)))
+	v.Embeds[0].Footer = footer("🔔 Watch your DMs: I'll message you when something happens in the forest.")
+	b.update(i, v)
 }
 
 // ---- joining ----
@@ -179,24 +170,27 @@ func (b *Bot) onJoinHunt(ctx context.Context, i *discordgo.InteractionCreate, id
 func huntJoinView(a store.Activity, host store.Character) *discordgo.InteractionResponseData {
 	var sb strings.Builder
 	var btns []discordgo.MessageComponent
+	sb.WriteString("What will you do in the forest?\n\n" + goalList(game.HuntGuestGoals))
 	for _, g := range game.HuntGuestGoals {
-		fmt.Fprintf(&sb, "**%s** — %s\n", g.Name, g.Description)
-		btns = append(btns, button(g.Name, fmt.Sprintf("hunt:jgoal:%d:%s", a.ID, g.Key), discordgo.PrimaryButton, false))
+		style := discordgo.PrimaryButton
+		if g.Key == game.GoalAccident {
+			style = discordgo.DangerButton
+		}
+		btns = append(btns, button(g.Name, fmt.Sprintf("hunt:jgoal:%d:%s", a.ID, g.Key), style, false))
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: fmt.Sprintf("Ride with %s", host.FullName()), Description: sb.String(), Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: fmt.Sprintf("🐎 Ride with %s", host.FullName()), Description: sb.String(), Color: colorPanel,
+			Fields: []*discordgo.MessageEmbedField{fact("Returns", relTime(a.EndsAt))},
+			Footer: footer("Riding along doesn't use your action.")}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
 
 func accidentPicker(id int64, note string) *discordgo.InteractionResponseData {
-	desc := "Who will have the accident? They must be riding on this hunt (the host counts) when it ends, or your plan comes to nothing."
-	color := colorPanel
-	if note != "" {
-		desc, color = note, colorBad
-	}
+	desc := withNote(note, "Who will have the accident? They must be riding on this hunt (the host counts) when it ends, or your plan comes to nothing.")
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Arrange an Accident", Description: desc, Color: color}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🏹 Arrange an Accident", Description: desc, Color: colorSecret,
+			Footer: footer("Victims and hosts may notice, and learn who did it.")}},
 		Components: []discordgo.MessageComponent{row(discordgo.SelectMenu{
 			MenuType: discordgo.UserSelectMenu, CustomID: fmt.Sprintf("hunt:target:%d", id), Placeholder: "Choose a rider…",
 		})},
@@ -237,6 +231,7 @@ func (b *Bot) onHuntTarget(ctx context.Context, i *discordgo.InteractionCreate, 
 func (b *Bot) joinHunt(ctx context.Context, i *discordgo.InteractionCreate, a store.Activity, c store.Character, goal game.Goal, targetID int64) {
 	err := b.store.AddParticipant(ctx, a.ID, c.ID, string(goal), targetID, time.Now())
 	var text string
+	color := colorMuted
 	switch {
 	case errors.Is(err, store.ErrExists):
 		text = "You're already riding on this hunt."
@@ -246,9 +241,10 @@ func (b *Bot) joinHunt(ctx context.Context, i *discordgo.InteractionCreate, a st
 		slog.Error("join hunt", "err", err)
 		text = "Something went wrong."
 	default:
-		text = fmt.Sprintf("You ride out to **%s**. You'll hear how it went <t:%d:R>.", strings.ToLower(game.HuntGoalName(goal)), a.EndsAt.Unix())
+		color = colorGood
+		text = fmt.Sprintf("🐎 You ride out to **%s**. You'll hear how it went %s.", strings.ToLower(game.HuntGoalName(goal)), relTime(a.EndsAt))
 	}
-	b.update(i, noteView(text, colorMuted))
+	b.update(i, noteView(text, color))
 }
 
 // ---- the end of the hunt ----
@@ -304,14 +300,8 @@ func (b *Bot) resolveHunt(ctx context.Context, a store.Activity, now time.Time) 
 		return
 	}
 
-	title := fmt.Sprintf("%s's hunt is over", host.FullName())
-	for id, lines := range res.Notices {
-		if uid, ok := users[id]; ok {
-			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorPanel,
-			}}})
-		}
-	}
+	title := fmt.Sprintf("🦌 %s's hunt is over", host.FullName())
+	b.dmNotices(res.Notices, users, title)
 	if a.AnnounceChannelID != "" {
 		public := res.Public
 		if n := len(parts); n > 0 {

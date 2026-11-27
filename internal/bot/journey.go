@@ -66,29 +66,24 @@ func (b *Bot) journeyPanel(ctx context.Context, c store.Character, note string) 
 }
 
 func journeyView(t game.PartyTiming, wealth int, busy, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Travel the realm for %s, or go abroad for %s. ", humanDuration(t.Duration), humanDuration(2*t.Duration))
-	sb.WriteString("I'll DM you when something happens on the road. The court is told you've left, and anyone may pay bandits to meet you on the way home. ")
-	sb.WriteString("Your martial skill, your sword arm and the guards your estate can afford are what stand between them and your purse.\n\n")
+	desc := "Travel the provinces, or go abroad, for gold, influence, renown or learning. The court is told you've left, " +
+		"and anyone may pay bandits to meet you on the way home. Your martial skill, your sword arm and your estate's guards stand between them and your purse."
+	e := actionEmbed(game.KindJourney, withNote(busyNote(busy, note), desc))
 	var btns []discordgo.MessageComponent
 	for _, d := range game.JourneyDests {
-		where := "in the realm"
+		where, dur := "In the realm", t.Duration
 		if d.Abroad {
-			where = "abroad"
+			where, dur = "Abroad", 2*t.Duration
 		}
-		fmt.Fprintf(&sb, "%s **%s** (%s, %d gold) — %s\n", d.Emoji, d.Name, where, d.Cost, d.Description)
-		btns = append(btns, button(truncate(d.Name, 80), "journey:go:"+d.Key, discordgo.SuccessButton, busy != "" || wealth < d.Cost))
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: d.Emoji + " " + d.Name,
+			Value: fmt.Sprintf("%s\n*%s · %s · %d gold*", d.Description, where, humanDuration(dur), d.Cost)})
+		btns = append(btns, withEmoji(button(truncate(d.Name, 80), "journey:go:"+d.Key, discordgo.SuccessButton, busy != "" || wealth < d.Cost), d.Emoji))
 	}
-	fmt.Fprintf(&sb, "\nYou have **%d gold**.", wealth)
-	if busy != "" {
-		sb.WriteString("\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
+	e.Fields = append(e.Fields, fact("Your purse", fmt.Sprintf("%d gold", wealth)))
+	e.Footer = footer("🔔 I'll DM you when something happens on the road.")
 	btns = append(btns, backButton(game.KindJourney))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Undertake a Journey", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: rows(btns),
 	}
 }
@@ -130,18 +125,14 @@ func (b *Bot) onSetOut(ctx context.Context, i *discordgo.InteractionCreate, key 
 	}
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s %s sets out for %s", d.Emoji, c.FullName(), d.Place),
-		Description: fmt.Sprintf("**%s**: %s. Expected home <t:%d:R>. The roads are long, and not everyone on them is friendly.", d.Name, strings.ToLower(d.Description[:1])+d.Description[1:], ends.Unix()),
+		Description: fmt.Sprintf("**%s**. The roads are long, and not everyone on them is friendly.", d.Name),
 		Color:       colorPanel,
-	}, []discordgo.MessageComponent{row(button("Hire bandits", fmt.Sprintf("journey:hire:%d", a.ID), discordgo.DangerButton, false))})
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{
-			Title: "On the road",
-			Description: fmt.Sprintf("**%s**. You spent **%d gold**. You'll be home <t:%d:R>.%s\nWatch your DMs: I'll message you when something happens on the road.",
-				d.Name, d.Cost, ends.Unix(), where),
-			Color: colorGood,
-		}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+		Fields:      []*discordgo.MessageEmbedField{fact("Expected home", relTime(ends))},
+	}, []discordgo.MessageComponent{row(withEmoji(button("Hire bandits", fmt.Sprintf("journey:hire:%d", a.ID), discordgo.DangerButton, false), "🗡️"))})
+	v := startedView("🧭 On the road", fmt.Sprintf("%s **%s**.%s", d.Emoji, d.Name, where),
+		fact("Spent", fmt.Sprintf("%d gold", d.Cost)), fact("Home", relTime(ends)))
+	v.Embeds[0].Footer = footer("🔔 Watch your DMs: I'll message you when something happens on the road.")
+	b.update(i, v)
 }
 
 // ---- hiring bandits ----
@@ -179,16 +170,17 @@ func (b *Bot) onHirePanel(ctx context.Context, i *discordgo.InteractionCreate, i
 
 func hireView(a store.Activity, c, traveler store.Character) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Pay a band to meet **%s** on the road home. Nobody will know it was you, unless they beat your bandits and one of them talks. ", traveler.FullName())
-	sb.WriteString("If the robbery works, the bandits split the loot with you. A tougher band costs more, but is harder to beat.\n\n")
+	fmt.Fprintf(&sb, "Pay a band to meet **%s** on the road home. If the robbery works, they split the loot with you. ", traveler.FullName())
+	sb.WriteString("A tougher band costs more, but is harder to beat.\n\n")
 	var btns []discordgo.MessageComponent
 	for _, bd := range game.BanditBands {
-		fmt.Fprintf(&sb, "**%s** (%d gold) — %s\n", bd.Name, bd.Price, bd.Desc)
+		fmt.Fprintf(&sb, "• **%s** · %d gold: %s\n", bd.Name, bd.Price, bd.Desc)
 		btns = append(btns, button(fmt.Sprintf("%s: %d gold", bd.Name, bd.Price), fmt.Sprintf("journey:band:%d:%s", a.ID, bd.Key), discordgo.DangerButton, c.Wealth < bd.Price))
 	}
-	fmt.Fprintf(&sb, "\nYou have **%d gold**. You can only hire one band for this journey.", c.Wealth)
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: sb.String(), Color: colorBad}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🗡️ Hire bandits", Description: strings.TrimSpace(sb.String()), Color: colorSecret,
+			Fields: []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)), fact("They're home", relTime(a.EndsAt))},
+			Footer: footer("🔒 One band per journey. Nobody will know it was you, unless they beat your bandits and one talks.")}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -196,7 +188,9 @@ func hireView(a store.Activity, c, traveler store.Character) *discordgo.Interact
 func (b *Bot) onHireBand(ctx context.Context, i *discordgo.InteractionCreate, id int64, key string) {
 	a, c, traveler, msg := b.hireCheck(ctx, i, id)
 	if msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}, Components: []discordgo.MessageComponent{}})
+		v := noteView(msg, colorMuted)
+		v.Components = []discordgo.MessageComponent{}
+		b.update(i, v)
 		return
 	}
 	band, ok := game.BanditBandByKey(key)
@@ -204,6 +198,7 @@ func (b *Bot) onHireBand(ctx context.Context, i *discordgo.InteractionCreate, id
 		return
 	}
 	var text string
+	color := colorMuted
 	switch err := b.store.HireBandits(ctx, a.ID, c.ID, band, time.Now()); {
 	case errors.Is(err, store.ErrExists):
 		text = "You've already paid a band to meet them."
@@ -214,12 +209,13 @@ func (b *Bot) onHireBand(ctx context.Context, i *discordgo.InteractionCreate, id
 	case err != nil:
 		text = err.Error()
 	default:
-		text = fmt.Sprintf("You paid **%s** %d gold. They'll be waiting for %s on the road home. You'll hear how it went <t:%d:R>.",
-			strings.ToLower(band.Name), band.Price, traveler.FullName(), a.EndsAt.Unix())
+		color = colorSecret
+		text = fmt.Sprintf("You paid **%s**. They'll be waiting for %s on the road home. You'll hear how it went %s.\n%s",
+			strings.ToLower(band.Name), traveler.FullName(), relTime(a.EndsAt), effects(fmt.Sprintf("-%d gold", band.Price)))
 		defer b.leak(ctx, c, game.SecretHiredBandits(c.FullName(), traveler.FullName(), strings.ToLower(band.Name), band.Price))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: text, Color: colorBad}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "🗡️ Hire bandits", Description: text, Color: color}},
 		Components: []discordgo.MessageComponent{},
 	})
 }
@@ -309,7 +305,7 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 		b.afterRealmChange(ctx, a.GuildID, before)
 	}
 
-	title := fmt.Sprintf("Home from %s", d.Place)
+	title := fmt.Sprintf("%s Home from %s", d.Emoji, d.Place)
 	color := colorGood
 	if !res.Success || robbed > 0 {
 		color = colorPanel
@@ -319,7 +315,7 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 	}}})
 	for _, n := range notes {
 		_, _ = b.dm(n.userID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-			Title: "Word from the road", Description: n.text, Color: colorBad,
+			Title: "🗡️ Word from the road", Description: n.text, Color: colorSecret,
 		}}})
 	}
 
