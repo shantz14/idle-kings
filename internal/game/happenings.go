@@ -16,7 +16,7 @@ const (
 	MaxHappenings = 2
 	// HappeningEncounter is the chance an activity a happening touches runs
 	// into it, in place of one of its usual events.
-	HappeningEncounter = 0.5
+	HappeningEncounter = 0.3
 )
 
 // Where a happening can be met. Journeys are split: some things are only
