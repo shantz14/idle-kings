@@ -492,20 +492,21 @@ func PickMatter(r Roller, realm Realm, recent []string) MatterEvent {
 	if len(recent) > MatterCooldown {
 		recent = recent[len(recent)-MatterCooldown:]
 	}
-	if e, ok := pickMatter(r, realm, recent, lastTheme(recent), nil); ok {
+	if e, ok := pickMatter(r, realm, recent, lastTheme(recent), nil, 0); ok {
 		return e
 	}
-	if e, ok := pickMatter(r, realm, recent, "", nil); ok {
+	if e, ok := pickMatter(r, realm, recent, "", nil, 0); ok {
 		return e
 	}
-	e, _ := pickMatter(r, realm, nil, "", nil)
+	e, _ := pickMatter(r, realm, nil, "", nil, 0)
 	return e
 }
 
 // pickMatter draws from the catalogue. laws nil leaves motions out;
 // otherwise motions come up when MotionAllowed, and motions to pass a law
-// only while there is room for one.
-func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws) (MatterEvent, bool) {
+// only while there is room for one. Events whose Earliest is above held (the
+// matters the court has held) are left out; laws nil leaves them all out.
+func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws, held int) (MatterEvent, bool) {
 	skip := map[string]bool{}
 	for _, k := range recent {
 		skip[k] = true
@@ -515,7 +516,7 @@ func pickMatter(r Roller, realm Realm, recent []string, avoid Theme, laws *Laws)
 	total := 0.0
 	for i := range MatterEvents {
 		e := &MatterEvents[i]
-		if e.FollowUpOnly || skip[e.Key] || (avoid != "" && e.Theme == avoid) {
+		if e.FollowUpOnly || skip[e.Key] || (avoid != "" && e.Theme == avoid) || (e.Earliest > 0 && (laws == nil || held < e.Earliest)) {
 			continue
 		}
 		w := 1.0

@@ -139,7 +139,11 @@ func (b *Bot) openMatter(ctx context.Context, court store.Court, st store.RealmS
 		if err != nil {
 			slog.Error("queued matters", "err", err)
 		}
-		ev = game.PickMatterAvoiding(b.rng, st.Trackers, recent, game.ActiveArcs(queued), st.Laws)
+		held, err := b.store.MattersHeld(ctx, court.GuildID)
+		if err != nil {
+			slog.Error("matters held", "err", err)
+		}
+		ev = game.PickMatterAvoiding(b.rng, st.Trackers, recent, game.ActiveArcs(queued), st.Laws, held)
 	}
 	closes, next := now.Add(b.senate.VoteWindow), now.Add(b.senate.Interval)
 	if ev.Auto { // a bill comes due: no vote, and it doesn't take the day's matter

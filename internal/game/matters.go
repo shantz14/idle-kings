@@ -26,6 +26,9 @@ type MatterEvent struct {
 	// motion to repeal it. Motions only come up when MotionAllowed.
 	Motion LawKey
 	Repeal bool
+	// Earliest is how many matters a court must have held before this one
+	// can come up at random (follow-ups and petitions ignore it).
+	Earliest int
 }
 
 // MatterOption is one choice. Hint is all players see before the vote;

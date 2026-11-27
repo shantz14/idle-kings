@@ -127,7 +127,7 @@ func TestPickMatterAvoidsRunningArcs(t *testing.T) {
 		t.Fatalf("active arcs: %v", active)
 	}
 	for n := 0; n < 3000; n++ {
-		e := PickMatterAvoiding(r, StartingRealm(), nil, active, nil)
+		e := PickMatterAvoiding(r, StartingRealm(), nil, active, nil, 1000)
 		if active[e.Arc] {
 			t.Fatalf("opened %s while %s was running", e.Key, e.Arc)
 		}

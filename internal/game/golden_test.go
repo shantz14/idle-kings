@@ -186,7 +186,7 @@ func goldenCases() map[string]any {
 		var picks []string
 		var recent []string
 		for n := 0; n < 60; n++ {
-			ev := PickMatterAvoiding(pr, realm, recent, map[string]bool{}, ls)
+			ev := PickMatterAvoiding(pr, realm, recent, map[string]bool{}, ls, 1000)
 			picks = append(picks, ev.Key)
 			recent = append(recent, ev.Key)
 		}

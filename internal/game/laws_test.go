@@ -112,7 +112,7 @@ func TestMotionsComeUpOnlyWhenTheyMakeSense(t *testing.T) {
 	ls := lawsOf(LawGrainDole)
 	motions := 0
 	for i := 0; i < 3000; i++ {
-		e := PickMatterAvoiding(r, StartingRealm(), nil, nil, ls)
+		e := PickMatterAvoiding(r, StartingRealm(), nil, nil, ls, 1000)
 		if e.Motion == "" {
 			continue
 		}
@@ -126,7 +126,7 @@ func TestMotionsComeUpOnlyWhenTheyMakeSense(t *testing.T) {
 	}
 	full := lawsOf(LawGrainDole, LawSlander, LawInformers, LawMartial, LawSorcery)
 	for i := 0; i < 3000; i++ {
-		if e := PickMatterAvoiding(r, StartingRealm(), nil, nil, full); e.Motion != "" && !e.Repeal {
+		if e := PickMatterAvoiding(r, StartingRealm(), nil, nil, full, 1000); e.Motion != "" && !e.Repeal {
 			t.Fatalf("no room for a law, but %s came up", e.Key)
 		}
 	}
@@ -402,5 +402,25 @@ func TestSlanderFine(t *testing.T) {
 	resolveRumor(zero{}, &res, host, liar, nil)
 	if res.Deltas[3].Wealth != 0 {
 		t.Fatal("no law, no fine")
+	}
+}
+
+func TestSecretBallotWaits(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 3))
+	seen := false
+	for held := 0; held < 400; held++ {
+		e := PickMatterAvoiding(r, StartingRealm(), nil, nil, nil, held%(2*LawSecretBallotEarliest))
+		if e.Key == MotionKey(LawSecretBallot) {
+			seen = true
+			if held%(2*LawSecretBallotEarliest) < LawSecretBallotEarliest {
+				t.Fatalf("the Secret Ballot came up after only %d matters", held%(2*LawSecretBallotEarliest))
+			}
+		}
+	}
+	for held := 0; !seen && held < 5000; held++ {
+		seen = PickMatterAvoiding(r, StartingRealm(), nil, nil, nil, LawSecretBallotEarliest).Key == MotionKey(LawSecretBallot)
+	}
+	if !seen {
+		t.Fatal("the Secret Ballot never came up once the court was old enough")
 	}
 }

@@ -62,8 +62,9 @@ func ActiveArcs(queued []string) map[string]bool {
 
 // PickMatterAvoiding is PickMatter, but never opens an arc that is already
 // under way (one of active), and may bring up motions to pass or repeal a
-// law (see MotionAllowed).
-func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[string]bool, laws Laws) MatterEvent {
+// law (see MotionAllowed). held is how many matters the court has held, for
+// events that only come up later (MatterEvent.Earliest).
+func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[string]bool, laws Laws, held int) MatterEvent {
 	if len(recent) > MatterCooldown {
 		recent = recent[len(recent)-MatterCooldown:]
 	}
@@ -74,15 +75,15 @@ func PickMatterAvoiding(r Roller, realm Realm, recent []string, active map[strin
 		}
 	}
 	all := append(skip, recent...)
-	if e, ok := pickMatter(r, realm, all, lastTheme(recent), &laws); ok {
+	if e, ok := pickMatter(r, realm, all, lastTheme(recent), &laws, held); ok {
 		return e
 	}
-	if e, ok := pickMatter(r, realm, all, "", &laws); ok {
+	if e, ok := pickMatter(r, realm, all, "", &laws, held); ok {
 		return e
 	}
 	// Everything was picked lately: allow repeats, but still never reopen a
 	// running arc or break the laws.
-	if e, ok := pickMatter(r, realm, skip, "", &laws); ok {
+	if e, ok := pickMatter(r, realm, skip, "", &laws, held); ok {
 		return e
 	}
 	return PickMatter(r, realm, recent)

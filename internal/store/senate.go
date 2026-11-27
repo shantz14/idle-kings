@@ -203,6 +203,14 @@ func (s *Store) RecentEventKeys(ctx context.Context, guildID string, n int) ([]s
 	return out, err
 }
 
+// MattersHeld counts the matters a court has opened, petitions and bills
+// included.
+func (s *Store) MattersHeld(ctx context.Context, guildID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM matters WHERE guild_id = ?`, guildID).Scan(&n)
+	return n, err
+}
+
 // DeferQueued pushes a queued follow-up back to a later time.
 func (s *Store) DeferQueued(ctx context.Context, id int64, due time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE realm_queue SET due_at = ? WHERE id = ?`, due.Unix(), id)

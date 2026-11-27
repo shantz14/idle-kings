@@ -58,6 +58,7 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 		"queue":          `SELECT id FROM realm_queue WHERE guild_id = 'g' AND due_at <= 5`,
 		"senators":       `SELECT id FROM senators WHERE guild_id = 'g'`,
 		"by user":        `SELECT id FROM characters WHERE user_id = 'a'`,
+		"matters held":   `SELECT COUNT(*) FROM matters WHERE guild_id = 'g'`,
 	} {
 		rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN `+q)
 		if err != nil {

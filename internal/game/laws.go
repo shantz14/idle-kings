@@ -98,6 +98,10 @@ const (
 	// Martial Law
 	LawPermitFee = 20 // gold to start a party, speech or circus
 
+	// Secret Ballot: matters held before the Senate moves to pass it, so a
+	// new court first learns how open votes and vote deals work.
+	LawSecretBallotEarliest = 12
+
 	// Licensed Sorcery
 	LawSorceryCheck = 10.0 // percent added to Senate rolls on sorcery matters
 
@@ -136,6 +140,9 @@ type LawDef struct {
 	Revenue map[SectorKey]float64
 	// Effects are the everyday rules it bends (see Laws.Rules).
 	Effects LawEffects
+	// Earliest is how many matters a court must have held before the
+	// Senate moves to pass it on its own (MatterEvent.Earliest).
+	Earliest int
 }
 
 // Title is the law's name with "the", e.g. "the Secret Ballot".
@@ -143,11 +150,12 @@ func (d LawDef) Title() string { return "the " + d.Name }
 
 var LawDefs = []LawDef{
 	{Key: LawSecretBallot, Name: "Secret Ballot", Emoji: "🗳️",
-		Desc:    "Nobody's vote is ever revealed. Senators can't tell who voted with them, a bought vote can't be checked, and only spies know the truth.",
-		Motion:  "A tribune proposes that the Senate vote in secret, with stones dropped into covered urns. \"Let every senator vote his conscience, and not his patron's,\" he says. The old families are not pleased.",
-		Repeal:  "The covered urns have hidden a great deal of treachery. A motion asks that votes be cast openly again, so the Senate can see who stands where.",
-		Traits:  map[Trait]float64{TraitScheming: 2, TraitIncorruptible: -1.5, TraitStern: -0.5, TraitConservative: -0.5},
-		Effects: LawEffects{SecretBallot: true}},
+		Desc:     "Nobody's vote is ever revealed. Senators can't tell who voted with them, a bought vote can't be checked, and only spies know the truth.",
+		Motion:   "A tribune proposes that the Senate vote in secret, with stones dropped into covered urns. \"Let every senator vote his conscience, and not his patron's,\" he says. The old families are not pleased.",
+		Repeal:   "The covered urns have hidden a great deal of treachery. A motion asks that votes be cast openly again, so the Senate can see who stands where.",
+		Traits:   map[Trait]float64{TraitScheming: 2, TraitIncorruptible: -1.5, TraitStern: -0.5, TraitConservative: -0.5},
+		Effects:  LawEffects{SecretBallot: true},
+		Earliest: LawSecretBallotEarliest},
 	{Key: LawBribery, Name: "Law Against Bribery", Emoji: "⚖️",
 		Desc:    "Bribing a senator costs more, and a bribe that comes out costs the briber their good name, and the respect of the Stern and the Incorruptible. Selling your vote to a senator is a crime too.",
 		Motion:  "Too much gold changes hands before every vote. A motion would make bribery of a senator a crime, tried before the whole Senate.",
@@ -469,7 +477,7 @@ func motionMatters() []MatterEvent {
 		}
 		out = append(out, MatterEvent{
 			Key: MotionKey(d.Key), Title: "A Motion for " + d.Title(), Prompt: d.Motion, Theme: ThemeLaw,
-			Motion: d.Key, Default: "reject",
+			Motion: d.Key, Default: "reject", Earliest: d.Earliest,
 			Options: []MatterOption{
 				{Key: "pass", Label: "Pass it", Hint: hint, Success: pass},
 				{Key: "reject", Label: "Reject it", Hint: "Things stay as they are.", Leans: L{LeanTradition: 1},

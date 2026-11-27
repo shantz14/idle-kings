@@ -82,7 +82,7 @@ func TestBalance(t *testing.T) {
 				}
 			}
 			if ev.Key == "" {
-				ev = PickMatterAvoiding(r, realm, recent, nil, laws)
+				ev = PickMatterAvoiding(r, realm, recent, nil, laws, d)
 			}
 			for _, l := range laws {
 				lawDays[l.Key]++
