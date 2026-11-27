@@ -51,14 +51,15 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 	case parts[0] == "senate":
 		b.update(i, b.senatePanel(ctx, c))
 	case parts[0] == "char":
-		b.update(i, b.characterPage(ctx, c, true))
+		b.open(i, b.characterPage(ctx, c, true), true)
 	case parts[0] == "estate":
 		b.update(i, b.estatePage(c, true))
 	case parts[0] == "cat" && len(parts) > 1:
 		b.update(i, categoryPanel(game.Category(parts[1]), c.Role))
 	case parts[0] == "act" && len(parts) > 1:
 		if d, ok := activityDefs[parts[1]]; ok && d.panel != nil {
-			b.update(i, d.panel(b, ctx, c))
+			a, _ := game.ActionByKey(parts[1])
+			b.open(i, d.panel(b, ctx, c), a.Secret)
 		}
 
 	}
@@ -90,7 +91,7 @@ func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.Inter
 		fact("Renown", game.Num(c.Renown)),
 		fact("Gold", fmt.Sprintf("%d (+%d/day)", c.Wealth, c.TotalIncome())),
 	}
-	return ephemeral(&discordgo.InteractionResponseData{
+	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{
 			row(cats...),
@@ -100,7 +101,7 @@ func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.Inter
 				withEmoji(button("Estate", "menu:estate", discordgo.SecondaryButton, false), emojiEstate),
 			),
 		},
-	})
+	}
 }
 
 func categoryPanel(cat game.Category, role string) *discordgo.InteractionResponseData {

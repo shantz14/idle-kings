@@ -89,8 +89,8 @@ func (b *Bot) onDeal(ctx context.Context, i *discordgo.InteractionCreate, parts 
 		return nil
 	}
 	switch {
-	case parts[0] == "start":
-		b.update(i, dealStart(""))
+	case parts[0] == "start": // a deal is private, even from a public estate page
+		b.open(i, dealStart(""), true)
 	case parts[0] == "who" && len(vals()) > 0:
 		other, err := b.store.GetCharacter(ctx, c.GuildID, vals()[0])
 		if err != nil || other.ID == c.ID {

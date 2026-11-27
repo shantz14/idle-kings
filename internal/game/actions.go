@@ -44,7 +44,10 @@ type ActionDef struct {
 	Category    Category
 	Description string
 	Public      bool
-	Roles       []string // empty = every role
+	// Secret panels open privately even from a screen everyone in a server
+	// can see, so nobody watching learns what you're up to.
+	Secret bool
+	Roles  []string // empty = every role
 }
 
 var Actions = []ActionDef{
@@ -77,7 +80,7 @@ var Actions = []ActionDef{
 		Description: fmt.Sprintf("Lobby to put a lasting law, or its repeal, before the Senate. Takes 2 hours and costs %d gold. It always reaches the floor, and your name goes on it, win or lose.", PetitionCost),
 	},
 	{
-		Key: KindCourt, Name: "Speak to a Senator", Emoji: "🎩", Category: CatDiplomacy,
+		Key: KindCourt, Name: "Speak to a Senator", Emoji: "🎩", Category: CatDiplomacy, Secret: true,
 		Description: "Call on a senator: ask how they'll vote, bribe them, sell them your vote, or spend an hour courting them. Their opinion of you may rise, or fall.",
 	},
 	{
@@ -89,27 +92,27 @@ var Actions = []ActionDef{
 		Description: "Pay for a statue, road, temple or aqueduct bearing your name. Takes days to build, but gives you lasting influence.",
 	},
 	{
-		Key: KindInvest, Name: "Invest in a Venture", Emoji: "📈", Category: CatMonetary,
+		Key: KindInvest, Name: "Invest in a Venture", Emoji: "📈", Category: CatMonetary, Secret: true,
 		Description: "Buy into one of the realm's industries for a share of its daily earnings. Takes 3 hours to strike the deal.",
 	},
 	{
-		Key: KindPlantSpies, Name: "Plant Spies", Emoji: "🕵️", Category: CatIntrigue,
+		Key: KindPlantSpies, Name: "Plant Spies", Emoji: "🕵️", Category: CatIntrigue, Secret: true,
 		Description: "Slip an agent into another player's household, and hear what they do in private. Takes an hour. Your network builds up over time; a clumsy agent may be caught.",
 	},
 	{
-		Key: KindRootOut, Name: "Root Out Spies", Emoji: "🔍", Category: CatIntrigue,
+		Key: KindRootOut, Name: "Root Out Spies", Emoji: "🔍", Category: CatIntrigue, Secret: true,
 		Description: "Search your own household for other players' agents. Takes 2 hours.",
 	},
 	{
-		Key: KindDossier, Name: "Your Dossier", Emoji: "📁", Category: CatIntrigue,
+		Key: KindDossier, Name: "Your Dossier", Emoji: "📁", Category: CatIntrigue, Secret: true,
 		Description: "Everything your spies have caught your rivals doing. Denounce them whenever you like; it doesn't take your action.",
 	},
 	{
-		Key: KindConspiracy, Name: "Conspiracies", Emoji: "🕸️", Category: CatIntrigue,
+		Key: KindConspiracy, Name: "Conspiracies", Emoji: "🕸️", Category: CatIntrigue, Secret: true,
 		Description: "Plot a murder, a theft, a forgery or a senator's fall, and invite players and senators in. It ripens over days without taking your action, but every day it may be found out.",
 	},
 	{
-		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Emoji: "🪙", Category: CatIntrigue,
+		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Emoji: "🪙", Category: CatIntrigue, Secret: true,
 		Description: "Quietly move the Republic's silver into your own purse. Takes 2 hours. If you're caught, everyone will know.",
 	},
 	{
