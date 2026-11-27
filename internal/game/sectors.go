@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 )
@@ -371,4 +372,32 @@ func AllSectors(health float64) map[SectorKey]SectorChange {
 		m[d.Key] = SectorChange{Health: health}
 	}
 	return m
+}
+
+// Slice is one player's share of a sector.
+type Slice struct {
+	CharacterID int64
+	Share       float64
+}
+
+// Ownership splits a sector between its player owners and the NPC houses.
+// eff and totals are effective stakes (see EffectiveStakes). Players come
+// biggest first, ties by id; their shares and houses sum to 1.
+func Ownership(d SectorDef, eff map[int64]Stakes, totals Stakes) (players []Slice, houses float64) {
+	total := totals[d.Key]
+	for id, st := range eff {
+		if sh := Share(d, st[d.Key], total); sh > 0 {
+			players = append(players, Slice{id, sh})
+		}
+	}
+	sort.Slice(players, func(a, b int) bool {
+		if players[a].Share != players[b].Share {
+			return players[a].Share > players[b].Share
+		}
+		return players[a].CharacterID < players[b].CharacterID
+	})
+	if d.HouseStake+total <= 0 {
+		return players, 1
+	}
+	return players, d.HouseStake / (d.HouseStake + total)
 }

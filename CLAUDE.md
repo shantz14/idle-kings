@@ -34,7 +34,8 @@ internal/store   SQLite: schema.sql (applied on open, no migrations), characters
 internal/bot     Discord: commands.go (registration + dispatch), creator, menu, party, speak (Speak to a Senator: the senator's page, asking), court,
                  invest, duel, hunt, journey (journeys, hiring bandits), intrigue (spies), leak, senate, votetrade, estate, shop,
                  estatetrade (player deals), influence (canvass, circus, announce helpers),
-                 speech, works, petition, laws (denouncing, permits, laws field), dossier (saved spy reports), info pages
+                 speech, works, petition, laws (denouncing, permits, laws field), dossier (saved spy reports), charts (ownership pie charts: PNGs drawn in pure Go with
+                 golang.org/x/image's Go font, attached via `attachChart`), info pages
 ```
 Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init` (`componentRoutes["hunt"] = (*Bot).onHunt`, `modalRoutes` for modals; see `routes.go`), and documents its IDs at the top. Handlers always get at least one part. `limits_test.go` fails on any tested button with no route.
 

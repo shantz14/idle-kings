@@ -270,6 +270,11 @@ func (b *Bot) send(i *discordgo.InteractionCreate, t discordgo.InteractionRespon
 	if d.Components == nil {
 		d.Components = []discordgo.MessageComponent{}
 	}
+	// An updated message keeps its old pictures unless told otherwise: keep
+	// none, so only this view's files (if any) are on it.
+	if t == discordgo.InteractionResponseUpdateMessage && d.Attachments == nil {
+		d.Attachments = &[]*discordgo.MessageAttachment{}
+	}
 	if _, ok := b.deferred.LoadAndDelete(i.ID); ok {
 		b.sendDeferred(i, t, d)
 		return
@@ -284,11 +289,11 @@ func (b *Bot) sendDeferred(i *discordgo.InteractionCreate, t discordgo.Interacti
 	var err error
 	if t == discordgo.InteractionResponseUpdateMessage {
 		_, err = b.s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: &d.Content, Embeds: &d.Embeds, Components: &d.Components,
+			Content: &d.Content, Embeds: &d.Embeds, Components: &d.Components, Files: d.Files, Attachments: d.Attachments,
 		})
 	} else {
 		_, err = b.s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: d.Content, Embeds: d.Embeds, Components: d.Components, Flags: d.Flags,
+			Content: d.Content, Embeds: d.Embeds, Components: d.Components, Flags: d.Flags, Files: d.Files,
 		})
 	}
 	if err != nil {

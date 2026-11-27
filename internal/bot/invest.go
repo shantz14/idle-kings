@@ -120,7 +120,7 @@ func (b *Bot) investPanel(ctx context.Context, c store.Character, note string) *
 	if err != nil {
 		return noteView("The realm isn't ready yet. Ask the admin to `/start` the game.", colorMuted)
 	}
-	return investView(c, st, game.SectorKey(""), busy, note, b.investFor)
+	return investView(c, st, game.SectorKey(""), nil, busy, note, b.investFor)
 }
 
 func (b *Bot) investAmountPanel(ctx context.Context, c store.Character, key game.SectorKey, note string) *discordgo.InteractionResponseData {
@@ -128,12 +128,19 @@ func (b *Bot) investAmountPanel(ctx context.Context, c store.Character, key game
 	if err != nil {
 		return noteView("The realm isn't ready yet.", colorMuted)
 	}
-	return investView(c, st, key, busy, note, b.investFor)
+	var own *pieCard
+	if cards, err := b.ownership(ctx, c.GuildID, c.ID); err != nil {
+		slog.Error("ownership", "err", err)
+	} else if card, ok := cardFor(cards, key); ok {
+		own = &card
+	}
+	return investView(c, st, key, own, busy, note, b.investFor)
 }
 
 // investView is the sector picker, plus the amount buttons once a sector is
-// chosen. Revenue isn't a roll, so it's shown; the deal odds never are.
-func investView(c store.Character, st store.RealmState, key game.SectorKey, busy, note string, dur time.Duration) *discordgo.InteractionResponseData {
+// chosen, with who owns it (own, nil to leave it out). Revenue isn't a
+// roll, so it's shown; the deal odds never are.
+func investView(c store.Character, st store.RealmState, key game.SectorKey, own *pieCard, busy, note string, dur time.Duration) *discordgo.InteractionResponseData {
 	intro := "Put gold into one of the realm's industries. It grows the sector and buys you a share of what it earns every day; " +
 		"how big a share depends on how well you negotiate."
 	e := actionEmbed(game.KindInvest, withNote(busyNote(busy, note), intro))
@@ -172,6 +179,9 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 	if v, ok := c.Ventures[d.Key]; ok {
 		card.Fields = append(card.Fields, fact("You own", fmt.Sprintf("%s · %s gold/day", pct(v.Share), game.Num(v.Income))))
 	}
+	if own != nil {
+		card.Fields = append(card.Fields, &discordgo.MessageEmbedField{Name: "👥 Who owns it", Value: legendList(*own)})
+	}
 	card.Footer = footer(fmt.Sprintf("Invest anything from %d to %d gold.", game.InvestMin, game.InvestMax))
 	embeds = append(embeds, card)
 
@@ -181,7 +191,11 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 			discordgo.SuccessButton, busy != "" || c.Wealth < g))
 	}
 	btns = append(btns, withEmoji(button("Custom amount", "invest:custom:"+string(d.Key), discordgo.PrimaryButton, busy != "" || c.Wealth < game.InvestMin), "✏️"))
-	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(btns...), row(back))}
+	data := &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(btns...), row(back))}
+	if own != nil {
+		attachChart(data, card, "ownership.png", pieImage(*own))
+	}
+	return data
 }
 
 // ---- starting ----

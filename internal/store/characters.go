@@ -362,6 +362,7 @@ type CharacterName struct {
 	Name     string
 	Family   string
 	FullName string
+	Crest    game.Crest
 }
 
 // CharacterNames looks up names and Discord users without loading the
@@ -372,12 +373,16 @@ func (s *Store) CharacterNames(ctx context.Context, ids []int64) (map[int64]Char
 		return out, nil
 	}
 	in, args := inList(ids)
-	list, err := queryAll(ctx, s.db, `SELECT id, user_id, name, family_name FROM characters WHERE id IN `+in,
+	list, err := queryAll(ctx, s.db, `SELECT id, user_id, name, family_name, crest FROM characters WHERE id IN `+in,
 		func(r scanner) (CharacterName, error) {
 			var n CharacterName
-			err := r.Scan(&n.ID, &n.UserID, &n.Name, &n.Family)
+			var crest string
+			if err := r.Scan(&n.ID, &n.UserID, &n.Name, &n.Family, &crest); err != nil {
+				return n, err
+			}
 			n.FullName = n.Name + " " + n.Family
-			return n, err
+			_ = json.Unmarshal([]byte(crest), &n.Crest) // a bad crest just draws grey
+			return n, nil
 		}, args...)
 	for _, n := range list {
 		out[n.ID] = n

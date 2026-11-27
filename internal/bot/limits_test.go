@@ -243,9 +243,12 @@ func TestInvestViewsFitDiscord(t *testing.T) {
 	}
 	c.VentureIncome = 863.8
 	long := "You are negotiating a stake in Timber & Shipbuilding. The deal is struck <t:9999999999:R>."
-	checkLimits(t, "invest picker", investView(c, st, "", long, "a note", time.Hour))
+	checkLimits(t, "invest picker", investView(c, st, "", nil, long, "a note", time.Hour))
+	eff, totals, owners := sampleCourt(40)
+	cards := ownershipCards(eff, totals, owners, 1)
 	for _, d := range game.SectorDefs {
-		checkLimits(t, "invest "+string(d.Key), investView(c, st, d.Key, long, "a note", time.Hour))
+		card, _ := cardFor(cards, d.Key)
+		checkLimits(t, "invest "+string(d.Key), investView(c, st, d.Key, &card, long, "a note", time.Hour))
 	}
 	page := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x", Description: "x",
 		Fields: []*discordgo.MessageEmbedField{{Name: "Industries", Value: industriesBlock(st)}, venturesField(c, true)}}}}

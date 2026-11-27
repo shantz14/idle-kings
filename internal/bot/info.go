@@ -40,7 +40,11 @@ func (b *Bot) onInfoCommand(ctx context.Context, i *discordgo.InteractionCreate,
 	}
 	switch name {
 	case "realm":
-		show(b.realmPage(ctx, c.GuildID))
+		viewer := c.ID
+		if public { // a public post names nobody in a secret industry
+			viewer = 0
+		}
+		show(b.realmPage(ctx, c.GuildID, viewer))
 	case "players":
 		show(b.playersPage(ctx, c.GuildID))
 	case "profile":
@@ -107,7 +111,9 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 
 // ---- the realm ----
 
-func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.InteractionResponseData {
+// realmPage is /realm. viewer is who sees it (0 for a public post): only
+// they are named in a secret industry's ownership.
+func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *discordgo.InteractionResponseData {
 	st, err := b.store.GetRealm(ctx, guildID)
 	if err != nil {
 		return noteView("This court has no realm yet.", colorMuted)
@@ -163,7 +169,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 			fall = append(fall, t.Emoji+" "+t.Name)
 		}
 	}
-	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+	e := &discordgo.MessageEmbed{
 		Title:       titled(emojiRealm, "The Realm"),
 		Description: status + "\n\n" + trackers.String(),
 		Color:       color,
@@ -172,10 +178,20 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 			{Name: "📜 Chronicle", Value: chronicle},
 			lawsField(st.Laws),
 			{Name: "🏭 Industries", Value: industriesBlock(st)},
-			fact("👥 The court", fmt.Sprintf("%d players · %d senators", players, len(sen))),
-			fact("💀 At 0, everyone loses", strings.Join(fall, ", ")),
 		},
-	}}}
+	}
+	data := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}}
+	if cards, err := b.ownership(ctx, guildID, viewer); err != nil {
+		slog.Error("ownership", "err", err)
+	} else {
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "🥧 Who owns the industries", Value: legendLines(cards)})
+		attachChart(data, e, "industries.png", pieGrid(cards))
+	}
+	e.Fields = append(e.Fields,
+		fact("👥 The court", fmt.Sprintf("%d players · %d senators", players, len(sen))),
+		fact("💀 At 0, everyone loses", strings.Join(fall, ", ")),
+	)
+	return data
 }
 
 // ---- players ----
@@ -351,7 +367,15 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 	if back {
 		btns = append(btns, backTo("menu:home"))
 	}
-	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: []discordgo.MessageComponent{row(btns...)}}
+	data := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: []discordgo.MessageComponent{row(btns...)}}
+	if len(c.Ventures) > 0 { // the industries you're in, and who you share them with
+		if cards, err := b.ownership(ctx, c.GuildID, c.ID); err != nil {
+			slog.Error("ownership", "err", err)
+		} else {
+			attachChart(data, e, "ventures.png", pieGrid(ownedCards(cards)))
+		}
+	}
+	return data
 }
 
 // ---- senators ----
