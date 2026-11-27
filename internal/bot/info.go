@@ -101,7 +101,8 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			return
 		}
 		ops, _ := b.store.Opinions(ctx, c.ID)
-		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s, ops[s.ID])}}))
+		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s, ops[s.ID])},
+			Components: []discordgo.MessageComponent{row(button("Speak to them", fmt.Sprintf("speak:open:%d", s.ID), discordgo.PrimaryButton, false))}}))
 	}
 }
 
@@ -405,7 +406,8 @@ var helpPages = []struct{ title, body string }{
 		"Something will probably go wrong during the evening; I'll DM you to decide what to do.\n\n" +
 		"**Attending** someone's party, you can make friends, talk business, or **spread rumors** about another player. " +
 		"Targets and hosts may notice the rumors, and might even learn who started them.\n\n" +
-		"**Court a Senator** (Diplomacy): spend an hour with a senator, flattering them, bringing a gift, sharing secrets or talking strategy. " +
+		"**Speak to a Senator** (Diplomacy): call on a senator. **Ask how they'll vote** on what's before the Senate (once per matter): depending on what they think of you, your Diplomacy and their character, they may tell you, refuse, or lie. " +
+		"You can bribe them or sell them your vote from there too, or **court** them: spend an hour flattering them, bringing a gift, sharing secrets or talking strategy. " +
 		"Pick the approach that suits their traits. It can raise their opinion of you, or lower it if it goes badly.\n\n" +
 		"**Invest in a Venture** (Monetary): put gold into one of the realm's industries, from farms and mines to the Black Market. " +
 		"Your gold grows the industry and buys you a share of what it earns every day; how big a share depends on how well you negotiate. " +

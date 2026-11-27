@@ -196,6 +196,36 @@ func TestCourtViewFitsDiscord(t *testing.T) {
 		Components: []discordgo.MessageComponent{senatorSelect(m, sen, map[int64]store.Bribe{1: {}}, ops)}})
 }
 
+func TestSpeakViewFitsDiscord(t *testing.T) {
+	sen := game.GenerateSenate(rand.New(rand.NewPCG(1, 2)), game.SenateSize)
+	for i := range sen {
+		sen[i].ID = int64(i + 1)
+	}
+	ops := game.Opinions{1: 100, 2: -100, 3: 0.4}
+	long := strings.Repeat("W", 200)
+	ev := game.MatterEvents[0]
+	ev.Title = long
+	ask := &store.VoteAsk{Text: strings.Repeat("\"I'll vote to do the thing.\" ", 10)}
+	matters := [][]speakMatter{
+		nil,
+		{{Matter: store.Matter{ID: 999999}, Event: ev, Offer: 99999}},
+		{{Matter: store.Matter{ID: 999998}, Event: ev, Ask: ask, Sold: true}, {Matter: store.Matter{ID: 999999}, Event: ev, Ask: ask, Offer: 5}},
+	}
+	c := store.Character{Name: "A", FamilyName: "B"}
+	for _, busy := range []string{"", "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."} {
+		checkLimits(t, "speak none", speakView(c, sen, ops, nil, "", nil, busy, "a note"))
+		for k := range sen[:3] {
+			s := sen[k]
+			for n, ms := range matters {
+				for _, visits := range []int{0, 5} {
+					checkLimits(t, fmt.Sprintf("speak %d %d %d %q", s.ID, n, visits, busy),
+						speakView(c, sen, ops, &s, game.Greeting(s, ops[s.ID], visits), ms, busy, long))
+				}
+			}
+		}
+	}
+}
+
 func TestOpinionTags(t *testing.T) {
 	for v, want := range map[float64]string{35: "🟢 +35", -20: "🔴 -20", 0.3: "⚪ 0", -0.4: "⚪ 0"} {
 		if got := opinionTag(v); got != want {
