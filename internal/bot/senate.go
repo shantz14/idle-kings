@@ -534,7 +534,7 @@ func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.Int
 			backTo("menu:home"),
 		)}
 	}
-	return ephemeral(&discordgo.InteractionResponseData{Embeds: embeds, Components: comps})
+	return &discordgo.InteractionResponseData{Embeds: embeds, Components: comps}
 }
 
 // senateTotal is the Senate's whole vote weight: every senator and player.

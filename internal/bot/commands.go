@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -16,10 +17,6 @@ func commands() []*discordgo.ApplicationCommand {
 	guildOnly := &[]discordgo.InteractionContextType{discordgo.InteractionContextGuild}
 	anywhere := &[]discordgo.InteractionContextType{discordgo.InteractionContextGuild, discordgo.InteractionContextBotDM}
 	install := &[]discordgo.ApplicationIntegrationType{discordgo.ApplicationIntegrationGuildInstall}
-	public := &discordgo.ApplicationCommandOption{
-		Type: discordgo.ApplicationCommandOptionBoolean, Name: "public",
-		Description: "Post it for everyone in the channel instead of just you",
-	}
 	cmd := func(name, desc string, ctxs *[]discordgo.InteractionContextType, opts ...*discordgo.ApplicationCommandOption) *discordgo.ApplicationCommand {
 		return &discordgo.ApplicationCommand{Name: name, Description: desc, Contexts: ctxs, IntegrationTypes: install, Options: opts}
 	}
@@ -45,12 +42,11 @@ func commands() []*discordgo.ApplicationCommand {
 		cmd("character", "Your full character sheet", anywhere),
 		cmd("estate", "Your properties and possessions", anywhere),
 		cmd("shop", "Buy houses, art, artifacts, weapons and armor", anywhere),
-		cmd("realm", "The state of the realm and recent Senate decisions", anywhere, public),
-		cmd("players", "Everyone at court, by influence", anywhere, public),
+		cmd("realm", "The state of the realm and recent Senate decisions", anywhere),
+		cmd("players", "Everyone at court, by influence", anywhere),
 		cmd("profile", "A player's public profile", anywhere,
 			&discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionUser, Name: "player",
-				Description: "Whose profile (defaults to yours)"},
-			public),
+				Description: "Whose profile (defaults to yours)"}),
 		cmd("help", "How to play", anywhere),
 		adminCommand(guildOnly, install),
 	}
@@ -112,15 +108,15 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			}
 			switch name {
 			case "court":
-				b.respond(i, b.homePanel(ctx, c))
+				b.respond(i, screen(i, b.homePanel(ctx, c)))
 			case "senate":
-				b.respond(i, b.senatePanel(ctx, c))
-			case "character":
+				b.respond(i, screen(i, b.senatePanel(ctx, c)))
+			case "character": // exact stats and spies: always private
 				b.respond(i, ephemeral(b.characterPage(ctx, c, false)))
 			case "estate":
-				b.respond(i, ephemeral(b.estatePage(c, false)))
+				b.respond(i, screen(i, b.estatePage(c, false)))
 			case "shop":
-				b.respond(i, ephemeral(b.shopPanel(ctx, c, shopProps, "")))
+				b.respond(i, screen(i, b.shopPanel(ctx, c, shopProps, "")))
 			}
 		}
 	case discordgo.InteractionApplicationCommandAutocomplete:
@@ -128,6 +124,10 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.onAdminAutocomplete(ctx, i)
 		}
 	case discordgo.InteractionMessageComponent:
+		if owner, locked := lockedOut(i); locked {
+			b.reply(i, fmt.Sprintf("This is <@%s>'s screen. Use `/court` to open your own.", owner))
+			return
+		}
 		b.dispatch(ctx, i, componentRoutes, i.MessageComponentData().CustomID)
 	case discordgo.InteractionModalSubmit:
 		b.dispatch(ctx, i, modalRoutes, i.ModalSubmitData().CustomID)
@@ -253,6 +253,71 @@ func modalValues(d discordgo.ModalSubmitInteractionData) map[string]string {
 func ephemeral(d *discordgo.InteractionResponseData) *discordgo.InteractionResponseData {
 	d.Flags = discordgo.MessageFlagsEphemeral
 	return d
+}
+
+// ---- public screens ----
+//
+// In a server, screens are posted for everyone in the channel to see; in
+// DMs they're private anyway. Secret panels (ActionDef.Secret, the full
+// character sheet) open as a private popup instead, and only the player who
+// opened a public screen can press its buttons.
+
+// inServer reports whether the interaction happened in a server channel.
+func inServer(i *discordgo.InteractionCreate) bool { return i.GuildID != "" }
+
+// publicMessage reports whether a component is on a message everyone in a
+// server channel can see.
+func publicMessage(i *discordgo.InteractionCreate) bool {
+	return inServer(i) && i.Message != nil && i.Message.Flags&discordgo.MessageFlagsEphemeral == 0
+}
+
+// screen makes a view public in a server, and leaves it private in DMs.
+func screen(i *discordgo.InteractionCreate, d *discordgo.InteractionResponseData) *discordgo.InteractionResponseData {
+	if inServer(i) {
+		d.Flags &^= discordgo.MessageFlagsEphemeral
+		return d
+	}
+	return ephemeral(d)
+}
+
+// open shows a view in place of the clicked one. A secret view clicked on a
+// public screen opens as a private popup instead.
+func (b *Bot) open(i *discordgo.InteractionCreate, d *discordgo.InteractionResponseData, secret bool) {
+	if secret && publicMessage(i) {
+		b.respond(i, ephemeral(d))
+		return
+	}
+	b.update(i, d)
+}
+
+// openToAll are custom ID prefixes anyone may press on someone else's
+// public message: the Join button on /start, and Make an offer on a profile
+// (it opens a private popup for whoever pressed it).
+var openToAll = map[string]bool{"cc": true, "deal": true}
+
+// ownerOf is who opened a message with a slash command or button, or "" for
+// messages the bot posted itself (announcements).
+func ownerOf(m *discordgo.Message) string {
+	switch {
+	case m == nil:
+		return ""
+	case m.InteractionMetadata != nil && m.InteractionMetadata.User != nil:
+		return m.InteractionMetadata.User.ID
+	case m.Interaction != nil && m.Interaction.User != nil:
+		return m.Interaction.User.ID
+	}
+	return ""
+}
+
+// lockedOut reports whether a click on someone else's public screen should
+// be turned away, and who that screen belongs to.
+func lockedOut(i *discordgo.InteractionCreate) (owner string, locked bool) {
+	if !publicMessage(i) {
+		return "", false
+	}
+	owner = ownerOf(i.Message)
+	prefix, _, _ := strings.Cut(i.MessageComponentData().CustomID, ":")
+	return owner, owner != "" && owner != userOf(i).ID && !openToAll[prefix]
 }
 
 // deferUpdate acknowledges a component click at once, for handlers about

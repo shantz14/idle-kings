@@ -25,20 +25,16 @@ func init() {
 
 func (b *Bot) onInfoCommand(ctx context.Context, i *discordgo.InteractionCreate, name string) {
 	if name == "help" {
-		b.respond(i, ephemeral(helpPage(0)))
+		b.respond(i, screen(i, helpPage(0)))
 		return
 	}
 	c, ok := b.myCharacter(ctx, i)
 	if !ok {
 		return
 	}
-	public := optBool(i, "public")
-	show := func(d *discordgo.InteractionResponseData) {
-		if !public {
-			ephemeral(d)
-		}
-		b.respond(i, d)
-	}
+	// Public in a server, private in DMs.
+	public := inServer(i)
+	show := func(d *discordgo.InteractionResponseData) { b.respond(i, screen(i, d)) }
 	switch name {
 	case "realm":
 		viewer := c.ID
@@ -60,10 +56,8 @@ func (b *Bot) onInfoCommand(ctx context.Context, i *discordgo.InteractionCreate,
 		}
 		// Stats and gold only on your own profile, and only privately.
 		d := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{
-			b.profileEmbed(ctx, target, target.ID == c.ID && !public)}}
-		if !public {
-			d.Components = profileButtons(target, target.ID == c.ID)
-		}
+			b.profileEmbed(ctx, target, target.ID == c.ID && !public)},
+			Components: profileButtons(target, target.ID == c.ID)}
 		show(d)
 	}
 }
