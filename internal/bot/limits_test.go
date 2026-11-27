@@ -545,3 +545,48 @@ func mustMatter(t *testing.T, key string) game.MatterEvent {
 	}
 	return ev
 }
+
+func TestConspiracyViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 1000}
+	tgt := store.Character{ID: 999999999, Name: long, FamilyName: long}
+	for k := range game.Items {
+		if len(tgt.Holdings) < 40 {
+			tgt.Holdings = append(tgt.Holdings, store.Holding{ID: 999999999 + int64(k), Key: game.Items[k].Key})
+		}
+	}
+	var senators []game.Senator
+	for i, p := range game.Personas {
+		if i < 30 {
+			senators = append(senators, game.Senator{ID: int64(999999 + i), Name: p.Name, Traits: p.Traits, Influence: 16})
+		}
+	}
+	checkLimits(t, "conspiracy schemes", schemesView(3, false, "a note"))
+	checkLimits(t, "conspiracy schemes alone", schemesView(0, true, ""))
+	for _, sc := range game.SchemeDefs {
+		checkLimits(t, "conspiracy target "+sc.Key, targetView(sc, senators, "a note"))
+		checkLimits(t, "conspiracy purse "+sc.Key, plotPurseView(c, sc, game.TargetSenator, 999999999, 999999999, long+" "+long, "a note"))
+		sen := senators[0]
+		pv := plotView{
+			K:      store.Conspiracy{Activity: store.Activity{ID: 999999999, EndsAt: time.Unix(9999999999, 0)}, Progress: 70},
+			Scheme: sc, Leader: c, Target: &tgt, ItemName: long, Senators: senators[:8],
+		}
+		for i := 0; i < 8; i++ {
+			pv.Members = append(pv.Members, tgt)
+			pv.Invited = append(pv.Invited, tgt)
+		}
+		if sc.Aims(game.TargetSenator) && !sc.Aims(game.TargetPlayer) {
+			pv.Target, pv.SenTgt = nil, &sen
+		}
+		checkLimits(t, "conspiracy leader "+sc.Key, leaderView(pv, senators, 80, false, "", time.Hour, 3, "a note"))
+		checkLimits(t, "conspiracy striking "+sc.Key, leaderView(pv, nil, 10, true, "", time.Hour, 0, ""))
+		checkLimits(t, "conspiracy busy "+sc.Key, leaderView(pv, senators, 10, false, "You are busy.", time.Hour, 0, ""))
+		checkLimits(t, "conspiracy member "+sc.Key, memberView(pv, store.MemberJoined, "a note"))
+		checkLimits(t, "conspiracy invited "+sc.Key, memberView(pv, store.MemberInvited, ""))
+		checkLimits(t, "conspiracy invite DM "+sc.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{inviteEmbed(pv)}, Components: []discordgo.MessageComponent{inviteButtons(pv.K.ID)},
+		})
+	}
+	checkLimits(t, "conspiracy steal", stealView(tgt))
+	checkLimits(t, "conspiracy ask senator", askSenatorView(c, senators[0], -40, "a note"))
+}

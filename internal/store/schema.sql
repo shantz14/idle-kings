@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS characters (
     wealth         INTEGER NOT NULL DEFAULT 0,
     daily_income   INTEGER NOT NULL DEFAULT 0, -- base income; estate items add on top
     residence_id   INTEGER,                    -- estate_items.id of the property they live in
+    heir_unnamed   INTEGER NOT NULL DEFAULT 0, -- 1 after a death, until the player names the heir
     last_income_at INTEGER NOT NULL,
     created_at     INTEGER NOT NULL,
     UNIQUE (guild_id, user_id)
@@ -297,3 +298,30 @@ CREATE TABLE IF NOT EXISTS vote_asks (
     asked_at     INTEGER NOT NULL,
     PRIMARY KEY (matter_id, senator_id, character_id)
 );
+
+-- ---- conspiracies ----
+
+-- A plot's state. The plot itself is an activity of kind 'conspiracy'
+-- (host = leader, goal = scheme, target_id = a character or a senator,
+-- spend = the purse's gold, ends_at = when it falls apart).
+CREATE TABLE IF NOT EXISTS conspiracies (
+    activity_id  INTEGER PRIMARY KEY REFERENCES activities(id),
+    target_kind  TEXT NOT NULL,              -- game.TargetKind
+    target_item  INTEGER NOT NULL DEFAULT 0, -- estate_items.id to steal; 0 = their coffers
+    purse        TEXT NOT NULL DEFAULT 'none',
+    progress     REAL NOT NULL DEFAULT 0,
+    warned       INTEGER NOT NULL DEFAULT 0, -- game.Discovery
+    next_step_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS conspiracies_step ON conspiracies (next_step_at);
+
+-- Who was asked into a plot, and what they said.
+CREATE TABLE IF NOT EXISTS conspiracy_members (
+    activity_id INTEGER NOT NULL REFERENCES activities(id),
+    member_kind TEXT NOT NULL,    -- player | senator
+    member_id   INTEGER NOT NULL, -- characters.id or senators.id
+    status      TEXT NOT NULL,    -- invited | joined | declined | left
+    invited_at  INTEGER NOT NULL,
+    PRIMARY KEY (activity_id, member_kind, member_id)
+);
+CREATE INDEX IF NOT EXISTS conspiracy_members_member ON conspiracy_members (member_kind, member_id);

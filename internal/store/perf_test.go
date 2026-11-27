@@ -59,6 +59,8 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 		"senators":       `SELECT id FROM senators WHERE guild_id = 'g'`,
 		"by user":        `SELECT id FROM characters WHERE user_id = 'a'`,
 		"matters held":   `SELECT COUNT(*) FROM matters WHERE guild_id = 'g'`,
+		"plot days":      `SELECT activity_id FROM conspiracies k WHERE k.next_step_at <= 5`,
+		"plots of":       `SELECT activity_id FROM conspiracy_members WHERE member_kind = 'player' AND member_id = 1`,
 	} {
 		rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN `+q)
 		if err != nil {

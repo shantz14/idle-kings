@@ -22,8 +22,9 @@ func ScaleInfluence(gain, current float64) float64 {
 }
 
 // FreeKinds are activities that don't take up the character's one action:
-// a public work is built by others while you get on with things.
-var FreeKinds = []string{KindWork}
+// a public work is built by others while you get on with things, and a
+// conspiracy ripens in the dark. Each kind is one at a time.
+var FreeKinds = []string{KindWork, KindConspiracy}
 
 // UsesSlot reports whether an activity kind takes up the character's action.
 func UsesSlot(kind string) bool {

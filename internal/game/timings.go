@@ -21,6 +21,7 @@ type Timings struct {
 	Embezzle time.Duration // Embezzle from the Treasury
 	Petition time.Duration // Petition the Senate
 	Journey  PartyTiming   // Undertake a Journey (abroad takes twice as long)
+	Strike   time.Duration // a conspiracy's leader striking
 }
 
 var (
@@ -34,6 +35,7 @@ var (
 		Embezzle: DefaultEmbezzleDuration,
 		Petition: DefaultPetitionDuration,
 		Journey:  DefaultJourneyTiming,
+		Strike:   DefaultStrikeDuration,
 	}
 	FastTimings = Timings{
 		Party: FastPartyTiming, Senate: FastSenateTiming,
@@ -45,5 +47,6 @@ var (
 		Embezzle: FastEmbezzleDuration,
 		Petition: FastPetitionDuration,
 		Journey:  FastJourneyTiming,
+		Strike:   FastStrikeDuration,
 	}
 )

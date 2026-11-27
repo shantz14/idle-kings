@@ -131,6 +131,10 @@ func (b *Bot) tick(parent context.Context) {
 		defer recoverPanic("senate tick")
 		b.senateTick(ctx, now)
 	}()
+	func() {
+		defer recoverPanic("conspiracy tick")
+		b.conspiracyTick(ctx, now)
+	}()
 	if err := b.store.PayIncome(ctx, now); err != nil {
 		slog.Error("pay income", "err", err)
 	}

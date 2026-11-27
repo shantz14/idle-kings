@@ -395,6 +395,7 @@ func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Tim
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: "🔍 You searched your household", Description: sb.String(), Color: color,
 	}}})
+	b.rootOutPlots(ctx, c)
 	for _, h := range res.Hits {
 		o := owners[h.Spy.ID]
 		_, _ = b.dm(o.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{

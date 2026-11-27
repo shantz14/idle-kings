@@ -69,6 +69,11 @@ type Outcome struct {
 	Spies      []game.SpyChange
 	Realm      game.Realm    // change to the court's trackers
 	Monuments  []NewMonument // finished public works
+	// Conspiracies' deeds.
+	Transfers     []ItemTransfer // stolen possessions
+	Denunciations []Denunciation // reports filed in dossiers (forgeries, betrayals)
+	Deaths        []Death        // murdered players, and their heirs
+	Senators      []game.Senator // new senators in empty seats (by ID)
 }
 
 // NewMonument records a finished public work.
@@ -102,7 +107,14 @@ func (s *Store) StartActivity(ctx context.Context, a Activity, cost int, events 
 		return a, err
 	}
 	defer tx.Rollback()
+	if a, err = startActivity(ctx, tx, a, cost, events); err != nil {
+		return a, err
+	}
+	return a, tx.Commit()
+}
 
+// startActivity is StartActivity inside a transaction.
+func startActivity(ctx context.Context, tx *sql.Tx, a Activity, cost int, events []NewEvent) (Activity, error) {
 	// Slot kinds compete for the one action; a free kind only with itself.
 	var busy int
 	where, args := slotFilter()
@@ -143,10 +155,7 @@ func (s *Store) StartActivity(ctx context.Context, a Activity, cost int, events 
 		return a, err
 	}
 	a.ID, _ = res.LastInsertId()
-	if err := insertEvents(ctx, tx, a, events); err != nil {
-		return a, err
-	}
-	return a, tx.Commit()
+	return a, insertEvents(ctx, tx, a, events)
 }
 
 func (s *Store) SetAnnouncement(ctx context.Context, activityID int64, channelID, messageID string) error {
@@ -415,7 +424,19 @@ func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, 
 	if err := changeSpies(ctx, tx, out.Spies); err != nil {
 		return err
 	}
-	return addConditions(ctx, tx, out.Conditions)
+	if err := addConditions(ctx, tx, out.Conditions); err != nil {
+		return err
+	}
+	if err := transferItems(ctx, tx, out.Transfers); err != nil {
+		return err
+	}
+	if err := fileDenunciations(ctx, tx, out.Denunciations, now); err != nil {
+		return err
+	}
+	if err := replaceSenators(ctx, tx, out.Senators, now); err != nil {
+		return err
+	}
+	return applyDeaths(ctx, tx, out.Deaths, now)
 }
 
 // applyRealm adds a change to a court's trackers, clamped to their range.
