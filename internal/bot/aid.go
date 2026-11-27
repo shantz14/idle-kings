@@ -99,7 +99,7 @@ func (b *Bot) aidAmountPanel(ctx context.Context, c store.Character, key, note s
 func aidAmountView(c store.Character, t game.AidTarget, current float64, note string) *discordgo.InteractionResponseData {
 	desc := fmt.Sprintf("The realm's %s stands at **%s**.", strings.ToLower(trackerLabel(t.Tracker)), game.Num(current))
 	if current < game.AidCrisis {
-		desc += " ⚠️ It's in trouble: a gift now will be remembered."
+		desc += " ⚠️ It's in trouble: a gift now will be remembered, and the court will count you among its saviours."
 	}
 	desc = withNote(note, desc+"\n\nHow much will you give?")
 	var btns []discordgo.MessageComponent

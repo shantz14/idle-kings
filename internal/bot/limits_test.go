@@ -435,6 +435,12 @@ func TestInfluenceViewsFitDiscord(t *testing.T) {
 				times[w.Key] = time.Duration(w.Days * float64(24*time.Hour))
 			}
 			checkLimits(t, "works", worksView(c, times, b, "a note"))
+			for _, w := range game.WorkRebuilds {
+				times[w.Key] = time.Duration(w.Days * float64(24*time.Hour))
+			}
+			great := c
+			great.Monuments = []string{"statue", "statue@grand", "statue@great", "road", "temple", "temple@grand"}
+			checkLimits(t, "works, rebuilt", worksView(great, times, b, ""))
 		}
 		for _, cause := range game.Causes {
 			a := store.Activity{ID: 999999, Goal: cause.Key}

@@ -22,6 +22,7 @@ func init() {
 //   estate:sell               (select) pick something to sell to the shop
 //   estate:sellok:<holding>   sale confirmed
 //   estate:repair             (select) pay to repair a sabotaged property
+//   estate:auction            (select) put a unique possession up for auction → auc:setup
 
 func (b *Bot) onEstate(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
 	c, ok := b.myCharacter(ctx, i)
@@ -45,6 +46,13 @@ func (b *Bot) onEstate(ctx context.Context, i *discordgo.InteractionCreate, part
 		b.update(i, sellConfirm(c, atoi(vals()[0])))
 	case parts[0] == "sellok" && len(parts) > 1:
 		b.sellToShop(ctx, i, c, atoi(parts[1]))
+	case parts[0] == "auction" && len(vals()) > 0:
+		h, ok := c.Holding(atoi(vals()[0]))
+		if it, iok := h.Item(); !ok || !iok || !game.Auctionable(it) {
+			b.update(i, b.estatePageNote(c, "You can't auction that."))
+			return
+		}
+		b.update(i, auctionSetupView(c, h, 1, 1, ""))
 	case parts[0] == "repair" && len(vals()) > 0:
 		h, ok := c.Holding(atoi(vals()[0]))
 		it, _ := h.Item()
@@ -288,6 +296,10 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 	if len(repairOpts) > 0 {
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "estate:repair",
 			Placeholder: "🔨 Repair what saboteurs damaged…", Options: repairOpts}))
+	}
+	if opts := auctionablePieces(c); len(opts) > 0 {
+		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "estate:auction",
+			Placeholder: "🔨 Put a unique piece up for auction…", Options: opts}))
 	}
 	btns := []discordgo.MessageComponent{
 		withEmoji(button("Shop", "shop:open:"+shopProps, discordgo.PrimaryButton, false), emojiShop),

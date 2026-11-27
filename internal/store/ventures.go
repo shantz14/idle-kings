@@ -106,6 +106,7 @@ type Investment struct {
 	Sector      game.SectorKey
 	Stake       float64    // stake gained
 	Gold        int        // gold invested: grows the sector (SectorDef.Grow)
+	UseUp       string     // a condition the deal used up (A Good Word), or ""
 	Delta       game.Delta // e.g. renown lost to exposure
 }
 
@@ -145,6 +146,11 @@ func (s *Store) ApplyInvestment(ctx context.Context, inv Investment, now time.Ti
 	}
 	if !isZero(inv.Delta) {
 		if err := applyDelta(ctx, tx, inv.CharacterID, inv.Delta); err != nil {
+			return err
+		}
+	}
+	if inv.UseUp != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM conditions WHERE character_id = ? AND key = ?`, inv.CharacterID, inv.UseUp); err != nil {
 			return err
 		}
 	}

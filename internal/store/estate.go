@@ -96,6 +96,9 @@ func (s *Store) SellToShop(ctx context.Context, charID, holdingID int64, payout 
 	if residence == holdingID {
 		return ErrResidence
 	}
+	if err := onAuction(ctx, tx, holdingID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM damaged_items WHERE holding_id = ?`, holdingID); err != nil {
 		return err
 	}
@@ -212,7 +215,7 @@ func ownsAll(ctx context.Context, tx *sql.Tx, charID int64, ids []int64) error {
 			return err
 		}
 	}
-	return nil
+	return onAuction(ctx, tx, ids...)
 }
 
 const offerCols = `id, guild_id, from_id, to_id, give, want, gold, status, created_at, expires_at`

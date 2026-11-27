@@ -228,6 +228,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	}
 	res := game.ResolveMatter(b.rng, in)
 	ventureNotices(chars, res)
+	credits := b.creditVoters(ctx, m, ev, &res, chars, senators)
 
 	decay := game.OpinionDecay
 	if ev.Auto || m.PetitionerID != 0 { // not a Senate day
@@ -279,6 +280,8 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	result := decisionEmbed(ev, res)
 	if ev.Auto {
 		result = billEmbed(ev, res)
+	} else if len(credits) > 0 {
+		result.Description += "\n\n" + strings.Join(credits, "\n")
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, result)
 	if m.MessageID != "" {
@@ -421,6 +424,9 @@ func optionFields(ev game.MatterEvent, winner string) []*discordgo.MessageEmbedF
 	var out []*discordgo.MessageEmbedField
 	for n, o := range ev.Options {
 		val := o.Hint
+		if k, ok := game.Contract(ev.Key, o.Key); ok {
+			val += "\n" + game.ContractHint(k)
+		}
 		if s := game.DescribeArrows(game.SectorPreview(o)); s != "" {
 			val += "\n*" + s + "*"
 		}
@@ -922,4 +928,79 @@ func (b *Bot) tellOutbid(ctx context.Context, br store.Bribe, s game.Senator, ev
 		b.dmNote(n.UserID, "💰 Outbid", fmt.Sprintf("Someone paid Senator **%s** more to vote on *%s*. Your **%d gold** has come back to you. "+
 			"You can still pay them more, if they're worth it.", s.Name, ev.Title, br.Amount), colorNotice)
 	}
+}
+
+// creditVoters pays a passed option's contract to the biggest investor who
+// voted for it, and credits (or blames) the player who led the Senate to
+// the decision, into res before it's stored. It returns lines for the
+// public decision. Under the Secret Ballot nobody is named, and nobody leads.
+func (b *Bot) creditVoters(ctx context.Context, m store.Matter, ev game.MatterEvent, res *game.MatterResult, chars []store.Character, senators []game.Senator) []string {
+	if ev.Auto || res.Winner.Key == "" {
+		return nil
+	}
+	byID := make(map[int64]store.Character, len(chars))
+	for _, c := range chars {
+		byID[c.ID] = c
+	}
+	votes, err := b.store.Votes(ctx, m.ID)
+	if err != nil {
+		return nil
+	}
+	var lines []string
+	add := func(id int64, d game.Delta, note string) {
+		cur := res.Deltas[id]
+		cur.Merge(d)
+		res.Deltas[id] = cur
+		res.Notices[id] = append(res.Notices[id], note)
+	}
+	// The contract.
+	if k, ok := game.Contract(ev.Key, res.Winner.Key); ok && res.Succeeded {
+		stakes := map[int64]float64{}
+		for id, opt := range votes {
+			if opt == res.Winner.Key {
+				stakes[id] = byID[id].Ventures[k].Stake
+			}
+		}
+		if id, ok := game.ContractWinner(stakes); ok {
+			if pay := game.ContractPay(res.Outcome, k); pay > 0 {
+				d, _ := game.SectorByKey(k)
+				add(id, game.Delta{Wealth: pay}, fmt.Sprintf("📜 As the biggest investor in %s who voted for it, the contract is yours. (+%d gold)", d.Name, pay))
+				if !res.Secret {
+					lines = append(lines, fmt.Sprintf("📜 The contract went to **%s**, the biggest investor in %s %s.", byID[id].FullName(), d.Emoji, d.Name))
+				}
+			}
+		}
+	}
+	// The leader.
+	if res.Secret {
+		return lines
+	}
+	id, ok, err := b.store.FirstVoter(ctx, m.ID, res.Winner.Key)
+	if err != nil || !ok {
+		return lines
+	}
+	leader, ok := byID[id]
+	if !ok {
+		return lines
+	}
+	d, blame := game.LeaderResult(res.Succeeded, leader.Influence)
+	if res.Succeeded {
+		add(id, d, fmt.Sprintf("🏛️ You were the first to back it, and the court gives you the credit. (%s)", d.Describe()))
+		lines = append(lines, fmt.Sprintf("🏛️ **%s** led the Senate to it.", leader.FullName()))
+		return lines
+	}
+	add(id, d, fmt.Sprintf("🏛️ You were the first to back it, and now it has failed, the court blames you. (%s)", d.Describe()))
+	lines = append(lines, fmt.Sprintf("🏛️ **%s** led the Senate to it, and takes the blame.", leader.FullName()))
+	against := map[string]bool{}
+	for _, v := range res.Votes {
+		if v.AI && v.Option != res.Winner.Key {
+			against[v.Name] = true
+		}
+	}
+	for _, s := range senators {
+		if against[s.Name] {
+			res.Opinions = append(res.Opinions, game.OpinionChange{SenatorID: s.ID, CharacterID: id, Delta: blame})
+		}
+	}
+	return lines
 }

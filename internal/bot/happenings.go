@@ -50,6 +50,9 @@ func (b *Bot) startHappening(ctx context.Context, guildID, key string, now time.
 			return ""
 		}
 	}
+	if h.Key == game.KindAuctionHappening && !b.lotAvailable(ctx, guildID) {
+		return "" // the merchant has nothing left to sell here
+	}
 	days := game.HappeningDays(b.rng, h)
 	ends := now.Add(time.Duration(days) * b.t.Day)
 	before, hadRealm := b.realmBefore(ctx, guildID)
@@ -73,6 +76,9 @@ func (b *Bot) startHappening(ctx context.Context, guildID, key string, now time.
 		e.Fields = append(e.Fields, fact("📋 While it lasts", fx))
 	}
 	b.post(ctx, guildID, e)
+	if h.Key == game.KindAuctionHappening {
+		b.openNPCAuction(ctx, guildID, now, ends)
+	}
 	if hadRealm && len(h.Realm) > 0 {
 		b.afterRealmChange(ctx, guildID, before)
 	}

@@ -47,9 +47,11 @@ const (
 	aidTaper        = 1000.0 // big gifts buy less per coin
 	aidRenown       = 0.2    // per point
 	aidInfluence    = 0.03   // per point
-	AidCrisis       = 25.0   // below this, rewards double
-	aidOpinionPer   = 5.0    // points per +1 opinion with the senators who care
-	AidPublicAmount = 50     // gifts this big are announced
+	AidCrisis       = 25.0   // below this, rewards triple, and influence comes on top
+	aidCrisisMult   = 3.0
+	aidCrisisPer    = 100.0 // gold per extra point of influence in a crisis
+	aidOpinionPer   = 5.0   // points per +1 opinion with the senators who care
+	AidPublicAmount = 50    // gifts this big are announced
 )
 
 // AidPoints is how much a gift raises the tracker.
@@ -72,13 +74,13 @@ func ResolveAid(p Person, t AidTarget, gold int, current float64, senators []Sen
 	pts := math.Min(AidPoints(gold), TrackerMax-current)
 	pts = math.Max(pts, 0)
 	res := AidResult{Points: pts, Crisis: current < AidCrisis}
-	mult := 1.0
-	if res.Crisis {
-		mult = 2
+	mult, extra := 1.0, 0.0
+	if res.Crisis { // a saviour is remembered
+		mult, extra = aidCrisisMult, float64(gold)/aidCrisisPer
 	}
 	res.Delta = Delta{
 		Renown:    pts * aidRenown * mult,
-		Influence: ScaleInfluence(pts*aidInfluence*mult, p.Sheet[AttrInfluence]),
+		Influence: ScaleInfluence(pts*aidInfluence*mult+extra, p.Sheet[AttrInfluence]),
 	}
 	if op := math.Floor(pts / aidOpinionPer); op > 0 {
 		res.Opinions = opinionsFrom(senators, p.ID, op, t.Fan)

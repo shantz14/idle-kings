@@ -58,6 +58,9 @@ var (
 
 	accidentRenown     = 3.0 // the victim, thrown in front of everyone
 	accidentCaught     = 5.0 // the culprit, once named
+	accidentDays       = 5.0 // a wound from an arranged fall lasts longer than most
+	accidentInfluence  = 1.0 // the victim, carried home in front of everyone
+	accidentDamages    = 25  // gold a named culprit pays the victim, as much as they have
 	accidentCaughtOpin = -2.0
 
 	huntHawkOpinion         = 3.0
@@ -270,8 +273,8 @@ func resolveAccident(r Roller, res *PartyResult, host Person, a HuntRider) {
 	case cancelled:
 		res.notice(a.ID, "Your accident for %s was spotted and undone before it happened.", t.Name)
 	default:
-		res.delta(t.ID, Delta{Renown: -accidentRenown})
-		res.Conditions = append(res.Conditions, ConditionChange{CharacterID: t.ID, Key: CondWounded})
+		res.delta(t.ID, Delta{Renown: -accidentRenown, Influence: -accidentInfluence})
+		res.Conditions = append(res.Conditions, ConditionChange{CharacterID: t.ID, Key: CondWounded, Days: accidentDays})
 		if named {
 			res.notice(a.ID, "On %s's hunt, %s took a bad fall.", host.Name, t.Name)
 		} else {
@@ -282,6 +285,12 @@ func resolveAccident(r Roller, res *PartyResult, host Person, a HuntRider) {
 		res.delta(a.ID, Delta{Renown: -accidentCaught})
 		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: a.ID, Delta: accidentCaughtOpin})
 		res.notice(a.ID, "You were seen. Word of what you tried is getting around. (-%s renown, and the Senate thinks less of you)", Num(accidentCaught))
+		if pay := min(accidentDamages, max(int(a.Sheet[AttrWealth]), 0)); pay > 0 {
+			res.delta(a.ID, Delta{Wealth: -pay})
+			res.delta(t.ID, Delta{Wealth: pay})
+			res.notice(a.ID, "%s's family demands satisfaction, and you pay. (-%d gold)", t.Name, pay)
+			res.notice(t.ID, "%s pays your family for the harm they meant you. (+%d gold)", a.Name, pay)
+		}
 	}
 }
 

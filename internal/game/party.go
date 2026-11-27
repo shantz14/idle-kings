@@ -120,9 +120,9 @@ var (
 	hostSuccess   = Delta{Influence: 2, Renown: 1, Stats: Stats{Diplomacy: 1.5}}
 	hostFailure   = Delta{Renown: -2}
 	hostFriends   = Delta{Influence: 2}
-	hostBusiness  = Delta{DailyIncome: 2, Stats: Stats{Stewardship: 2.5}}
+	hostBusiness  = Delta{Stats: Stats{Stewardship: 2.5}} // and A Good Word (CondGoodWord)
 	guestFriends  = Delta{Influence: 1}
-	guestBusiness = Delta{DailyIncome: 1, Stats: Stats{Stewardship: 1.25}}
+	guestBusiness = Delta{Stats: Stats{Stewardship: 1.25}} // and A Friendly Word
 	rumorDamage   = 2.0 // influence lost by the target
 
 	// Guests do better at a good party.
@@ -414,6 +414,8 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		case GoalTalkBusiness:
 			if ok, _ := businessCheck.Roll(r, host.Sheet, 0, Normal); ok {
 				hd.Merge(hostBusiness)
+				res.Conditions = append(res.Conditions, ConditionChange{CharacterID: host.ID, Key: CondGoodWord})
+				res.notice(host.ID, "The merchants you charmed will put in a good word: your next investment's deal will be easier.")
 			}
 		}
 		hd = ScaleGain(hd.Scale(PartyRewardScale(in.Spend)), host.Sheet[AttrInfluence])
@@ -448,7 +450,8 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		case GoalTalkBusiness:
 			if ok, _ := businessCheck.Roll(r, a.Sheet, mod, Normal); ok {
 				res.delta(a.ID, guestBusiness)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You struck a deal at %s's party.", host.Name), guestBusiness))
+				res.Conditions = append(res.Conditions, ConditionChange{CharacterID: a.ID, Key: CondGoodWordLesser})
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made a useful friend at %s's party: your next investment's deal will be a little easier.", host.Name), guestBusiness))
 			} else {
 				res.notice(a.ID, "No one at %s's party wanted to do business.", host.Name)
 			}

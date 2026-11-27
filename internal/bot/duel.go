@@ -418,6 +418,40 @@ func (b *Bot) afterDecline(a store.Activity, c, t store.Character, timedOut bool
 	}
 	b.dmNote(c.UserID, "🏳️ Your challenge was refused", fmt.Sprintf("%s %s your challenge.%s", t.FullName(), how, refund), colorMuted)
 	b.editDuelAnnouncement(a, c, t, fmt.Sprintf("**%s** %s **%s**'s challenge.", t.FullName(), how, c.FullName()), nil)
+	b.countRefusal(context.Background(), t)
+}
+
+// countRefusal records a refused challenge, and on the season's third the
+// court calls it what it is. Not under the Ban on Dueling: obeying the law is
+// no cowardice.
+func (b *Bot) countRefusal(ctx context.Context, t store.Character) {
+	if t.Laws.Rules().NoDeclineShame {
+		return
+	}
+	b.addDeeds(ctx, t.GuildID, store.Deed{CharacterID: t.ID, Kind: game.DeedDuelRefused, Amount: 1})
+	se, err := b.store.Season(ctx, t.GuildID)
+	if err != nil {
+		return
+	}
+	tot, err := b.store.SeasonTotals(ctx, t.GuildID, se.Number, game.DeedDuelRefused)
+	if err == nil && int(tot[t.ID]) == game.CowardRefusals {
+		b.post(ctx, t.GuildID, &discordgo.MessageEmbed{Title: "🐔 A coward at court",
+			Description: fmt.Sprintf("**%s** (%s) has refused a %s challenge this season. The court has a word for that.",
+				t.FullName(), t.House(), ordinal(game.CowardRefusals)),
+			Color: colorBad})
+	}
+}
+
+func ordinal(n int) string {
+	switch n {
+	case 1:
+		return "first"
+	case 2:
+		return "second"
+	case 3:
+		return "third"
+	}
+	return fmt.Sprintf("%dth", n)
 }
 
 // ---- betting ----

@@ -58,6 +58,7 @@ var (
 	traitIndex     = newIndex(&TraitList, func(t TraitInfo) Trait { return t.Key })
 	conditionIndex = newIndex(&ConditionDefs, func(c ConditionDef) string { return c.Key })
 	workIndex      = newIndex(&WorkDefs, func(w WorkDef) string { return w.Key })
+	rebuildIndex   = newIndex(&WorkRebuilds, func(w WorkDef) string { return w.Key })
 	happeningIndex = newIndex(&HappeningDefs, func(h HappeningDef) string { return h.Key })
 	schemeIndex    = newIndex(&SchemeDefs, func(s SchemeDef) string { return s.Key })
 	sectorIndex    = newIndex(&SectorDefs, func(d SectorDef) SectorKey { return d.Key })

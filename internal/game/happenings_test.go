@@ -14,7 +14,7 @@ func TestHappeningsAreWellFormed(t *testing.T) {
 		}
 		seen[h.Key] = true
 		if h.Weight <= 0 || h.MinDays < 1 || h.MaxDays < h.MinDays || h.Name == "" || h.Emoji == "" ||
-			h.Announce == "" || h.Fade == "" || h.Hint == "" || len(h.Events) == 0 {
+			h.Announce == "" || h.Fade == "" || h.Hint == "" || (len(h.Events) == 0 && h.Key != KindAuctionHappening) {
 			t.Errorf("%s: incomplete", h.Key)
 		}
 		for k := range h.Sectors {

@@ -65,6 +65,7 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 		"happenings":     `SELECT id FROM happenings WHERE guild_id = 'g' AND ended_at IS NULL`,
 		"venture damage": `SELECT character_id FROM venture_damage WHERE guild_id = 'g' AND ends_at > 5`,
 		"damaged items":  `SELECT repair_cost FROM damaged_items WHERE holding_id = 1`,
+		"auctions due":   `SELECT id FROM auctions WHERE settled_at IS NULL AND ends_at <= 5`,
 	} {
 		rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN `+q)
 		if err != nil {

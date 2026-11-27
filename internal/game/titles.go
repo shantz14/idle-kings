@@ -22,6 +22,7 @@ const (
 	DeedDuelWon     = "duel_won"     // amount 1 per duel won
 	DeedWinningVote = "winning_vote" // amount 1 per vote on the winning side
 	DeedCrisisAid   = "crisis_aid"   // gold given to a tracker in danger
+	DeedDuelRefused = "duel_refused" // amount 1 per challenge refused (or never answered)
 )
 
 // Season titles.

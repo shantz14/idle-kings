@@ -103,7 +103,10 @@ const (
 	duelUpsetRenown     = 5   // extra for beating a better fighter
 	duelDecisive        = 30  // a margin this large always wounds the loser
 	duelWoundChance     = 25  // percent, for a closer loss
-	DuelDeclineRenown   = 3   // lost by refusing a challenge
+	DuelDeclineRenown   = 10  // lost by refusing a challenge
+	// CowardRefusals is how many refusals in a season the court calls
+	// cowardice, out loud.
+	CowardRefusals = 3
 	duelHawkWinner      = 4.0 // senator opinions after the bout
 	duelHawkBraveLoser  = 1.0
 	duelRiskTakerWinner = 3.0
@@ -323,9 +326,9 @@ func BetPayouts(bets []Bet, winnerID int64) map[int64]int {
 	return out
 }
 
-// DeclineOpinions is how senators react to a refused challenge. Under the
-// Ban on Dueling nobody minds; under the Code of Honor the Stern and the
-// Conservative join the Hawks.
+// DeclineOpinions is how senators react to a refused challenge: Hawks and
+// the Stern think less of you. Under the Ban on Dueling nobody minds; under
+// the Code of Honor the Conservative join them, and all think worse.
 func DeclineOpinions(senators []Senator, defenderID int64, ls Laws) []OpinionChange {
 	rules := ls.Rules()
 	if rules.NoDeclineShame {
@@ -334,7 +337,7 @@ func DeclineOpinions(senators []Senator, defenderID int64, ls Laws) []OpinionCha
 	var out []OpinionChange
 	for _, s := range senators {
 		d := 0.0
-		if s.Has(TraitHawk) {
+		if s.Has(TraitHawk) || s.Has(TraitStern) {
 			d += duelHawkDecline
 		}
 		if rules.DeclineOpinion != 0 && (s.Has(TraitHawk) || s.Has(TraitStern) || s.Has(TraitConservative)) {

@@ -719,3 +719,17 @@ func (s *Store) RecentDecisions(ctx context.Context, guildID string, n int) ([]D
 func (s *Store) QueuedEvents(ctx context.Context, guildID string) ([]string, error) {
 	return queryAll(ctx, s.db, `SELECT event_key FROM realm_queue WHERE guild_id = ? ORDER BY due_at, id`, scanString, guildID)
 }
+
+// FirstVoter is the player whose standing vote for an option on a matter was
+// cast first (changing your vote makes it count from then). ok is false if
+// nobody voted for it.
+func (s *Store) FirstVoter(ctx context.Context, matterID int64, option string) (int64, bool, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT character_id FROM votes WHERE matter_id = ? AND option = ? ORDER BY voted_at, character_id LIMIT 1`,
+		matterID, option).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return id, err == nil, err
+}

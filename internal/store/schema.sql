@@ -398,3 +398,24 @@ CREATE TABLE IF NOT EXISTS venture_damage (
     ends_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS venture_damage_guild ON venture_damage (guild_id, ends_at);
+
+-- Auctions (game/auction.go): one unique piece each. seller_id 0 is a
+-- merchant (an NPC auction, with no holding yet); a player's auction locks
+-- their holding until it's settled. The top bid is held from the bidder.
+CREATE TABLE IF NOT EXISTS auctions (
+    id          INTEGER PRIMARY KEY,
+    guild_id    TEXT NOT NULL REFERENCES courts(guild_id),
+    item_key    TEXT NOT NULL,
+    seller_id   INTEGER NOT NULL DEFAULT 0,
+    holding_id  INTEGER NOT NULL DEFAULT 0,
+    reserve     INTEGER NOT NULL,
+    top_bid     INTEGER NOT NULL DEFAULT 0,
+    top_bidder  INTEGER NOT NULL DEFAULT 0,
+    started_at  INTEGER NOT NULL,
+    ends_at     INTEGER NOT NULL,
+    settled_at  INTEGER,
+    channel_id  TEXT,
+    message_id  TEXT
+);
+CREATE INDEX IF NOT EXISTS auctions_due ON auctions (settled_at, ends_at);
+CREATE INDEX IF NOT EXISTS auctions_holding ON auctions (holding_id, settled_at);

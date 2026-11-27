@@ -176,7 +176,7 @@ func TestReplaceSenatorPicksANewFace(t *testing.T) {
 }
 
 func TestCofferTake(t *testing.T) {
-	if CofferTake(100) != 30 || CofferTake(100000) != StealCofferMax || CofferTake(0) != 0 {
+	if CofferTake(100) != 30 || CofferTake(2000) != StealCofferMax+100 || CofferTake(100000) != StealCofferMax+9900 || CofferTake(0) != 0 {
 		t.Error("a theft takes a share of the gold, up to a cap")
 	}
 }

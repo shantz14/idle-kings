@@ -120,8 +120,8 @@ func TestAid(t *testing.T) {
 	sen := []Senator{{ID: 1, Traits: []Trait{TraitEconomical}}, {ID: 2}}
 	calm := ResolveAid(p, treasury, 250, 60, sen)
 	crisis := ResolveAid(p, treasury, 250, 10, sen)
-	if !crisis.Crisis || math.Abs(crisis.Delta.Renown-2*calm.Delta.Renown) > 1e-9 {
-		t.Errorf("crisis should double rewards: %v vs %v", crisis.Delta, calm.Delta)
+	if !crisis.Crisis || math.Abs(crisis.Delta.Renown-aidCrisisMult*calm.Delta.Renown) > 1e-9 || crisis.Delta.Influence <= aidCrisisMult*calm.Delta.Influence {
+		t.Errorf("crisis should triple rewards, and add influence: %v vs %v", crisis.Delta, calm.Delta)
 	}
 	if len(calm.Opinions) != 1 || calm.Opinions[0].SenatorID != 1 {
 		t.Errorf("only the economical senator should care: %+v", calm.Opinions)

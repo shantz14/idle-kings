@@ -11,13 +11,35 @@ type ConditionDef struct {
 	Description string
 	Effects     Effects
 	Days        float64 // how long it lasts, in game days (see Timings.Day)
+	// InvestBonus helps the next investment's deal roll, and is used up by it.
+	InvestBonus float64
 }
 
-const CondWounded = "wounded"
+const (
+	CondWounded        = "wounded"
+	CondGoodWord       = "good_word"       // talked business as a host
+	CondGoodWordLesser = "good_word_guest" // talked business as a guest
+)
 
 var ConditionDefs = []ConditionDef{
 	{Key: CondWounded, Name: "Wounded", Emoji: "🩹", Description: "Still healing. Weaker with a blade and in command.",
 		Effects: Effects{Stats: Stats{Prowess: -10, Martial: -5}}, Days: 3},
+	{Key: CondGoodWord, Name: "A Good Word", Emoji: "🤝", Description: "The merchants you charmed will put in a word for you: your next investment's deal is easier.",
+		Days: 3, InvestBonus: 20},
+	{Key: CondGoodWordLesser, Name: "A Friendly Word", Emoji: "🤝", Description: "Someone you met will put in a word for you: your next investment's deal is a little easier.",
+		Days: 3, InvestBonus: 10},
+}
+
+// InvestBonus is the best deal bonus among a character's conditions, and the
+// condition that gives it ("" for none). Investing uses it up.
+func InvestBonus(cs []Condition) (float64, string) {
+	best, key := 0.0, ""
+	for _, c := range cs {
+		if d, ok := ConditionByKey(c.Key); ok && d.InvestBonus > best {
+			best, key = d.InvestBonus, c.Key
+		}
+	}
+	return best, key
 }
 
 func ConditionByKey(k string) (ConditionDef, bool) {
@@ -45,6 +67,7 @@ func ConditionEffects(cs []Condition) Effects {
 type ConditionChange struct {
 	CharacterID int64
 	Key         string
+	Days        float64 // how long, in game days; 0 = the condition's own length
 }
 
 // Ends is when a condition given now ends.

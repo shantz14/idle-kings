@@ -482,6 +482,17 @@ var HappeningDefs = []HappeningDef{
 	},
 }
 
+func init() {
+	// The Venetian merchant's auction: no event to meet, just a lot to bid on
+	// (auction.go; the bot opens the auction when it begins).
+	HappeningDefs = append(HappeningDefs, HappeningDef{
+		Key: KindAuctionHappening, Name: "A Venetian Merchant's Auction", Emoji: "🔨", Weight: 0.8, MinDays: 1, MaxDays: 2,
+		Announce: "A Venetian merchant has set up his table in the Forum, with one curiosity to sell to the highest bidder. **The bidding is open.** He starts low; whether it ends low is up to the court.",
+		Fade:     "The Venetian merchant has packed his table and gone.",
+		Hint:     "🔨 A Venetian merchant is holding an auction in the Forum.",
+	})
+}
+
 // happeningTrophies are the prizes the slayers of the great beasts take
 // home. Never sold in the shop; one per court.
 var happeningTrophies = []Item{

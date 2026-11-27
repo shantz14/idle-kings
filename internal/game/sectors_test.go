@@ -130,20 +130,20 @@ func TestInvestTiers(t *testing.T) {
 		tier DealTier
 	}{{10, DealGreat}, {40, DealFair}, {70, DealBad}}
 	for _, c := range cases {
-		res := Invest(rolls(t, c.roll), steward, agri, 100)
+		res := Invest(rolls(t, c.roll), steward, agri, 100, 0)
 		if res.Tier != c.tier || !near(res.Stake, 100*dealStake[c.tier]) || res.Exposed {
 			t.Errorf("roll %d: %+v", c.roll, res)
 		}
 	}
 	// Only the Black Market exposes, and only on a bad miss.
-	if Invest(rolls(t, 99), Sheet{}, agri, 100).Exposed {
+	if Invest(rolls(t, 99), Sheet{}, agri, 100, 0).Exposed {
 		t.Fatal("agriculture exposed")
 	}
 	shadow := mustSector(t, SectorBlackMarket) // intrigue 0: chance 30
-	if !Invest(rolls(t, 80), Sheet{}, shadow, 100).Exposed {
+	if !Invest(rolls(t, 80), Sheet{}, shadow, 100, 0).Exposed {
 		t.Fatal("shadow should expose at margin -50")
 	}
-	if Invest(rolls(t, 50), Sheet{}, shadow, 100).Exposed {
+	if Invest(rolls(t, 50), Sheet{}, shadow, 100, 0).Exposed {
 		t.Fatal("shadow exposed at margin -20")
 	}
 }

@@ -246,9 +246,10 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: {Wealth: a.Spend}}}, now)
 		return
 	}
-	res := game.Invest(b.rng, c.Sheet(), d, a.Spend)
+	bonus, word := game.InvestBonus(c.Conditions)
+	res := game.Invest(b.rng, c.Sheet(), d, a.Spend, bonus)
 	inv := store.Investment{ActivityID: a.ID, CharacterID: c.ID, GuildID: c.GuildID, Sector: d.Key,
-		Stake: res.Stake, Gold: a.Spend}
+		Stake: res.Stake, Gold: a.Spend, UseUp: word}
 	inv.Delta = res.Practice
 	if res.Exposed {
 		inv.Delta.Merge(game.ExposedDelta)
@@ -261,6 +262,9 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 	}
 
 	desc := res.Text
+	if word != "" {
+		desc = "🤝 Your friends from the party put in a word for you.\n" + desc
+	}
 	if res.Exposed {
 		desc = withDelta(desc, game.ExposedDelta)
 	}

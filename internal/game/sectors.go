@@ -327,8 +327,9 @@ type InvestResult struct {
 
 // Invest rolls the deal. The gold is spent and the sector grows whatever the
 // roll; the roll decides how much of it the investor ends up owning.
-func Invest(r Roller, investor Sheet, d SectorDef, gold int) InvestResult {
-	_, m := d.Deal.Roll(r, investor, 0, Normal)
+// bonus is added to the deal roll (A Good Word).
+func Invest(r Roller, investor Sheet, d SectorDef, gold int, bonus float64) InvestResult {
+	_, m := d.Deal.Roll(r, investor, bonus, Normal)
 	res := InvestResult{Tier: DealBad}
 	switch {
 	case m >= dealGreatMargin:

@@ -229,3 +229,31 @@ func TestOutbidBribe(t *testing.T) {
 		t.Fatalf("new briber paid %d", b.Wealth-w)
 	}
 }
+
+func TestFirstVoter(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	now := time.Now()
+	if err := s.CreateRealm(ctx, "g", game.StartingRealm(), game.GenerateSenate(rand.New(rand.NewPCG(1, 2)), game.SenateSize), now); err != nil {
+		t.Fatal(err)
+	}
+	a, b := newChar(t, s, "a", "merchant"), newChar(t, s, "b", "merchant")
+	m, err := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.FirstVoter(ctx, m.ID, "lavish"); ok {
+		t.Fatal("nobody voted yet")
+	}
+	_ = s.CastVote(ctx, m.ID, a.ID, "lavish", now)
+	_ = s.CastVote(ctx, m.ID, b.ID, "lavish", now.Add(time.Minute))
+	if id, ok, err := s.FirstVoter(ctx, m.ID, "lavish"); err != nil || !ok || id != a.ID {
+		t.Fatalf("first %d %v %v", id, ok, err)
+	}
+	// Changing your vote counts from then.
+	_ = s.CastVote(ctx, m.ID, a.ID, "none", now.Add(2*time.Minute))
+	_ = s.CastVote(ctx, m.ID, a.ID, "lavish", now.Add(3*time.Minute))
+	if id, _, _ := s.FirstVoter(ctx, m.ID, "lavish"); id != b.ID {
+		t.Fatalf("first after a change of heart: %d", id)
+	}
+}

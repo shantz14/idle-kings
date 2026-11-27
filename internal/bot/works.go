@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -32,7 +31,7 @@ func init() {
 }
 
 // Public works custom IDs:
-//   work:build:<work>   pay for a public work and break ground
+//   work:build:<work>   pay for a public work (or its rebuild, "<work>@grand") and break ground
 
 func (b *Bot) onWork(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
 	c, ok := b.myCharacter(ctx, i)
@@ -55,7 +54,7 @@ func (b *Bot) worksPanel(ctx context.Context, c store.Character, note string) *d
 		building = "The realm has fallen. Nobody is building anything now."
 	}
 	times := map[string]time.Duration{}
-	for _, w := range game.WorkDefs {
+	for _, w := range append(append([]game.WorkDef(nil), game.WorkDefs...), game.WorkRebuilds...) {
 		times[w.Key] = b.workTime(w)
 	}
 	return worksView(c, times, building, note)
@@ -63,22 +62,33 @@ func (b *Bot) worksPanel(ctx context.Context, c store.Character, note string) *d
 
 func worksView(c store.Character, times map[string]time.Duration, building, note string) *discordgo.InteractionResponseData {
 	desc := "Pay for something the whole city will use, with your family's name carved on it. " +
-		"Once it opens, it gives you **lasting influence**, and it adds to your estate."
+		"Once it opens, it gives you **lasting influence**, and it adds to your estate. A finished work can be rebuilt grander, twice, for its influence again."
 	e := actionEmbed(game.KindWork, withNote(busyNote(building, note), desc))
 	var btns []discordgo.MessageComponent
-	for _, w := range game.WorkDefs {
-		built := slices.Contains(c.Monuments, w.Key)
-		name := w.Emoji + " " + w.Name
-		if built {
-			name += " ✅"
+	for _, base := range game.WorkDefs {
+		w, more := game.NextWork(base.Key, c.Monuments)
+		name := base.Emoji + " " + base.Name
+		switch {
+		case !more:
+			name += " ✅✅✅"
+			w = base
+		case w.Tier > 0:
+			name += " " + strings.Repeat("✅", w.Tier) + " · next: " + w.Prefix
 		}
-		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: name, Value: fmt.Sprintf(
-			"%s\n**%d** gold · %s to build · **+%s** vote weight", w.Description, w.Cost, humanDuration(times[w.Key]), game.Num(w.VoteWeight))})
-		btns = append(btns, withEmoji(button(fmt.Sprintf("%s (%d gold)", w.Name, w.Cost), "work:build:"+w.Key,
-			discordgo.SuccessButton, built || building != "" || w.Cost > c.Wealth), w.Emoji))
+		value := fmt.Sprintf("%s\n**%d** gold · %s to build · **+%s** vote weight", w.Description, w.Cost, humanDuration(times[w.Key]), game.Num(w.VoteWeight))
+		if !more {
+			value = "Built, rebuilt, and rebuilt again. It can be no greater."
+		}
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: name, Value: value})
+		label := fmt.Sprintf("%s (%d gold)", w.Name, w.Cost)
+		if !more {
+			label = base.Name
+		}
+		btns = append(btns, withEmoji(button(label, "work:build:"+w.Key,
+			discordgo.SuccessButton, !more || building != "" || w.Cost > c.Wealth), base.Emoji))
 	}
 	e.Fields = append(e.Fields, fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)))
-	e.Footer = footer("One at a time, and one of each. Building doesn't stop you doing other things.")
+	e.Footer = footer("One at a time. Building doesn't stop you doing other things.")
 	btns = append(btns, backButton(game.KindWork))
 	return &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{e},
@@ -89,6 +99,14 @@ func worksView(c store.Character, times map[string]time.Duration, building, note
 func (b *Bot) onBuildWork(ctx context.Context, i *discordgo.InteractionCreate, c store.Character, key string) {
 	w, ok := game.WorkByKey(key)
 	if !ok {
+		return
+	}
+	base := w.Key
+	if w.Tier > 0 {
+		base = w.Base
+	}
+	if next, more := game.NextWork(base, c.Monuments); !more || next.Key != w.Key { // rebuild in order
+		b.update(i, b.worksPanel(ctx, c, ""))
 		return
 	}
 	if c.RealmFallen {
