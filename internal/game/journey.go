@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // ---- Undertake a Journey (Martial) ----
@@ -190,12 +191,23 @@ var BanditBands = []BanditBand{
 	{Key: "cutthroats", Name: "A few cutthroats", Price: 40, Strength: 0,
 		Reward: Delta{Renown: 0.3, Stats: Stats{Prowess: 1, Martial: 0.5}},
 		Desc:   "Half a dozen desperate men with clubs and knives. Cheap, and easily scared."},
-	{Key: "outlaws", Name: "A band of outlaws", Price: 100, Strength: 15,
+	{Key: "outlaws", Name: "The Bloody Mummers", Price: 100, Strength: 15,
 		Reward: Delta{Renown: 0.6, Stats: Stats{Prowess: 1.5, Martial: 1}},
-		Desc:   "Twenty hard men from the hills who know every pass and ambush on the road."},
-	{Key: "sellswords", Name: "A sellsword company", Price: 250, Strength: 30,
+		Desc:   "Twenty cutthroats from every land, in motley and stolen armor, who know every pass and ambush on the road."},
+	{Key: "sellswords", Name: "The Black Company", Price: 250, Strength: 30,
 		Reward: Delta{Renown: 1, Stats: Stats{Prowess: 2.5, Martial: 1.5}},
-		Desc:   "Professional soldiers between wars, armored and mounted. Anyone who beats them will be famous."},
+		Desc:   "The most famous sellsword company in the world, between wars, armored and mounted. Anyone who beats them will be famous."},
+}
+
+// Phrase is the band's name mid-sentence: "a few cutthroats", "the Black
+// Company". Only the leading article is lowercased.
+func (b BanditBand) Phrase() string {
+	if b.Name == "" {
+		return ""
+	}
+	r := []rune(b.Name)
+	r[0] = unicode.ToLower(r[0])
+	return string(r)
 }
 
 func BanditBandByKey(k string) (BanditBand, bool) {
@@ -252,7 +264,7 @@ func ResolveAmbush(r Roller, traveler, hirer Person, band BanditBand, purse int,
 	_, m := ambushCheck.Roll(r, traveler.Sheet, quality*journeyQualityAmb-band.Strength, Normal)
 	purse = max(purse, 0)
 	var res AmbushResult
-	name := strings.ToLower(band.Name)
+	name := band.Phrase()
 	switch {
 	case m <= robbedMargin:
 		res.Outcome = AmbushRobbed
@@ -321,16 +333,16 @@ var (
 			Default: "around",
 		},
 		{
-			Key: "road_toll", Title: "A toll lord",
-			Prompt: "A petty lord has chained his road shut and wants silver to open it.",
+			Key: "road_toll", Title: "Walder Frey's toll",
+			Prompt: "Old Walder Frey has chained the bridge at the Twins shut, and wants silver to open it.",
 			Choices: []EventChoice{
 				{Key: "pay", Label: "Pay the toll (15 gold)",
-					Success: EventOutcome{Text: "He bows and drops the chain. Robbery with manners.", Quality: 2, Delta: Delta{Wealth: -15}}},
+					Success: EventOutcome{Text: "Lord Frey cackles and drops the chain. Robbery with manners.", Quality: 2, Delta: Delta{Wealth: -15}}},
 				{Key: "talk", Label: "Talk your way through", Check: chk(20, AttrDiplomacy, 6),
 					Success: EventOutcome{Text: "By the end he's apologizing, and offers you dinner.", Quality: 5},
 					Failure: EventOutcome{Text: "He doubles the price for wasting his time.", Quality: -3, Delta: Delta{Wealth: -30}}},
 				{Key: "force", Label: "Break the chain", Check: chk(15, AttrProwess, 6),
-					Success: EventOutcome{Text: "His men take one look at your escort and step aside.", Quality: 4, Delta: Delta{Renown: 0.2}},
+					Success: EventOutcome{Text: "His many sons take one look at your escort and step aside.", Quality: 4, Delta: Delta{Renown: 0.2}},
 					Failure: EventOutcome{Text: "A scuffle, a bloody nose, and you pay anyway.", Quality: -5, Delta: Delta{Wealth: -15}}},
 			},
 			Default: "pay",

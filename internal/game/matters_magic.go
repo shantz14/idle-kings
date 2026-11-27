@@ -34,8 +34,8 @@ var magicMatters = []MatterEvent{
 		},
 	},
 	{
-		Key: "oracle_smoke", Title: "The Oracle's Smoke", Theme: ThemeOmens,
-		Prompt:  "The blind oracle of the hill shrine has sent word: for a fee, she will breathe the smoke and tell the Senate what the coming season holds.",
+		Key: "oracle_smoke", Title: "The Oracle of Delphi", Theme: ThemeOmens,
+		Prompt:  "The Pythia, the oracle of Delphi, has sent word: for a fee, she will breathe the smoke and tell the Senate what the coming season holds.",
 		Default: "refuse",
 		Options: []MatterOption{
 			{Key: "pay", Label: "Pay for the prophecy", Hint: "Prophecies are expensive. Good ones are worth it.",
@@ -46,7 +46,7 @@ var magicMatters = []MatterEvent{
 					Realm: R{AttrTreasury: -6, AttrPopularity: -4, AttrStability: -2}}},
 			{Key: "refuse", Label: "Refuse", Hint: "The Senate makes its own future.",
 				Leans: L{LeanTradition: -0.5},
-				Success: MatterOutcome{Text: "The oracle shrugs and sells her prophecy to a merchant house instead. They do very well this year.",
+				Success: MatterOutcome{Text: "The Pythia shrugs and sells her prophecy to a merchant house instead. They do very well this year.",
 					Realm: R{}}},
 			{Key: "seize", Label: "Bring her to the city in chains", Hint: "A seer should serve the Republic.",
 				Leans: L{LeanMilitary: 1, LeanScheme: 1}, Check: chk(30, AttrMilitary, 0.4),
@@ -58,7 +58,7 @@ var magicMatters = []MatterEvent{
 	},
 	{
 		Key: "senate_ghost", Title: "A Ghost in the Senate House", Theme: ThemeOmens,
-		Prompt:  "The night watch swear a figure in an old-fashioned toga walks the Senate floor after dark, and sits in the consul's chair. Clerks are refusing to work late.",
+		Prompt:  "The night watch swear a crowned figure walks the Senate floor after dark and sits in the consul's chair: Tarquin the Proud, the last king of Rome, whom the Republic drove out. Clerks are refusing to work late.",
 		Default: "leave",
 		Options: []MatterOption{
 			{Key: "exorcise", Label: "Have the priests exorcise it", Hint: "Bells, salt, prayers. Costly but proper.",
@@ -67,18 +67,18 @@ var magicMatters = []MatterEvent{
 					Realm: R{AttrTreasury: -4, AttrStability: 3}}},
 			{Key: "seance", Label: "Hold a séance and ask what it wants", Hint: "The dead sometimes know things.",
 				Leans: L{LeanRisk: 1.5, LeanScheme: 0.5}, Check: chk(35, AttrStability, 0.4),
-				Success: MatterOutcome{Text: "The ghost names a consul from a century ago, and the vault where he hid the treasury's gold. It's still there.",
+				Success: MatterOutcome{Text: "Tarquin names the vault where he hid the royal treasury before he fled. It's still there.",
 					Realm: R{AttrTreasury: 12, AttrPopularity: 2}},
 				Failure: MatterOutcome{Text: "The candles go out and something laughs. Two senators resign the next morning.",
 					Realm: R{AttrStability: -5}}},
 			{Key: "leave", Label: "Let it walk", Hint: "It was here before us. It isn't hurting anyone.",
-				Success: MatterOutcome{Text: "The ghost keeps its hours. Visitors now pay to stand in the gallery at midnight.",
+				Success: MatterOutcome{Text: "The old king keeps his hours. Visitors now pay to stand in the gallery at midnight.",
 					Realm: R{AttrTreasury: 2, AttrStability: -2}}},
 		},
 	},
 	{
-		Key: "fey_lights", Title: "Fey Lights on the Marsh Road", Theme: ThemeSorcery, Bias: map[Attr]float64{AttrStability: 0.3},
-		Prompt:  "Travelers on the marsh road follow pale lights into the reeds and are not seen again. The caravans have started going the long way round.",
+		Key: "fey_lights", Title: "The Wild Hunt on the Marsh Road", Theme: ThemeSorcery, Bias: map[Attr]float64{AttrStability: 0.3},
+		Prompt:  "Horns sound over the marsh road at night, and the Wild Hunt rides: pale riders and pale lights. Travelers who follow them into the reeds are not seen again. The caravans have started going the long way round.",
 		Default: "close",
 		Options: []MatterOption{
 			{Key: "close", Label: "Close the road", Hint: "Nobody follows lights on a closed road. Trade will suffer.",

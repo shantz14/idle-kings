@@ -136,8 +136,8 @@ var arcMatters = []MatterEvent{
 		},
 	},
 	{
-		Key: "star_cult", Title: "The Star Cult", Arc: "fallen_star", Chapter: 3, Theme: ThemeFaith, FollowUpOnly: true,
-		Prompt:  "Preachers say the fallen star is a god, and it is speaking. Thousands have gone out to camp by the crater. Some of the miners say they hear it too.",
+		Key: "star_cult", Title: "The Church of Starry Wisdom", Arc: "fallen_star", Chapter: 3, Theme: ThemeFaith, FollowUpOnly: true,
+		Prompt:  "Preachers of the Church of Starry Wisdom say the fallen star is a god, and it is speaking. Thousands have gone out to camp by the crater. Some of the miners say they hear it too.",
 		Default: "tolerate",
 		Options: []MatterOption{
 			{Key: "suppress", Label: "Break up the camps", Hint: "Soldiers, and the preachers in chains.",
@@ -148,7 +148,7 @@ var arcMatters = []MatterEvent{
 					Realm: R{AttrMilitary: -5, AttrStability: -4}, FollowUps: next("star_wanted", 1)}},
 			{Key: "tolerate", Label: "Let them worship", Hint: "It's only another faith.",
 				Leans: L{LeanPopular: 1},
-				Success: MatterOutcome{Text: "The cult grows. Its hymns are strange, but they bring bread to the poor.",
+				Success: MatterOutcome{Text: "The Church of Starry Wisdom grows. Its hymns are strange, but they bring bread to the poor.",
 					Realm: R{AttrPopularity: 2, AttrStability: -3}, FollowUps: next("star_wanted", 1)}},
 			{Key: "coopt", Label: "Make it part of the state religion", Hint: "The Senate's priests will interpret the star.",
 				Leans: L{LeanTradition: 0.5, LeanScheme: 1},
@@ -158,7 +158,7 @@ var arcMatters = []MatterEvent{
 	},
 	{
 		Key: "star_wanted", Title: "What the Star Wanted", Arc: "fallen_star", Chapter: 4, Theme: ThemeOmens, FollowUpOnly: true,
-		Prompt:  "The star-iron sings louder every night. The alchemists say it wants to be forged. The cult says it wants to be worshipped. A few old priests say it wants to go home.",
+		Prompt:  "The star-iron sings louder every night. The alchemists say it wants to be forged. The Church of Starry Wisdom says it wants to be worshipped. A few old priests say it wants to go home.",
 		Default: "sea",
 		Options: []MatterOption{
 			{Key: "forge", Label: "Forge star-steel for the legions", Hint: "Swords that ring like bells. If it works.",
@@ -305,10 +305,10 @@ var arcMatters = []MatterEvent{
 	// ================= ⚗️ The Elixir of Youth =================
 	{
 		Key: "elixir_youth", Title: "An Elixir of Youth?", Arc: "elixir", Chapter: 1, Theme: ThemeSorcery,
-		Prompt:  "An alchemist on Crucible Street is selling a silver elixir that makes the old young. Three elderly senators drank it last week; they look forty, and are insufferable about it.",
+		Prompt:  "Nicolas Flamel, the alchemist of Crucible Street, is selling a silver elixir that makes the old young. Three elderly senators drank it last week; they look forty, and are insufferable about it.",
 		Default: "license",
 		Options: []MatterOption{
-			{Key: "license", Label: "License it", Hint: "Let him sell it, and tax it.",
+			{Key: "license", Label: "License it", Hint: "Let Flamel sell it, and tax it.",
 				Leans: L{LeanRisk: 1},
 				Success: MatterOutcome{Text: "Queues stretch down Crucible Street. Half the Senate seems younger by midsummer.",
 					Realm: R{AttrTreasury: 4, AttrPopularity: 2}, Sectors: SC{SectorAlchemy: {Health: 0.2}}, FollowUps: next("elixir_sickness", 2)}},
@@ -319,7 +319,7 @@ var arcMatters = []MatterEvent{
 					Enact: []LawKey{LawProhibition}}},
 			{Key: "monopoly", Label: "Make it a state monopoly", Hint: "The Senate owns the recipe, and sells it.",
 				Leans: L{LeanScheme: 1.5},
-				Success: MatterOutcome{Text: "The alchemist works for the treasury now. The price is high, and the treasury is happy.",
+				Success: MatterOutcome{Text: "Flamel works for the treasury now. The price is high, and the treasury is happy.",
 					Realm: R{AttrTreasury: 10, AttrPopularity: -1}, FollowUps: next("elixir_sickness", 2)}},
 		},
 	},
@@ -332,9 +332,9 @@ var arcMatters = []MatterEvent{
 				Leans: L{LeanPopular: 1},
 				Success: MatterOutcome{Text: "The river runs silver for a day. The fish are very lively for a week.",
 					Realm: R{AttrPopularity: 1}, Sectors: SC{SectorAlchemy: {Health: -0.2}}, FollowUps: next("elixir_trial", 1)}},
-			{Key: "arrest", Label: "Arrest the alchemist", Hint: "Someone has to answer for this.",
+			{Key: "arrest", Label: "Arrest Flamel", Hint: "Someone has to answer for this.",
 				Leans: L{LeanTradition: 1},
-				Success: MatterOutcome{Text: "The alchemist is dragged from his shop. He insists, loudly, that he was almost finished.",
+				Success: MatterOutcome{Text: "Flamel is dragged from his shop. He insists, loudly, that he was almost finished.",
 					Realm: R{AttrStability: 2}, FollowUps: next("elixir_trial", 1)}},
 			{Key: "cure", Label: "Pay physicians to find a cure", Hint: "Save the drinkers, whatever it costs.",
 				Leans: L{LeanPopular: 1.5}, Check: chk(35, AttrStability, 0.4),
@@ -346,7 +346,7 @@ var arcMatters = []MatterEvent{
 	},
 	{
 		Key: "elixir_trial", Title: "The Philosopher's Trial", Arc: "elixir", Chapter: 3, Theme: ThemeSorcery, FollowUpOnly: true,
-		Prompt:  "The alchemist stands trial before the Senate. His defense: the true elixir is nearly perfected. Give him a year, he says, and no senator need ever die.",
+		Prompt:  "Nicolas Flamel stands trial before the Senate. His defense: the true elixir is nearly perfected. Give him a year, he says, and no senator need ever die.",
 		Default: "execute",
 		Options: []MatterOption{
 			{Key: "execute", Label: "Execute him", Hint: "An example to every alchemist in the realm.",

@@ -211,8 +211,8 @@ func (b *Bot) onHireBand(ctx context.Context, i *discordgo.InteractionCreate, id
 	default:
 		color = colorSecret
 		text = fmt.Sprintf("You paid **%s**. They'll be waiting for %s on the road home. You'll hear how it went %s.\n%s",
-			strings.ToLower(band.Name), traveler.FullName(), relTime(a.EndsAt), effects(fmt.Sprintf("-%d gold", band.Price)))
-		defer b.leak(ctx, c, game.SecretHiredBandits(c.FullName(), traveler.FullName(), strings.ToLower(band.Name), band.Price))
+			band.Phrase(), traveler.FullName(), relTime(a.EndsAt), effects(fmt.Sprintf("-%d gold", band.Price)))
+		defer b.leak(ctx, c, game.SecretHiredBandits(c.FullName(), traveler.FullName(), band.Phrase(), band.Price))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "🗡️ Hire bandits", Description: text, Color: color}},

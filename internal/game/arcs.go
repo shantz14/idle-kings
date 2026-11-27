@@ -26,12 +26,12 @@ var Arcs = []ArcDef{
 	{Key: "elixir", Name: "The Elixir of Youth", Emoji: "⚗️", Chapters: 3, Strict: true},
 
 	{Key: "northern_tribes", Name: "The Dothraki", Emoji: "🪓", Chapters: 3},
-	{Key: "eastern_road", Name: "The King of the Eastern Road", Emoji: "🗡️", Chapters: 2},
+	{Key: "eastern_road", Name: "Robin Hood", Emoji: "🗡️", Chapters: 2},
 	{Key: "hungry_year", Name: "The Hungry Year", Emoji: "🌾", Chapters: 2},
 	{Key: "black_lances", Name: "The Golden Company", Emoji: "🛡️", Chapters: 2},
 	{Key: "plague", Name: "The Plague", Emoji: "🐀", Chapters: 2},
 	{Key: "gladiators", Name: "The Gladiators' Revolt", Emoji: "⚔️", Chapters: 2},
-	{Key: "pirates", Name: "The Pirates of the Teeth", Emoji: "🏴‍☠️", Chapters: 2},
+	{Key: "pirates", Name: "The Ironborn", Emoji: "🏴‍☠️", Chapters: 2},
 }
 
 func ArcByKey(k string) (ArcDef, bool) {
@@ -39,13 +39,14 @@ func ArcByKey(k string) (ArcDef, bool) {
 }
 
 // ArcLabel is the line shown above an arc's matter: "💀 The Barrow King ·
-// Chapter 3 of 5". Empty for matters outside any arc.
+// Chapter 3". It never says how many chapters are left. Empty for matters
+// outside any arc.
 func (e MatterEvent) ArcLabel() string {
 	a, ok := ArcByKey(e.Arc)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("%s %s · Chapter %d of %d", a.Emoji, a.Name, e.Chapter, a.Chapters)
+	return fmt.Sprintf("%s %s · Chapter %d", a.Emoji, a.Name, e.Chapter)
 }
 
 // ActiveArcs are the arcs with a chapter waiting in the queue.
@@ -146,7 +147,7 @@ func Chronicle(decisions []Decided, queued []string) []ChronicleEntry {
 
 // Line renders an entry for the realm page.
 func (c ChronicleEntry) Line() string {
-	s := fmt.Sprintf("%s **%s** — chapter %d of %d: *%s*", c.Arc.Emoji, c.Arc.Name, c.Chapter, c.Arc.Chapters, c.Title)
+	s := fmt.Sprintf("%s **%s** — chapter %d: *%s*", c.Arc.Emoji, c.Arc.Name, c.Chapter, c.Title)
 	if c.Choice != "" {
 		s += fmt.Sprintf(" (the Senate chose: %s)", c.Choice)
 	}

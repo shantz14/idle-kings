@@ -49,8 +49,8 @@ var magicPartyEvents = []PartyEvent{
 
 var magicHuntEvents = []PartyEvent{
 	{
-		Key: "hunt_fey_lights", Title: "Lights between the trees",
-		Prompt: "Pale lights bob between the trunks, just off the trail. The hounds won't go near them. They seem to be waiting for you.",
+		Key: "hunt_fey_lights", Title: "The Wild Hunt",
+		Prompt: "Far-off horns, and pale lights bob between the trunks, just off the trail: the Wild Hunt is riding. The hounds won't go near them. They seem to be waiting for you.",
 		Choices: []EventChoice{
 			{Key: "follow", Label: "Follow them", Check: chk(20, AttrIntrigue, 6),
 				Success: EventOutcome{Text: "They lead you to a clearing full of game, and then wink out. You come back with the best kill of the day, and a strange calm.", Quality: 14, Delta: Delta{Stats: Stats{Intrigue: 1}}},
@@ -61,8 +61,8 @@ var magicHuntEvents = []PartyEvent{
 		Default: "turn_back",
 	},
 	{
-		Key: "hunt_witch_hut", Title: "The witch's hut",
-		Prompt: "Deep in the wood, a hut of bones and turf. Smoke from the chimney. A voice from inside says your name, though you never gave it.",
+		Key: "hunt_witch_hut", Title: "Baba Yaga's hut",
+		Prompt: "Deep in the wood, a hut of bones and turf stands on a pair of chicken legs. Smoke from the chimney. Baba Yaga's voice from inside says your name, though you never gave it.",
 		Choices: []EventChoice{
 			{Key: "knock", Label: "Knock, politely", Check: chk(25, AttrDiplomacy, 6),
 				Success: EventOutcome{Text: "She gives you tea and tells you where the stags sleep. Your hunt is charmed.", Quality: 12},
