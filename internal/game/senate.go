@@ -181,14 +181,14 @@ const (
 // one against one, war is two Hawks against two Doves, and the farms, trade
 // and law and order each have a champion (TestStandardSenateIsBalanced).
 var StandardSenate = []string{
-	"Julius Caesar",     // Hawk, Reckless
-	"Tywin Lannister",   // Hawk, Economical
-	"Saruman",           // Scheming, Big spender
-	"Elminster",         // Cosmopolitan, Dove
-	"Denethor",          // Isolationist, Conservative
-	"Eddard Stark",      // Incorruptible, Stern
-	"Tiberius Gracchus", // Populist, Landowner
-	"Atticus",           // Dove, Merchant prince
+	"Julius Caesar",      // Hawk, Reckless
+	"Tywin Lannister",    // Hawk, Economical
+	"Saruman",            // Scheming, Big spender
+	"Elminster",          // Cosmopolitan, Dove
+	"Thorin Oakenshield", // Isolationist, Conservative
+	"Eddard Stark",       // Incorruptible, Stern
+	"Joan of Arc",        // Populist, Landowner
+	"Midas",              // Dove, Merchant prince
 }
 
 // NewSenate seats a court's Senate. Each senator still gets a random
