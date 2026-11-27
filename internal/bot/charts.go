@@ -177,6 +177,9 @@ func (s pieSlice) label() string {
 	return "**" + s.Name + "**"
 }
 
+// housesKey explains the grey in every chart.
+const housesKey = "🏛️ *Grey is the old houses, who own whatever players haven't bought.*"
+
 // legendList is one owner per line, for a single industry.
 func legendList(c pieCard) string {
 	var lines []string
@@ -217,9 +220,9 @@ func legendLines(cards []pieCard) string {
 		lines = append(lines, legendLine(c))
 	}
 	if len(lines) == 0 {
-		return "Nobody has invested yet. *Monetary → Invest in a Venture*"
+		lines = append(lines, "Nobody has invested yet. *Monetary → Invest in a Venture*")
 	}
-	return joinLines(lines, 1000)
+	return joinLines(lines, 900) + "\n" + housesKey
 }
 
 // ---- loading ----
@@ -417,6 +420,10 @@ func drawTile(img *image.RGBA, x, y int, s float64, c pieCard) {
 	roundRect(img, image.Rect(x, y, x+w, y+h), 28*s, tileRGB)
 	drawText(img, face(40*s), textRGB, x+w/2, y+int(58*s), shortName(c.Sector.Name))
 	cx, cy := float64(x)+float64(w)/2, float64(y)+235*s
+	if len(c.Slices) == 1 { // only the old houses: a plain grey disc, explained in the legend
+		drawDonut(img, cx, cy, 145*s, 0, c.Slices)
+		return
+	}
 	drawDonut(img, cx, cy, 145*s, 92*s, c.Slices)
 	big, small := headline(c)
 	drawText(img, face(60*s), textRGB, int(cx), int(cy+12*s), big)
