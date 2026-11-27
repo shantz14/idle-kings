@@ -25,15 +25,17 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  works.go (public works and monuments),
                  spies.go (spy networks, Plant/Root Out Spies, Practice), secrets.go (what spies leak), misdeeds.go (which secrets are shameful, and denouncing them),
                  votesale.go (the scandal risk of selling your vote to a senator),
+                 conspiracy.go (Conspiracies: schemes, power, daily ripening and discovery, senators joining, the strike, forgeries, ReplaceSenator), succession.go (death and the heir),
                  laws.go (lasting laws, their motions and every rule they bend), petition.go (Petition the Senate)
 internal/store   SQLite: schema.sql (applied on open, no migrations), characters,
                  activities (parties, courting), speak (senator visits, vote asks), senate (realm, matters, votes, bribes, vote deals),
                  opinions, ventures (sector stakes, investments), journeys (hiring bandits: a participant with goal `bandits:<band>`), duels (accept/decline, bets),
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
-                 monuments (in activities.go), laws (ApplyOutcome, denunciations)
+                 monuments (in activities.go), laws (ApplyOutcome, denunciations),
+                 conspiracies (plots, members, strikes, and the deeds: deaths/heirs, thefts, new senators)
 internal/bot     Discord: commands.go (registration + dispatch), creator, menu, party, speak (Speak to a Senator: the senator's page, asking), court,
                  invest, duel, hunt, journey (journeys, hiring bandits), intrigue (spies), leak, senate, votetrade, estate, shop,
-                 estatetrade (player deals), influence (canvass, circus, announce helpers),
+                 estatetrade (player deals), conspiracy (plots, invitations, the daily tick, striking, naming an heir), influence (canvass, circus, announce helpers),
                  speech, works, petition, laws (denouncing, permits, laws field), dossier (saved spy reports), info pages
 ```
 Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init` (`componentRoutes["hunt"] = (*Bot).onHunt`, `modalRoutes` for modals; see `routes.go`), and documents its IDs at the top. Handlers always get at least one part. `limits_test.go` fails on any tested button with no route.
@@ -61,6 +63,7 @@ Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init
 - Senators score a matter's options once (`viewOptions`, `Senator.scores`); reuse the scores rather than calling `Score` in loops. Catalogue lookups (`MatterByKey`, `ItemByKey`, …) are indexed (`index.go`); add one there for a new catalogue. Senator reactions to an action go through `TraitReactions`/`opinionsFrom`, and resolvers collect results in a `Ledger`. `TestGolden` (`testdata/golden.txt`) pins what the rules decide at fixed seeds: a refactor must leave it passing; after an intended rule change, rerun it with `-update`.
 - Senate picks: no event repeats within `game.MatterCooldown` matters (read from the `matters` table), and two random picks in a row never share a `Theme`. Every new event needs a Theme.
 - The store uses a single DB connection: close `rows` before running another query (see `listCharacters`), and never call non-tx store methods inside a transaction. Use the helpers in `helpers.go`: `withTx`, `queryAll` (closes rows for you), `inList`, `spend`/`spendOr`/`credit`, `resolveOnce`. Look characters up in bulk with `CharactersByIDs`/`CharacterNames`, never in a loop. Loaded characters carry `RealmFallen`, so don't reload the realm to check it. `TestHotQueriesUseIndexes` guards the per-tick queries; add yours there.
+- Conspiracies (`conspiracy.go`): a plot is a free activity (`KindConspiracy` in `FreeKinds`, one led at a time) with its state in `conspiracies` and everyone asked in `conspiracy_members`; `conspiracyTick` steps each plot once per game day (`game.StepDay`), and the leader's `KindStrike` activity (target = the plot's id) ends both through `store.ResolveStrike`. What a plot does goes through `Outcome.Deaths` (the same character row carries on as the heir, `game.Inherit`), `Outcome.Transfers` (possessions only), `Outcome.Denunciations` and `Outcome.Senators` (a new persona in the same seat ID, `game.ReplaceSenator`). Root Out Spies also rolls `game.Uncover` on plots against you.
 - `b.leak` runs in the background (`b.background`), so call it whenever it fits; the player's answer doesn't wait on it.
 - Schema is dev-only. Changing it means deleting `idle-kings.db`; say so in the README.
 

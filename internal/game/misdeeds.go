@@ -23,15 +23,19 @@ type MisdeedDef struct {
 }
 
 var MisdeedDefs = map[string]MisdeedDef{
-	SecretKindEmbezzle: {Word: "stealing from the treasury", Severity: 1, Offended: []Trait{TraitIncorruptible, TraitEconomical}, AlwaysCrime: true},
-	SecretKindBandits:  {Word: "paying bandits to rob a traveller", Severity: 1, Offended: []Trait{TraitStern}, AlwaysCrime: true},
-	SecretKindBribe:    {Word: "bribing a senator", Severity: 0.6, Offended: []Trait{TraitIncorruptible}},
-	SecretKindSoldVote: {Word: "selling votes to senators", Severity: 0.5, Offended: []Trait{TraitIncorruptible, TraitStern}},
-	SecretKindVoteDeal: {Word: "trading votes for gold", Severity: 0.4, Offended: []Trait{TraitIncorruptible}},
-	SecretKindRumor:    {Word: "spreading lies about another house", Severity: 0.4, Offended: []Trait{TraitStern}},
-	SecretKindPlant:    {Word: "spying on another house", Severity: 0.3, Offended: []Trait{TraitStern}},
-	SecretKindWhisper:  {Word: "spreading scandal about another house", Severity: 0.3, Offended: []Trait{TraitStern}},
-	SecretKindMagic:    {Word: "dealing in enchanted goods", Severity: 0.6, Offended: []Trait{TraitPious, TraitConservative}, Needs: LawWitchcraftAct},
+	SecretKindEmbezzle:   {Word: "stealing from the treasury", Severity: 1, Offended: []Trait{TraitIncorruptible, TraitEconomical}, AlwaysCrime: true},
+	SecretKindBandits:    {Word: "paying bandits to rob a traveller", Severity: 1, Offended: []Trait{TraitStern}, AlwaysCrime: true},
+	SecretKindBribe:      {Word: "bribing a senator", Severity: 0.6, Offended: []Trait{TraitIncorruptible}},
+	SecretKindSoldVote:   {Word: "selling votes to senators", Severity: 0.5, Offended: []Trait{TraitIncorruptible, TraitStern}},
+	SecretKindVoteDeal:   {Word: "trading votes for gold", Severity: 0.4, Offended: []Trait{TraitIncorruptible}},
+	SecretKindRumor:      {Word: "spreading lies about another house", Severity: 0.4, Offended: []Trait{TraitStern}},
+	SecretKindPlant:      {Word: "spying on another house", Severity: 0.3, Offended: []Trait{TraitStern}},
+	SecretKindWhisper:    {Word: "spreading scandal about another house", Severity: 0.3, Offended: []Trait{TraitStern}},
+	SecretKindMurder:     {Word: "murder", Severity: 1, Offended: []Trait{TraitStern, TraitPious}, AlwaysCrime: true},
+	SecretKindTheft:      {Word: "burgling another house", Severity: 0.9, Offended: []Trait{TraitStern}, AlwaysCrime: true},
+	SecretKindForgery:    {Word: "forging evidence against another house", Severity: 0.8, Offended: []Trait{TraitStern, TraitIncorruptible}, AlwaysCrime: true},
+	SecretKindConspiracy: {Word: "conspiring against another house", Severity: 0.7, Offended: []Trait{TraitStern}, AlwaysCrime: true},
+	SecretKindMagic:      {Word: "dealing in enchanted goods", Severity: 0.6, Offended: []Trait{TraitPious, TraitConservative}, Needs: LawWitchcraftAct},
 }
 
 const (

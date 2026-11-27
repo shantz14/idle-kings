@@ -105,6 +105,10 @@ var Actions = []ActionDef{
 		Description: "Everything your spies have caught your rivals doing. Denounce them whenever you like; it doesn't take your action.",
 	},
 	{
+		Key: KindConspiracy, Name: "Conspiracies", Emoji: "🕸️", Category: CatIntrigue,
+		Description: "Plot a murder, a theft, a forgery or a senator's fall, and invite players and senators in. It ripens over days without taking your action, but every day it may be found out.",
+	},
+	{
 		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Emoji: "🪙", Category: CatIntrigue,
 		Description: "Quietly move the Republic's silver into your own purse. Takes 2 hours. If you're caught, everyone will know.",
 	},

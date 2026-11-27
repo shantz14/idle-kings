@@ -77,6 +77,9 @@ func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.Inter
 	if a, err := b.store.WorkInProgress(ctx, c.ID); err == nil {
 		lines = append(lines, "🏗️ "+b.activityLine(ctx, a))
 	}
+	if k, err := b.store.LedConspiracy(ctx, c.ID); err == nil {
+		lines = append(lines, "🕸️ "+b.activityLine(ctx, k.Activity))
+	}
 	var cats []discordgo.MessageComponent
 	for _, cat := range game.Categories {
 		cats = append(cats, withEmoji(button(cat.Name, "menu:cat:"+string(cat.Key), discordgo.PrimaryButton, false), cat.Emoji))

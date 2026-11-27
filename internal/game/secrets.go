@@ -60,6 +60,11 @@ const (
 	SecretKindCanvass     = "canvass"
 	SecretKindEmbezzle    = "embezzle"
 	SecretKindMagic       = "magic"
+	SecretKindConspiracy  = "conspiracy"
+	SecretKindMurder      = "murder"
+	SecretKindTheft       = "theft"
+	SecretKindForgery     = "forgery"
+	SecretKindBetrayal    = "betrayal"
 )
 
 // LeakChance is the percent chance that a network at this level reports a
@@ -291,5 +296,40 @@ func SecretMagic(actor, item string) Secret {
 		Vague:   fmt.Sprintf("Something heavy and carefully wrapped was carried into %s's house after dark.", actor),
 		Partial: fmt.Sprintf("%s has bought something enchanted, in spite of the Witchcraft Act.", actor),
 		Full:    fmt.Sprintf("%s bought **%s**, in spite of the Witchcraft Act.", actor, item),
+	}
+}
+
+// SecretConspire is starting or joining a plot. leader is "" when the actor
+// leads it.
+func SecretConspire(actor, leader, scheme, target string) Secret {
+	s := Secret{
+		Kind:    SecretKindConspiracy,
+		Vague:   fmt.Sprintf("%s has been meeting people at night, in places they shouldn't be.", actor),
+		Partial: fmt.Sprintf("%s is part of a conspiracy against **%s**.", actor, target),
+		Full:    fmt.Sprintf("%s is plotting to %s **%s**.", actor, scheme, target),
+	}
+	if leader != "" {
+		s.Full = fmt.Sprintf("%s has joined **%s**'s plot to %s **%s**.", actor, leader, scheme, target)
+	}
+	return s
+}
+
+// SecretPlotDone is a plot's deed, once done. kind is the scheme's crime.
+func SecretPlotDone(kind, actor, scheme, target string) Secret {
+	return Secret{
+		Kind:    kind,
+		Vague:   fmt.Sprintf("%s seems very pleased with themselves this morning.", actor),
+		Partial: fmt.Sprintf("%s was behind what happened to **%s**.", actor, target),
+		Full:    fmt.Sprintf("%s's plot to %s **%s** worked. They planned it all.", actor, scheme, target),
+	}
+}
+
+// SecretBetrayal is a plotter giving their friends away to the target.
+func SecretBetrayal(actor string, target int64, targetName, leader string) Secret {
+	return Secret{
+		Kind: SecretKindBetrayal, Skip: []int64{target},
+		Vague:   fmt.Sprintf("%s was seen at another house's back door.", actor),
+		Partial: fmt.Sprintf("%s has betrayed a conspiracy.", actor),
+		Full:    fmt.Sprintf("%s told **%s** everything about **%s**'s plot against them.", actor, targetName, leader),
 	}
 }
