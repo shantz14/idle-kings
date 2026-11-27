@@ -99,10 +99,8 @@ func (b *Bot) courtPanel(ctx context.Context, c store.Character, senatorID int64
 }
 
 func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senatorID int64, dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Spend %s in a senator's company and try to win them over. ", humanDuration(dur))
-	sb.WriteString("How well it goes depends on your skills, how you approach them, their traits, and what they already think of you. ")
-	sb.WriteString("Senators who like you charge less for bribes, pay more for your vote, and may follow your lead in the Senate.\n")
+	intro := "Spend time in a senator's company and try to win them over. It depends on your skills, your approach, " +
+		"their traits, and what they already think of you."
 
 	embeds := []*discordgo.MessageEmbed{}
 	var chosen *game.Senator
@@ -117,13 +115,10 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 			chosen = &s
 		}
 	}
-	if busy != "" {
-		sb.WriteString("\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Court a Senator", Description: sb.String(), Color: colorPanel})
+	e := actionEmbed(game.KindCourt, withNote(busyNote(busy, note), intro))
+	e.Fields = []*discordgo.MessageEmbedField{fact("Takes", humanDuration(dur)), fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))}
+	e.Footer = footer("💬 Senators who like you take smaller bribes, pay more for your vote, and may follow your lead.")
+	embeds = append(embeds, e)
 
 	comps := []discordgo.MessageComponent{}
 	if len(opts) > 0 {
@@ -141,7 +136,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 	if p, ok := game.PersonaByName(s.Name); ok {
 		fmt.Fprintf(&desc, "*%s*\n", p.Bio)
 	}
-	fmt.Fprintf(&desc, "%s · influence %s\n**Their opinion of you**\n%s\n**How will you approach them?**\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
+	fmt.Fprintf(&desc, "*%s* · influence %s\n**Their opinion of you**\n%s\n**How will you approach them?**\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
 	var btns []discordgo.MessageComponent
 	for _, a := range game.Approaches {
 		label := a.Name
@@ -150,11 +145,10 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 			cost = game.GiftCost(s)
 			label = fmt.Sprintf("%s (%d gold)", a.Name, cost)
 		}
-		fmt.Fprintf(&desc, "**%s**: %s\n", label, a.Description)
-		btns = append(btns, button(label, fmt.Sprintf("court:go:%d:%s", s.ID, a.Key), discordgo.SuccessButton, busy != "" || cost > c.Wealth))
+		fmt.Fprintf(&desc, "• **%s**: %s\n", label, a.Description)
+		btns = append(btns, button(label, fmt.Sprintf("court:go:%d:%s", s.ID, a.Key), discordgo.PrimaryButton, busy != "" || cost > c.Wealth))
 	}
-	fmt.Fprintf(&desc, "\nYou have **%d gold**.", c.Wealth)
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Senator " + s.Name, Description: desc.String(), Color: colorPanel})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: "🎩 Senator " + s.Name, Description: strings.TrimSpace(desc.String()), Color: colorSenate})
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(append(btns, back)...))}
 }
 
@@ -193,12 +187,13 @@ func (b *Bot) onCourtGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 		b.update(i, b.courtPanel(ctx, c, s.ID, err.Error()))
 		return
 	}
-	text := fmt.Sprintf("You call on **Senator %s** (%s). You'll be back <t:%d:R>, and I'll DM you how it went.", s.Name, strings.ToLower(a.Name), ends.Unix())
+	text := fmt.Sprintf("You call on **Senator %s**. You'll be back %s, and I'll DM you how it went.", s.Name, relTime(ends))
+	fields := []*discordgo.MessageEmbedField{fact("Approach", a.Name)}
 	if cost > 0 {
-		text += fmt.Sprintf(" The gift cost **%d gold**.", cost)
+		fields = append(fields, fact("Gift", fmt.Sprintf("%d gold", cost)))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Courting " + s.Name, Description: text, Color: colorGood}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "🎩 Courting Senator " + s.Name, Description: text, Color: colorGood, Fields: fields}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretCourt(c.FullName(), s.Name, strings.ToLower(a.Name)))
@@ -243,7 +238,7 @@ func (b *Bot) resolveCourt(ctx context.Context, a store.Activity, now time.Time)
 	after := game.ClampOpinion(before + res.Delta)
 	desc := res.Text + "\n\n**Their opinion of you**\n" + opinionBlock(after)
 	if res.Delta != 0 {
-		desc += fmt.Sprintf("(%s)", game.OpinionNum(res.Delta))
+		desc += effects("Opinion " + game.OpinionNum(res.Delta))
 	}
 	color := colorPanel
 	switch {
@@ -253,7 +248,7 @@ func (b *Bot) resolveCourt(ctx context.Context, a store.Activity, now time.Time)
 		color = colorBad
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "You called on Senator " + s.Name, Description: desc, Color: color,
+		Title: "🎩 You called on Senator " + s.Name, Description: desc, Color: color,
 	}}})
 	b.leak(ctx, c, game.SecretCourtResult(c.FullName(), s.Name, res.Delta > 0, res.Delta < 0))
 }

@@ -76,12 +76,8 @@ func (b *Bot) onCanvass(ctx context.Context, i *discordgo.InteractionCreate, par
 		return
 	}
 	b.leak(ctx, c, game.SecretCanvass(c.FullName()))
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Out in the districts",
-			Description: fmt.Sprintf("You head out to shake hands across the city. You'll be back <t:%d:R>, and I'll DM you how it went.", a.EndsAt.Unix()),
-			Color:       colorGood}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	b.update(i, startedView("🗺️ Out in the districts", "You head out to shake hands across the city. I'll DM you how it went.",
+		fact("Back", relTime(a.EndsAt))))
 }
 
 func (b *Bot) canvassPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
@@ -89,19 +85,15 @@ func (b *Bot) canvassPanel(ctx context.Context, c store.Character, note string) 
 }
 
 func canvassView(dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
-	desc := fmt.Sprintf("Spend %s shaking hands, kissing babies and making promises in the city's districts. ", humanDuration(dur)) +
-		"It costs nothing, and even a bad day wins you a little influence. Diplomacy helps most, and a famous name opens doors.\n\n" +
-		"Influence comes harder the more of it you already have."
-	if busy != "" {
-		desc += "\n\n" + busy
-	}
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	desc := "Shake hands, kiss babies and make promises across the city's districts. " +
+		"Even a bad day wins a little influence. Diplomacy helps most, and a famous name opens doors."
+	e := actionEmbed(game.KindCanvass, withNote(busyNote(busy, note), desc))
+	e.Fields = []*discordgo.MessageEmbedField{fact("Cost", "Free"), fact("Takes", humanDuration(dur)), fact("Seen by", "🔒 Private")}
+	e.Footer = footer("Influence comes harder the more of it you already have.")
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Canvass the Districts", Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(
-			button("Go canvassing", "canvass:go", discordgo.SuccessButton, busy != ""),
+			withEmoji(button("Go canvassing", "canvass:go", discordgo.SuccessButton, busy != ""), "🗺️"),
 			backButton(game.KindCanvass),
 		)},
 	}
@@ -127,7 +119,7 @@ func (b *Bot) resolveCanvass(ctx context.Context, a store.Activity, now time.Tim
 		color = colorGood
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "Back from the districts", Description: fmt.Sprintf("%s (%s)", res.Text, d.Describe()), Color: color,
+		Title: "🗺️ Back from the districts", Description: withDelta(res.Text, d), Color: color,
 	}}})
 }
 
@@ -167,25 +159,23 @@ func (b *Bot) circusPanel(ctx context.Context, c store.Character, note string) *
 }
 
 func circusView(c store.Character, dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
-	desc := fmt.Sprintf("Feed and entertain the city at your own expense for %s. The people's mood rises, and your influence with it. ", humanDuration(dur)) +
-		"Every coin helps a little less than the last, and influence comes harder the more you already have. " +
-		"A steady hand with money (Stewardship) keeps the crowds from turning ugly.\n\n" +
-		"Populists in the Senate will love you for it. Misers won't.\n\n" +
-		fmt.Sprintf("You have **%d gold**. Spend anything from %d to %d.", c.Wealth, game.CircusMin, game.CircusMax)
-	if busy != "" {
-		desc += "\n\n" + busy
+	desc := "Feed and entertain the city at your own expense. The people's mood rises, and your influence with it. " +
+		"A steady hand with money (Stewardship) keeps the crowds from turning ugly. Populists in the Senate will love you for it; misers won't."
+	e := actionEmbed(game.KindCircus, withNote(busyNote(busy, note), desc))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)),
+		fact("Spend", fmt.Sprintf("%d to %d gold", game.CircusMin, game.CircusMax)),
+		fact("Lasts", humanDuration(dur)),
 	}
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	e.Footer = footer("Each coin helps a little less than the last, and influence comes harder the more you have.")
 	var btns []discordgo.MessageComponent
 	for _, s := range game.CircusSizes {
 		btns = append(btns, button(fmt.Sprintf("%s (%d gold)", s.Name, s.Gold), fmt.Sprintf("circus:size:%d", s.Gold),
 			discordgo.SuccessButton, busy != "" || s.Gold > c.Wealth))
 	}
-	btns = append(btns, button("Other amount", "circus:custom", discordgo.PrimaryButton, busy != "" || c.Wealth < game.CircusMin))
+	btns = append(btns, withEmoji(button("Other amount", "circus:custom", discordgo.PrimaryButton, busy != "" || c.Wealth < game.CircusMin), "✏️"))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and Circuses", Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...),
 			row(backButton(game.KindCircus))},
 	}
@@ -215,17 +205,14 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 	permit := b.payPermit(ctx, c)
 	name := game.CircusName(gold)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%s pays for a %s", c.FullName(), lowerName(name)),
-		Description: fmt.Sprintf("House %s throws open its granaries. The celebrations end <t:%d:R>.", c.FamilyName, a.EndsAt.Unix()),
+		Title:       fmt.Sprintf("🎪 %s pays for a %s", c.FullName(), lowerName(name)),
+		Description: fmt.Sprintf("House %s throws open its granaries. Bread for all, and games in the arena.", c.FamilyName),
 		Color:       colorPanel,
+		Fields:      []*discordgo.MessageEmbedField{fact("Ends", relTime(a.EndsAt))},
 	}, nil)
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and circuses",
-			Description: fmt.Sprintf("You spent **%d gold** on a %s. It ends <t:%d:R>, and I'll DM you how the city took it.%s%s",
-				gold, lowerName(name), a.EndsAt.Unix(), where, permit),
-			Color: colorGood}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	b.update(i, startedView("🎪 Bread and circuses",
+		fmt.Sprintf("You pay for a %s. I'll DM you how the city took it.%s%s", lowerName(name), where, permit),
+		fact("Spent", fmt.Sprintf("%d gold", gold)), fact("Ends", relTime(a.EndsAt))))
 }
 
 func (b *Bot) resolveCircus(ctx context.Context, a store.Activity, now time.Time) {
@@ -253,11 +240,9 @@ func (b *Bot) resolveCircus(ctx context.Context, a store.Activity, now time.Time
 	if !res.Success {
 		color = colorBad
 	}
-	desc := fmt.Sprintf("%s (%s)\n\nThe people's mood: +%s popularity.", res.Text, res.Delta.Describe(), game.Num(res.Popularity))
-	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "Bread and circuses", Description: desc, Color: color,
-	}}})
-	b.announceEnd(a, &discordgo.MessageEmbed{Title: fmt.Sprintf("%s's %s", c.FullName(), lowerName(game.CircusName(a.Spend))),
+	desc := fmt.Sprintf("%s\n\n👥 The people's mood: **+%s** popularity.", withDelta(res.Text, res.Delta), game.Num(res.Popularity))
+	b.dmNote(c.UserID, "🎪 Bread and circuses", desc, color)
+	b.announceEnd(a, &discordgo.MessageEmbed{Title: fmt.Sprintf("🎪 %s's %s", c.FullName(), lowerName(game.CircusName(a.Spend))),
 		Description: res.Public, Color: color})
 }
 

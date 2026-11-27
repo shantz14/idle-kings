@@ -150,3 +150,28 @@ func effects(s string) string {
 func (b *Bot) dmNote(userID, title, text string, color int) {
 	_, _ = b.dm(userID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{Title: title, Description: text, Color: color}}})
 }
+
+// dmNotices DMs each player their lines from an activity's result.
+func (b *Bot) dmNotices(notices map[int64][]string, users map[int64]string, title string) {
+	for id, lines := range notices {
+		if uid, ok := users[id]; ok {
+			b.dmNote(uid, title, truncate(strings.Join(lines, "\n\n"), 4000), colorPanel)
+		}
+	}
+}
+
+// busyNote is a panel's status: what you're busy with, then any note.
+func busyNote(busy, note string) string {
+	if busy != "" {
+		busy = "⏳ " + busy
+	}
+	return joinNotes(busy, note)
+}
+
+// startedView confirms an action has begun, with a way back home.
+func startedView(title, desc string, fields ...*discordgo.MessageEmbedField) *discordgo.InteractionResponseData {
+	return &discordgo.InteractionResponseData{
+		Embeds:     []*discordgo.MessageEmbed{{Title: title, Description: strings.TrimSpace(desc), Color: colorGood, Fields: fields}},
+		Components: []discordgo.MessageComponent{homeRow()},
+	}
+}

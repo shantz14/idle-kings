@@ -62,33 +62,26 @@ func (b *Bot) worksPanel(ctx context.Context, c store.Character, note string) *d
 }
 
 func worksView(c store.Character, times map[string]time.Duration, building, note string) *discordgo.InteractionResponseData {
-	var sb strings.Builder
-	sb.WriteString("Pay for something the whole city will use, with your family's name carved on it. ")
-	sb.WriteString("It takes days to build, but you can get on with other things meanwhile. ")
-	sb.WriteString("Once it opens, its **Senate vote weight is yours for good**, and it adds to your estate.\n")
-	sb.WriteString("You can build one at a time, and one of each.\n\n")
+	desc := "Pay for something the whole city will use, with your family's name carved on it. " +
+		"Once it opens, its **Senate vote weight is yours for good**, and it adds to your estate."
+	e := actionEmbed(game.KindWork, withNote(busyNote(building, note), desc))
 	var btns []discordgo.MessageComponent
 	for _, w := range game.WorkDefs {
 		built := slices.Contains(c.Monuments, w.Key)
-		status := ""
+		name := w.Emoji + " " + w.Name
 		if built {
-			status = " ✅ *built*"
+			name += " ✅"
 		}
-		fmt.Fprintf(&sb, "%s **%s** — %d gold, %s to build, **+%s vote weight**%s\n%s\n\n",
-			w.Emoji, w.Name, w.Cost, humanDuration(times[w.Key]), game.Num(w.VoteWeight), status, w.Description)
-		btns = append(btns, button(fmt.Sprintf("%s (%d gold)", w.Name, w.Cost), "work:build:"+w.Key,
-			discordgo.SuccessButton, built || building != "" || w.Cost > c.Wealth))
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: name, Value: fmt.Sprintf(
+			"%s\n**%d** gold · %s to build · **+%s** vote weight", w.Description, w.Cost, humanDuration(times[w.Key]), game.Num(w.VoteWeight))})
+		btns = append(btns, withEmoji(button(fmt.Sprintf("%s (%d gold)", w.Name, w.Cost), "work:build:"+w.Key,
+			discordgo.SuccessButton, built || building != "" || w.Cost > c.Wealth), w.Emoji))
 	}
-	fmt.Fprintf(&sb, "You have **%d gold**.", c.Wealth)
-	if building != "" {
-		sb.WriteString("\n\n" + building)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
+	e.Fields = append(e.Fields, fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)))
+	e.Footer = footer("One at a time, and one of each. Building doesn't stop you doing other things.")
 	btns = append(btns, backButton(game.KindWork))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Endow a Public Work", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -114,16 +107,13 @@ func (b *Bot) onBuildWork(ctx context.Context, i *discordgo.InteractionCreate, c
 	title := game.WorkTitle(c.FamilyName, w)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s House %s breaks ground on %s", w.Emoji, c.FamilyName, strings.ToLower(article(w.Name))+" "+strings.ToLower(w.Name)),
-		Description: fmt.Sprintf("%s pays for %s, a gift to the city. It opens <t:%d:R>.", c.FullName(), title, a.EndsAt.Unix()),
+		Description: fmt.Sprintf("%s pays for %s, a gift to the city.", c.FullName(), title),
 		Color:       colorPanel,
+		Fields:      []*discordgo.MessageEmbedField{fact("Opens", relTime(a.EndsAt))},
 	}, nil)
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Ground is broken",
-			Description: fmt.Sprintf("You paid **%d gold** for %s. It opens <t:%d:R>, and I'll DM you when it does. You're free to do other things meanwhile.%s",
-				w.Cost, title, a.EndsAt.Unix(), where),
-			Color: colorGood}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	b.update(i, startedView("🏗️ Ground is broken",
+		fmt.Sprintf("Work begins on %s. I'll DM you when it opens; you're free to do other things meanwhile.%s", title, where),
+		fact("Spent", fmt.Sprintf("%d gold", w.Cost)), fact("Opens", relTime(a.EndsAt))))
 }
 
 func (b *Bot) resolveWork(ctx context.Context, a store.Activity, now time.Time) {
@@ -152,9 +142,9 @@ func (b *Bot) resolveWork(ctx context.Context, a store.Activity, now time.Time) 
 		return
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: game.WorkTitle(c.FamilyName, w) + " is open", Description: res.Text, Color: colorGood,
+		Title: w.Emoji + " " + game.WorkTitle(c.FamilyName, w) + " is open", Description: res.Text, Color: colorGood,
 	}}})
-	b.announceEnd(a, &discordgo.MessageEmbed{Title: game.WorkTitle(c.FamilyName, w), Description: res.Public, Color: colorGood})
+	b.announceEnd(a, &discordgo.MessageEmbed{Title: w.Emoji + " " + game.WorkTitle(c.FamilyName, w), Description: res.Public, Color: colorGood})
 }
 
 // monumentsField lists a character's finished public works, or nil.
@@ -168,5 +158,5 @@ func monumentsField(c store.Character) *discordgo.MessageEmbedField {
 	if len(lines) == 0 {
 		return nil
 	}
-	return &discordgo.MessageEmbedField{Name: "Public works", Value: strings.Join(lines, "\n")}
+	return &discordgo.MessageEmbedField{Name: "🏛️ Public works", Value: strings.Join(lines, "\n")}
 }

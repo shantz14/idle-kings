@@ -57,26 +57,25 @@ func (b *Bot) speechPanel(ctx context.Context, c store.Character, note string) *
 
 func speechView(dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Take the stand in the Forum for %s. Diplomacy carries a speech, and a famous name helps. ", humanDuration(dur))
-	sb.WriteString("The court is told, and others may come to **cheer**, which helps you, or to **heckle**, which might not. ")
-	sb.WriteString("A good speech wins influence and a little renown; a bad one is a public humiliation. ")
-	sb.WriteString("Influence comes harder the more of it you already have.\n\n")
-	sb.WriteString("Senators who share your cause will think better of you if it goes well; those who oppose it, less.\n\n**Choose your cause:**\n")
+	sb.WriteString("Take the stand in the Forum. Diplomacy carries a speech, and a famous name helps. ")
+	sb.WriteString("A good one wins influence and a little renown; a bad one is a public humiliation. ")
+	sb.WriteString("Senators who share your cause warm to you if it goes well, and those who oppose it cool.\n\n**Choose your cause**\n")
 	for _, cause := range game.Causes {
-		fmt.Fprintf(&sb, "**%s** — %s\n", cause.Name, cause.Description)
-	}
-	if busy != "" {
-		sb.WriteString("\n" + busy)
-	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
+		fmt.Fprintf(&sb, "• **%s**: %s\n", cause.Name, cause.Description)
 	}
 	var btns []discordgo.MessageComponent
 	for _, cause := range game.Causes {
-		btns = append(btns, button(cause.Name, "speech:cause:"+cause.Key, discordgo.SuccessButton, busy != ""))
+		btns = append(btns, button(cause.Name, "speech:cause:"+cause.Key, discordgo.PrimaryButton, busy != ""))
 	}
+	e := actionEmbed(game.KindSpeech, withNote(busyNote(busy, note), strings.TrimSpace(sb.String())))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Cost", "Free"),
+		fact("Lasts", humanDuration(dur)),
+		fact("Crowd", "📣 Others may cheer or heckle"),
+	}
+	e.Footer = footer("Influence comes harder the more of it you already have.")
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Give a Speech in the Forum", Description: sb.String(), Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...),
 			row(backButton(game.KindSpeech))},
 	}
@@ -106,14 +105,16 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 	}
 	permit := b.payPermit(ctx, c)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("%s speaks in the Forum", c.FullName()),
-		Description: fmt.Sprintf("Cause: **%s**. The speech ends <t:%d:R>. Come to cheer, or to heckle.", cause.Name, a.EndsAt.Unix()),
+		Title:       fmt.Sprintf("📢 %s speaks in the Forum", c.FullName()),
+		Description: fmt.Sprintf("A speech for **%s**. Come to cheer, or to heckle.", cause.Name),
 		Color:       colorPanel,
-	}, []discordgo.MessageComponent{row(button("Attend the speech", fmt.Sprintf("speech:attend:%d", a.ID), discordgo.SuccessButton, false))})
+		Fields:      []*discordgo.MessageEmbedField{fact("Ends", relTime(a.EndsAt))},
+	}, []discordgo.MessageComponent{row(withEmoji(button("Attend the speech", fmt.Sprintf("speech:attend:%d", a.ID), discordgo.SuccessButton, false), "👂"))})
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "You take the stand",
-			Description: fmt.Sprintf("Cause: **%s**. You'll hear how it went <t:%d:R>.%s%s", cause.Name, a.EndsAt.Unix(), where, permit),
-			Color:       colorGood}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "📢 You take the stand",
+			Description: strings.TrimSpace(fmt.Sprintf("You speak for **%s**.%s%s", cause.Name, where, permit)),
+			Color:       colorGood,
+			Fields:      []*discordgo.MessageEmbedField{fact("You'll hear how it went", relTime(a.EndsAt))}}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -154,12 +155,16 @@ func speechAttendView(a store.Activity, speaker store.Character) *discordgo.Inte
 	fmt.Fprintf(&sb, "%s is speaking for **%s**.\n\n", speaker.FullName(), cause.Name)
 	var btns []discordgo.MessageComponent
 	for _, g := range game.SpeechGoals {
-		fmt.Fprintf(&sb, "**%s** — %s\n", g.Name, g.Description)
-		btns = append(btns, button(g.Name, fmt.Sprintf("speech:goal:%d:%s", a.ID, g.Key), discordgo.PrimaryButton, false))
+		style := discordgo.PrimaryButton
+		if g.Key == game.GoalHeckle {
+			style = discordgo.DangerButton
+		}
+		btns = append(btns, button(g.Name, fmt.Sprintf("speech:goal:%d:%s", a.ID, g.Key), style, false))
 	}
-	sb.WriteString("\nHeckling is done in public: the speaker will know it was you.")
+	sb.WriteString(goalList(game.SpeechGoals))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Attend " + speaker.FullName() + "'s speech", Description: sb.String(), Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "👂 Attend " + speaker.FullName() + "'s speech", Description: sb.String(), Color: colorPanel,
+			Footer: footer("Heckling is done in public: the speaker will know it was you.")}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -175,6 +180,7 @@ func (b *Bot) onSpeechGoal(ctx context.Context, i *discordgo.InteractionCreate, 
 	}
 	err := b.store.AddParticipant(ctx, a.ID, c.ID, string(goal), 0, time.Now())
 	var text string
+	color := colorMuted
 	switch {
 	case errors.Is(err, store.ErrExists):
 		text = "You're already in the crowd."
@@ -184,10 +190,11 @@ func (b *Bot) onSpeechGoal(ctx context.Context, i *discordgo.InteractionCreate, 
 		slog.Error("attend speech", "err", err)
 		text = "Something went wrong."
 	default:
-		text = fmt.Sprintf("You're in the crowd to **%s**. You'll hear how it went <t:%d:R>.",
-			strings.ToLower(game.SpeechGoalName(goal)), a.EndsAt.Unix())
+		color = colorGood
+		text = fmt.Sprintf("👂 You're in the crowd to **%s**. You'll hear how it went %s.",
+			strings.ToLower(game.SpeechGoalName(goal)), relTime(a.EndsAt))
 	}
-	b.update(i, noteView(text, colorMuted))
+	b.update(i, noteView(text, color))
 }
 
 // ---- the end of the speech ----
@@ -214,14 +221,8 @@ func (b *Bot) resolveSpeech(ctx context.Context, a store.Activity, now time.Time
 		}
 		return
 	}
-	title := fmt.Sprintf("%s's speech is over", sp.FullName())
-	for id, lines := range res.Notices {
-		if uid, ok := users[id]; ok {
-			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorPanel,
-			}}})
-		}
-	}
+	title := fmt.Sprintf("📢 %s's speech is over", sp.FullName())
+	b.dmNotices(res.Notices, users, title)
 	public := res.Public
 	if n := len(parts); n > 0 {
 		public += fmt.Sprintf(" %d came to listen.", n)
