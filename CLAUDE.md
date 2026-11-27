@@ -33,7 +33,7 @@ internal/store   SQLite: schema.sql (applied on open, no migrations), characters
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
                  monuments (in activities.go), laws (ApplyOutcome, denunciations),
                  conspiracies (plots, members, strikes, and the deeds: deaths/heirs, thefts, new senators)
-internal/bot     Discord: commands.go (registration + dispatch), creator, menu, party, speak (Speak to a Senator: the senator's page, asking), court,
+internal/bot     Discord: commands.go (registration + dispatch), admin (/admin testing tools), creator, menu, party, speak (Speak to a Senator: the senator's page, asking), court,
                  invest, duel, hunt, journey (journeys, hiring bandits), intrigue (spies), leak, senate, votetrade, estate, shop,
                  estatetrade (player deals), conspiracy (plots, invitations, the daily tick, striking, naming an heir), influence (canvass, circus, announce helpers),
                  speech, works, petition, laws (denouncing, permits, laws field), dossier (saved spy reports), charts (ownership pie charts: PNGs drawn in pure Go with
@@ -75,7 +75,7 @@ IDLE_KINGS_SIM=1 go test ./internal/game -run TestBalance -v   # after changing 
 ```
 `IDLE_KINGS_VIEWS=/tmp/views.txt go test ./internal/bot` writes every tested popup as text, to review wording and layout without Discord.
 `internal/bot/limits_test.go` checks every popup against Discord's component and embed limits; add new views to it.
-The bot can't be exercised without Isaac's token. Run it with `IDLE_KINGS_FAST=1 DISCORD_TOKEN=... go run ./cmd/idle-kings` (short timers).
+The bot can't be exercised without Isaac's token. Run it with `IDLE_KINGS_FAST=1 DISCORD_TOKEN=... go run ./cmd/idle-kings` (short timers). In Discord, `/admin` gives gold, items, stats, opinion and spies, and `/admin rush` ends a player's timers at the next tick; add a subcommand there for any new resource worth testing.
 
 ## Open questions
 - Restarting after the realm falls isn't designed.

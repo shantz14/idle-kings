@@ -20,6 +20,20 @@ Invite the bot with the `bot` and `applications.commands` scopes. Commands are r
 
 The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.db`. (The senator opinion system added the `senator_opinions` table and `activities.target_id`, party budgets added `activities.spend`, ventures added `realms.sectors` and the `sector_stakes` table, duels and hunts added the `conditions` and `bets` tables, spies added the `spy_networks` table, public works added the `monuments` table, the Alchemy and Black Market sectors renamed sector keys in `realms.sectors`, the estate shop added `characters.residence_id`, `estate_items.guild_id`/`price_paid` and the `estate_offers` table (and dropped `realms.recent`), and laws added `realms.laws`, `matters.petitioner_id`, `realm_queue.petitioner_id` and the `denunciations` table, so older databases need deleting. Stats moved to a ×5 scale, so characters made before it need deleting too. Renown moved to a ×10 scale, so characters made before it need deleting too. Conspiracies added `characters.heir_unnamed` and the `conspiracies` and `conspiracy_members` tables, so older databases need deleting. Speak to a Senator only added the `senator_visits` and `vote_asks` tables, which older databases pick up on open.)
 
+## Admin commands (testing)
+
+The court's admin (`/claim-admin`) can use `/admin` on any player, or themselves by default. Nothing is announced, and nothing leaks to spies.
+
+| Subcommand | What it does |
+|---|---|
+| `/admin gold amount` | Give gold (negative takes it away) |
+| `/admin influence amount`, `/admin renown amount` | Give influence or renown |
+| `/admin stat stat amount` | Raise a stat, in shown points |
+| `/admin item item` | Give any estate item, free (with autocomplete; unique items still have one owner) |
+| `/admin opinion amount [senator]` | Change one senator's opinion of the player, or every senator's |
+| `/admin spies target amount` | Change the player's spy network on someone |
+| `/admin rush` | End the player's running actions at the next tick, and move their conspiracy on a game day |
+
 ## Game flow (current)
 
 1. `/claim-admin` — first person to run it becomes the server's admin.

@@ -545,3 +545,29 @@ func (s *Store) AbandonActivity(ctx context.Context, activityID int64, now time.
 		return err
 	})
 }
+
+// RushCharacter is an admin testing tool: the character's running actions
+// end, and their events fire, at the next tick, and the plot they lead
+// moves on a game day. A plot itself is never ended (it would fall apart),
+// and nor is a public work (which would open early).
+func (s *Store) RushCharacter(ctx context.Context, charID int64, now time.Time) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		where, args := slotFilter()
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE activity_events SET fires_at = MIN(fires_at, ?) WHERE resolved_at IS NULL AND sent_at IS NULL AND activity_id IN
+			   (SELECT id FROM activities WHERE host_id = ? AND resolved_at IS NULL AND `+where+`)`,
+			append([]any{now.Unix(), charID}, args...)...); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE activities SET ends_at = MIN(ends_at, ?) WHERE host_id = ? AND resolved_at IS NULL AND `+where,
+			append([]any{now.Unix(), charID}, args...)...); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx,
+			`UPDATE conspiracies SET next_step_at = MIN(next_step_at, ?) WHERE activity_id IN
+			   (SELECT id FROM activities WHERE host_id = ? AND kind = ? AND resolved_at IS NULL)`,
+			now.Unix(), charID, game.KindConspiracy)
+		return err
+	})
+}

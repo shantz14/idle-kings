@@ -61,7 +61,7 @@ type SchemeDef struct {
 var SchemeDefs = []SchemeDef{
 	{Key: SchemeAssassinate, Name: "Assassinate", Emoji: "🗡️",
 		Desc:    "Have a rival or a senator killed.",
-		Targets: []TargetKind{TargetPlayer, TargetSenator}, Stat: Prowess, Base: 10, Crime: SecretKindMurder, Bloody: true},
+		Targets: []TargetKind{TargetPlayer, TargetSenator}, Stat: Prowess, Base: 20, Crime: SecretKindMurder, Bloody: true},
 	{Key: SchemeFrame, Name: "Frame a Rival", Emoji: "🖋️",
 		Desc:    "Forge the evidence of a crime they never did. It goes in your dossier, as good as real, to denounce when it suits you.",
 		Targets: []TargetKind{TargetPlayer}, Stat: Diplomacy, Base: 30, Crime: SecretKindForgery},

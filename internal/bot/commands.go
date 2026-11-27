@@ -52,6 +52,7 @@ func commands() []*discordgo.ApplicationCommand {
 				Description: "Whose profile (defaults to yours)"},
 			public),
 		cmd("help", "How to play", anywhere),
+		adminCommand(guildOnly, install),
 	}
 }
 
@@ -98,6 +99,8 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			b.cmdClaimAdmin(ctx, i)
 		case "start":
 			b.cmdStart(ctx, i)
+		case "admin":
+			b.cmdAdmin(ctx, i)
 		case "join":
 			b.onJoin(ctx, i)
 		case "realm", "players", "profile", "help":
@@ -119,6 +122,10 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 			case "shop":
 				b.respond(i, ephemeral(b.shopPanel(ctx, c, shopProps, "")))
 			}
+		}
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		if i.ApplicationCommandData().Name == "admin" {
+			b.onAdminAutocomplete(ctx, i)
 		}
 	case discordgo.InteractionMessageComponent:
 		b.dispatch(ctx, i, componentRoutes, i.MessageComponentData().CustomID)

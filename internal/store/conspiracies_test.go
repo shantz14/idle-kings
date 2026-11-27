@@ -172,3 +172,27 @@ func TestStealOnlyTakesPossessions(t *testing.T) {
 		t.Error("the trinket should be the thief's")
 	}
 }
+
+func TestRushCharacter(t *testing.T) {
+	s, ctx := estateStore(t)
+	now := time.Unix(2_000_000, 0)
+	c, other := newChar(t, s, "c", "merchant"), newChar(t, s, "o", "merchant")
+	if _, err := s.StartActivity(ctx, Activity{GuildID: "g", HostID: c.ID, Kind: game.KindRootOut, StartedAt: now, EndsAt: now.Add(time.Hour)}, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	k, err := s.StartConspiracy(ctx, Activity{GuildID: "g", HostID: c.ID, Goal: game.SchemeFrame, TargetID: other.ID, StartedAt: now,
+		EndsAt: now.Add(5 * time.Hour)}, 0, Conspiracy{TargetKind: game.TargetPlayer, Purse: "none", NextStepAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RushCharacter(ctx, c.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	ended, _ := s.EndedActivities(ctx, now)
+	if len(ended) != 1 || ended[0].Kind != game.KindRootOut {
+		t.Errorf("only the action should end: %+v", ended)
+	}
+	if due, _ := s.DueConspiracies(ctx, now); len(due) != 1 || due[0].ID != k.ID {
+		t.Errorf("the plot should move on a day: %+v", due)
+	}
+}
