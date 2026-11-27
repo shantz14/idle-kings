@@ -187,9 +187,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 		slog.Error("ownership", "err", err)
 	} else {
 		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "🥧 Who owns the industries", Value: legendLines(cards)})
-		if len(invested(cards)) > 0 { // seven grey rings say nothing
-			attachChart(data, e, "industries.png", pieGrid(cards))
-		}
+		attachChart(data, e, "industries.png", pieGrid(cards)) // grey rings show nobody has invested yet
 	}
 	e.Fields = append(e.Fields,
 		fact("👥 The court", fmt.Sprintf("%d player%s · %d senators", players, plural(players), len(sen))),
