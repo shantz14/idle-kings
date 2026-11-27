@@ -109,7 +109,7 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.InteractionResponseData {
 	st, err := b.store.GetRealm(ctx, guildID)
 	if err != nil {
-		return &discordgo.InteractionResponseData{Content: "This court has no realm yet."}
+		return noteView("This court has no realm yet.", colorMuted)
 	}
 	// Bars first, in code, so they line up whatever the emoji widths.
 	var trackers strings.Builder
@@ -182,7 +182,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string) *discordgo.Interact
 func (b *Bot) playersPage(ctx context.Context, guildID string) *discordgo.InteractionResponseData {
 	chars, err := b.store.CharactersInCourt(ctx, guildID)
 	if err != nil || len(chars) == 0 {
-		return &discordgo.InteractionResponseData{Content: "Nobody has joined the court yet."}
+		return noteView("Nobody has joined the court yet.", colorMuted)
 	}
 	sort.Slice(chars, func(a, c int) bool { return chars[a].VoteWeight() > chars[c].VoteWeight() })
 	sen, _ := b.store.Senators(ctx, guildID)

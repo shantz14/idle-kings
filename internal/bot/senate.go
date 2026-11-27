@@ -496,7 +496,7 @@ func decisionEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.Messag
 func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
 	st, err := b.ensureRealm(ctx, c.GuildID, time.Now())
 	if err != nil {
-		return ephemeral(&discordgo.InteractionResponseData{Content: "Something went wrong."})
+		return ephemeral(noteView(emojiWarn+" Something went wrong.", colorMuted))
 	}
 	realm := &discordgo.MessageEmbed{Title: titled(emojiRealm, "The realm"), Description: trackersLine(st.Trackers), Color: colorPanel,
 		Fields: []*discordgo.MessageEmbedField{lawsField(st.Laws)}}

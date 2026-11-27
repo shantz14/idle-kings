@@ -87,7 +87,7 @@ func (b *Bot) courtPanel(ctx context.Context, c store.Character, senatorID int64
 	ops, err2 := b.store.Opinions(ctx, c.ID)
 	if err := errors.Join(err1, err2); err != nil {
 		slog.Error("court panel", "err", err)
-		return &discordgo.InteractionResponseData{Content: "Something went wrong."}
+		return noteView(emojiWarn+" Something went wrong.", colorMuted)
 	}
 	busy := ""
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {

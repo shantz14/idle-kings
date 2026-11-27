@@ -309,8 +309,9 @@ func (b *Bot) finishCreator(ctx context.Context, i *discordgo.InteractionCreate,
 	role, _ := game.RoleByKey(c.Role)
 	bg, _ := game.BackgroundByKey(c.Background)
 	welcome := b.profileEmbed(ctx, c, true)
-	welcome.Title = "Welcome to court, " + c.Name
-	welcome.Footer = &discordgo.MessageEmbedFooter{Text: "Next: /court to act · /senate to vote · /help to learn the ropes"}
+	welcome.Title = "👑 Welcome to court, " + c.Name
+	welcome.Color = colorGood
+	welcome.Footer = footer("Next: /court to act · /senate to vote · /help to learn the ropes")
 	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{welcome}})
 
 	channel := i.ChannelID
@@ -323,6 +324,7 @@ func (b *Bot) finishCreator(ctx context.Context, i *discordgo.InteractionCreate,
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s %s of House %s joins the court", c.Crest.Emoji(), c.Name, c.FamilyName),
+		Footer:      footer("👋 Welcome them, or start plotting."),
 		Description: desc,
 		Color:       colorPanel,
 	})
@@ -378,12 +380,13 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 		step = stepCrest
 	}
 	embed := &discordgo.MessageEmbed{
-		Title: fmt.Sprintf("Create your character · step %d of %d: %s", step+1, len(stepTitles), stepTitles[step]),
-		Color: colorPanel,
+		Title:  fmt.Sprintf("✒️ Create your character · %s", stepTitles[step]),
+		Color:  colorPanel,
+		Footer: footer(fmt.Sprintf("Step %d of %d · %s", step+1, len(stepTitles), pageDots(step, len(stepTitles)))),
 	}
 	var sb strings.Builder
 	if note != "" {
-		sb.WriteString("> " + note + "\n\n")
+		sb.WriteString(quote(note) + "\n\n")
 	}
 	sb.WriteString(previewLine(bd) + "\n\n")
 	var comps []discordgo.MessageComponent
@@ -391,7 +394,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 		return backTo(fmt.Sprintf("cc:step:%d", to))
 	}
 	next := func(to int, enabled bool) discordgo.MessageComponent {
-		return button("Next", fmt.Sprintf("cc:step:%d", to), discordgo.PrimaryButton, !enabled)
+		return withEmoji(button("Next", fmt.Sprintf("cc:step:%d", to), discordgo.PrimaryButton, !enabled), "➡️")
 	}
 
 	switch step {
@@ -400,7 +403,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 		comps = []discordgo.MessageComponent{
 			crestSelect("cc:color", "Choose a color…", game.CrestColors, bd.Crest.Color),
 			crestSelect("cc:symbol", "Choose a symbol…", game.CrestSymbols, bd.Crest.Symbol),
-			row(button("Edit name & motto", "cc:editnames", discordgo.SecondaryButton, false), next(stepStats, bd.Crest.Complete())),
+			row(withEmoji(button("Edit name & motto", "cc:editnames", discordgo.SecondaryButton, false), "✏️"), next(stepStats, bd.Crest.Complete())),
 		}
 
 	case stepStats:
@@ -413,12 +416,16 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 			}
 		}
 		sb.WriteString(statsBlock(bd.AssignedStats(), pts))
-		fmt.Fprintf(&sb, "\nPoints left: **%d**", bd.PointsLeft())
+		left := fmt.Sprintf("\nPoints left: **%d**", bd.PointsLeft())
+		if bd.PointsLeft() == 0 {
+			left = "\n✅ All points spent."
+		}
+		sb.WriteString(left)
 		var blurbs []string
 		for _, s := range game.AllStats {
-			blurbs = append(blurbs, fmt.Sprintf("**%s**: %s", s, statBlurbs[s]))
+			blurbs = append(blurbs, fmt.Sprintf("• **%s**: %s", s, statBlurbs[s]))
 		}
-		embed.Fields = []*discordgo.MessageEmbedField{{Name: "What the stats do", Value: strings.Join(blurbs, "\n")}}
+		embed.Fields = []*discordgo.MessageEmbedField{{Name: "📊 What the stats do", Value: strings.Join(blurbs, "\n")}}
 		var plus, minus []discordgo.MessageComponent
 		for _, s := range game.AllStats {
 			name := strings.ToUpper(string(s[:1])) + string(s[1:])
@@ -442,7 +449,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 				{Name: "Stat bonus", Value: bonusText(bg.StatBonus), Inline: true},
 				{Name: "Renown", Value: game.Num(bg.Renown), Inline: true},
 				{Name: "Gold", Value: fmt.Sprint(bg.Wealth), Inline: true},
-				{Name: "Starting estate", Value: estateLines(bg.EstateItems())},
+				{Name: emojiEstate + " Starting estate", Value: estateLines(bg.EstateItems())},
 			}
 		} else {
 			sb.WriteString("Where do you come from? Your background adds stat points and decides your starting renown, gold and estate: your home and a possession or two.")
@@ -474,7 +481,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 				{Name: "Stat bonus", Value: bonusText(r.StatBonus), Inline: true},
 				{Name: "Influence", Value: game.Num(r.Influence), Inline: true},
 				{Name: "Salary", Value: fmt.Sprintf("%d gold/day", r.Salary), Inline: true},
-				{Name: "Your starting character", Value: statsBlock(eff, fromItems) + fmt.Sprintf(
+				{Name: "👤 Your starting character", Value: statsBlock(eff, fromItems) + fmt.Sprintf(
 					"Influence **%s** · Renown **%s** · Gold **%d** · Income **%d**/day · Estate **%s**",
 					game.Num(start.Influence), game.Num(start.Renown), start.Wealth,
 					start.DailyIncome+effects.DailyIncome, game.Num(game.EstateValue(start.Items)))},
@@ -484,7 +491,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 		}
 		comps = []discordgo.MessageComponent{
 			row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "cc:role", Placeholder: "Choose your role…", Options: opts}),
-			row(back(stepBackground), button("Join the court", "cc:confirm", discordgo.SuccessButton, bd.Role == "")),
+			row(back(stepBackground), withEmoji(button("Join the court", "cc:confirm", discordgo.SuccessButton, bd.Role == ""), "👑")),
 		}
 	}
 	embed.Description = sb.String()

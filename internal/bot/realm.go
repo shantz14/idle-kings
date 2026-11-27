@@ -42,15 +42,16 @@ func (b *Bot) postWarnings(channel string, warnings []string) {
 		return
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, &discordgo.MessageEmbed{
-		Title: "The state of the realm", Description: strings.Join(warnings, "\n"), Color: colorBad,
+		Title: "⚠️ The state of the realm", Description: strings.Join(warnings, "\n"), Color: colorBad,
+		Footer: footer("💀 If any tracker reaches 0, the realm falls and everyone loses."),
 	})
 }
 
 // announceFall tells the court, and every player by DM, that all is lost.
 func (b *Bot) announceFall(ctx context.Context, guildID, channel, reason string) {
 	fall := &discordgo.MessageEmbed{
-		Title:       "The realm has fallen",
-		Description: reason + "\n\n**All players have lost.**",
+		Title:       "🔥 The realm has fallen",
+		Description: reason + "\n\n💀 **All players have lost.**",
 		Color:       colorBad,
 	}
 	if channel != "" {

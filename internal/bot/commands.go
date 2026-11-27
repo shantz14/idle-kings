@@ -167,17 +167,18 @@ func (b *Bot) cmdStart(ctx context.Context, i *discordgo.InteractionCreate) {
 	}
 	b.respond(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title: "The court is assembling",
+			Title: "👑 The court is assembling",
 			Description: "The Republic's great families gather once more. Make your name among them.\n\n" +
 				"Press **Join the court** to create your character: your name and family, your crest, your strengths, " +
-				"your story, and your place at court. (You can also use `/join`.)",
+				"your story, and your place at court.",
 			Color: colorPanel,
 			Fields: []*discordgo.MessageEmbedField{
-				{Name: "Announcements", Value: fmt.Sprintf("<#%s>", announce), Inline: true},
-				{Name: "The Senate first meets", Value: fmt.Sprintf("<t:%d:R>", st.NextMatterAt.Unix()), Inline: true},
+				fact("📣 Announcements", fmt.Sprintf("<#%s>", announce)),
+				fact(emojiSenate+" The Senate first meets", relTime(st.NextMatterAt)),
 			},
+			Footer: footer("You can also use /join. New here? /help explains everything."),
 		}},
-		Components: []discordgo.MessageComponent{row(button("Join the court", idCreatorStart, discordgo.SuccessButton, false))},
+		Components: []discordgo.MessageComponent{row(withEmoji(button("Join the court", idCreatorStart, discordgo.SuccessButton, false), "👑"))},
 	})
 }
 
