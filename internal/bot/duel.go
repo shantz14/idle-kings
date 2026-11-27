@@ -173,7 +173,7 @@ func wagerView(c, t store.Character, note string) *discordgo.InteractionResponse
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Challenge " + t.FullName(), Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(backTo("menu:act:"+game.KindDuel))},
+			row(backTo("menu:act:" + game.KindDuel))},
 	}
 }
 

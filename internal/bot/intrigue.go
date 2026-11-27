@@ -206,7 +206,7 @@ func purseView(c, t store.Character, tier game.SpyTier, next, note string) *disc
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Plant Spies on " + t.FullName(), Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(backTo("menu:act:"+game.KindPlantSpies))},
+			row(backTo("menu:act:" + game.KindPlantSpies))},
 	}
 }
 

@@ -126,7 +126,7 @@ func categoryPanel(cat game.Category, role string) *discordgo.InteractionRespons
 // backButton returns to the menu category an action is listed under.
 func backButton(kind string) discordgo.Button {
 	a, _ := game.ActionByKey(kind)
-	return backTo("menu:cat:"+string(a.Category))
+	return backTo("menu:cat:" + string(a.Category))
 }
 
 // homeRow is a row with one Back button to the home panel.

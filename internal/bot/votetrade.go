@@ -167,7 +167,7 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 	}
 	opt, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, ops[s.ID])
 	if !ok || st.Laws.Rules().SecretBallot {
-		b.update(i, noteView(s.Name + " isn't buying.", colorMuted))
+		b.update(i, noteView(s.Name+" isn't buying.", colorMuted))
 		return
 	}
 	now := time.Now()

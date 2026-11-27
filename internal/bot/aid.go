@@ -116,7 +116,7 @@ func aidAmountView(c store.Character, t game.AidTarget, current float64, note st
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(backTo("menu:act:"+game.KindAid))},
+			row(backTo("menu:act:" + game.KindAid))},
 	}
 }
 
@@ -156,7 +156,7 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorGood}},
-		Components: []discordgo.MessageComponent{row(backTo("menu:act:"+game.KindAid))},
+		Components: []discordgo.MessageComponent{row(backTo("menu:act:" + game.KindAid))},
 	})
 	if res.Public != "" {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
