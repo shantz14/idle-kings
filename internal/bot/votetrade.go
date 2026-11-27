@@ -101,7 +101,7 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 		return
 	}
 	if opt, _, sold := b.store.SoldVote(ctx, m.ID, c.ID); sold {
-		b.reply(i, fmt.Sprintf("Your vote is already sold. You will vote to **%s**.", strings.ToLower(optionLabel(ev, opt))))
+		b.reply(i, fmt.Sprintf("🔒 Your vote is already sold. You will vote to **%s**.", strings.ToLower(optionLabel(ev, opt))))
 		return
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
@@ -117,11 +117,11 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 		// Nobody can check a secret vote: senators won't pay for one, and
 		// a player who buys one has only your word.
 		offers = nil
-		sb.WriteString("Under the Secret Ballot nobody can see how you vote, so a sold vote is a promise, not a lock. ")
-		sb.WriteString("You can take the gold and vote however you like, and your buyer will never know.\n\n**Senators' offers**\n")
+		sb.WriteString(quote("🗳️ Under the Secret Ballot nobody can see how you vote, so a sold vote is a promise, not a lock. "+
+			"You can take the gold and vote however you like, and your buyer will never know.") + "\n\n**🏛️ Senators' offers**\n")
 		sb.WriteString("Senators won't pay for a vote they can't check.\n")
 	} else {
-		sb.WriteString("Once sold, your vote is locked and you can't change it. Senators pay well, but a bought vote can come out, and the Senate remembers who sells.\n\n**Senators' offers**\n")
+		sb.WriteString("Once sold, your vote is locked. Senators pay well, but a bought vote can come out, and the Senate remembers who sells.\n\n**🏛️ Senators' offers**\n")
 	}
 	var btns []discordgo.MessageComponent
 	for _, o := range ev.Options {
@@ -129,21 +129,22 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(&sb, "**%s** will pay **%d gold** for you to vote to *%s*.\n", off.Senator.Name, off.Gold, strings.ToLower(o.Label))
+		fmt.Fprintf(&sb, "• **%s** pays **%d gold** for *%s*\n", off.Senator.Name, off.Gold, strings.ToLower(o.Label))
 		btns = append(btns, button(truncate(fmt.Sprintf("%s: %d gold", o.Label, off.Gold), 80),
 			fmt.Sprintf("senate:sellai:%d:%d", m.ID, off.Senator.ID), discordgo.SuccessButton, false))
 	}
 	if len(btns) == 0 {
 		sb.WriteString("No senator wants to buy your vote on this matter.\n")
 	}
-	sb.WriteString("\nOr offer your vote to another player at a price you name. They choose which way you vote.")
+	sb.WriteString("\n**👥 Or sell to a player**\nName your price; they choose which way you vote.")
 	comps := []discordgo.MessageComponent{}
 	if len(btns) > 0 {
 		comps = append(comps, row(btns...))
 	}
 	comps = append(comps, userSelect(fmt.Sprintf("senate:sellto:%d", m.ID), "Offer your vote to a player…"))
 	b.respond(i, ephemeral(&discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Sell your vote: " + ev.Title, Description: sb.String(), Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🪙 Sell your vote", Description: "*" + ev.Title + "*\n\n" + sb.String(), Color: colorSecret,
+			Footer: footer("🔒 A private deal. Spies may hear of it.")}},
 		Components: comps,
 	}))
 }
@@ -196,8 +197,9 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 		b.fail(i, err)
 		return
 	default:
-		text = fmt.Sprintf("You sold your vote to **%s**. You will vote to **%s**. (+%d gold, their opinion of you %s)",
-			s.Name, strings.ToLower(optionLabel(ev, opt)), gold, game.OpinionNum(game.OpinionSoldVote))
+		color = colorGood
+		text = fmt.Sprintf("You sold your vote to **%s**. You will vote to **%s**.\n%s",
+			s.Name, strings.ToLower(optionLabel(ev, opt)), effects(fmt.Sprintf("+%d gold · their opinion of you %s", gold, game.OpinionNum(game.OpinionSoldVote))))
 		defer b.leak(ctx, c, game.SecretSoldToSenator(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), gold))
 		if res := game.ResolveVoteSale(b.rng, sale, sen); res.Caught {
 			out := store.Outcome{Deltas: map[int64]game.Delta{c.ID: res.Delta}, Opinions: res.Opinions}
@@ -206,16 +208,13 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 				break
 			}
 			color = colorBad
-			text += "\n\n" + res.Text
-			if d := res.Delta.Describe(); d != "" {
-				text += fmt.Sprintf(" (%s)", d)
-			}
+			text += "\n\n" + quote("📢 "+withDelta(res.Text, res.Delta))
 			b.post(ctx, m.GuildID, &discordgo.MessageEmbed{
-				Title: "A bought vote", Description: res.Public, Color: colorBad,
+				Title: "📢 A bought vote", Description: res.Public, Color: colorBad,
 			})
 		}
 	}
-	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "Vote sold", Description: text, Color: color}}})
+	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "🪙 Vote sold", Description: text, Color: color}}})
 }
 
 // ---- buying ----
@@ -227,8 +226,10 @@ func (b *Bot) onBuyPanel(ctx context.Context, i *discordgo.InteractionCreate, ma
 		return
 	}
 	b.respond(i, ephemeral(&discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Buy a vote: " + ev.Title, Color: colorPanel,
-			Description: fmt.Sprintf("Offer another player gold to vote your way. They'll get your offer by DM.\n\nYou have **%d gold**.", c.Wealth)}},
+		Embeds: []*discordgo.MessageEmbed{{Title: emojiDeal + " Buy a vote", Color: colorSecret,
+			Description: fmt.Sprintf("*%s*\n\nOffer another player gold to vote your way. They'll get your offer by DM.", ev.Title),
+			Fields:      []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))},
+			Footer:      footer("🔒 A private deal. Spies may hear of it.")}},
 		Components: []discordgo.MessageComponent{userSelect(fmt.Sprintf("senate:buyfrom:%d", m.ID), "Whose vote do you want?")},
 	}))
 }
@@ -266,7 +267,7 @@ func (b *Bot) onPickPlayer(ctx context.Context, i *discordgo.InteractionCreate, 
 		btns = append(btns, button(o.Label, fmt.Sprintf("senate:buyopt:%d:%d:%s", m.ID, other.ID, o.Key), discordgo.PrimaryButton, false))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Buy " + other.FullName() + "'s vote", Description: "How do you want them to vote?", Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: emojiDeal + " Buy " + other.FullName() + "'s vote", Description: "*" + ev.Title + "*\n\nHow do you want them to vote?", Color: colorSecret}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	})
 }
@@ -328,13 +329,13 @@ func (b *Bot) onTradeModal(ctx context.Context, i *discordgo.InteractionCreate, 
 			btns = append(btns, button(truncate("Buy: "+o.Label, 80), fmt.Sprintf("senate:offer:%d:a:%s", offer.ID, o.Key), discordgo.SuccessButton, false))
 		}
 	} else {
-		btns = append(btns, button("Accept", fmt.Sprintf("senate:offer:%d:a", offer.ID), discordgo.SuccessButton, false))
+		btns = append(btns, withEmoji(button("Accept", fmt.Sprintf("senate:offer:%d:a", offer.ID), discordgo.SuccessButton, false), "✅"))
 	}
-	btns = append(btns, button("Decline", fmt.Sprintf("senate:offer:%d:d", offer.ID), discordgo.DangerButton, false))
+	btns = append(btns, withEmoji(button("Decline", fmt.Sprintf("senate:offer:%d:d", offer.ID), discordgo.DangerButton, false), "✖️"))
 
 	_, dmErr := b.dm(other.UserID, &discordgo.MessageSend{
-		Embeds: []*discordgo.MessageEmbed{{Title: "A vote for sale", Description: dmText, Color: colorPanel,
-			Footer: &discordgo.MessageEmbedFooter{Text: "The offer lapses when voting closes."}}},
+		Embeds: []*discordgo.MessageEmbed{{Title: emojiVote + " A vote for sale", Description: dmText, Color: colorNotice,
+			Footer: footer("⏳ The offer lapses when voting closes.")}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	})
 	if dmErr != nil {
@@ -342,7 +343,7 @@ func (b *Bot) onTradeModal(ctx context.Context, i *discordgo.InteractionCreate, 
 		b.reply(i, other.FullName()+" isn't accepting DMs, so the offer couldn't be sent.")
 		return true
 	}
-	b.reply(i, fmt.Sprintf("Your offer has been sent to %s. I'll DM you their answer.", other.FullName()))
+	b.replyDone(i, fmt.Sprintf("Your offer has been sent to %s. I'll DM you their answer.", other.FullName()))
 	b.leak(ctx, c, game.SecretVoteOffer(c.FullName(), other.ID, other.FullName(), ev.Title,
 		optionLabel(ev, offer.Option), price, offer.Kind == store.OfferBuy))
 	return true
@@ -370,7 +371,8 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 	ev, _ := game.MatterByKey(m.EventKey)
 
 	done := func(text string) {
-		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "A vote for sale", Description: text, Color: colorPanel}}})
+		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: emojiVote + " A vote for sale", Description: text, Color: colorMuted}},
+			Components: []discordgo.MessageComponent{}})
 	}
 	if !accept {
 		if _, err := b.store.DeclineOffer(ctx, o.ID); errors.Is(err, store.ErrHandled) {
@@ -379,7 +381,7 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 		}
 		done("You declined.")
 		b.leak(ctx, me, game.SecretVoteDeal(me.FullName(), them.ID, them.FullName(), ev.Title, "", o.Price, false))
-		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf("**%s** declined your vote offer on **%s**.", me.FullName(), ev.Title)})
+		b.dmNote(them.UserID, emojiVote+" Offer declined", fmt.Sprintf("**%s** declined your vote offer on **%s**.", me.FullName(), ev.Title), colorBad)
 		return
 	}
 	if o.Kind == store.OfferSell {
@@ -411,12 +413,12 @@ func (b *Bot) onOfferAnswer(ctx context.Context, i *discordgo.InteractionCreate,
 		trust = " The ballot is secret, so this is a promise, not a lock."
 	}
 	if o.Kind == store.OfferSell { // I bought their vote
-		done(fmt.Sprintf("Deal. You paid %d gold. **%s** has promised to vote to **%s**.%s", o.Price, them.FullName(), label, trust))
-		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf(
-			"**%s** bought your vote on **%s** for %d gold. You will vote to **%s**.%s", me.FullName(), ev.Title, o.Price, label, trust)})
+		done(fmt.Sprintf("✅ Deal. **%s** has promised to vote to **%s**.%s\n%s", them.FullName(), label, trust, effects(fmt.Sprintf("-%d gold", o.Price))))
+		b.dmNote(them.UserID, emojiVote+" Vote sold", fmt.Sprintf(
+			"**%s** bought your vote on **%s**. You will vote to **%s**.%s\n%s", me.FullName(), ev.Title, label, trust, effects(fmt.Sprintf("+%d gold", o.Price))), colorGood)
 	} else { // I sold my vote
-		done(fmt.Sprintf("Deal. You received %d gold and will vote to **%s**.%s", o.Price, label, trust))
-		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf(
-			"**%s** accepted your offer on **%s**. They have promised to vote to **%s**. (-%d gold)%s", me.FullName(), ev.Title, label, o.Price, trust)})
+		done(fmt.Sprintf("✅ Deal. You will vote to **%s**.%s\n%s", label, trust, effects(fmt.Sprintf("+%d gold", o.Price))))
+		b.dmNote(them.UserID, emojiVote+" Offer accepted", fmt.Sprintf(
+			"**%s** accepted your offer on **%s**. They have promised to vote to **%s**.%s\n%s", me.FullName(), ev.Title, label, trust, effects(fmt.Sprintf("-%d gold", o.Price))), colorGood)
 	}
 }

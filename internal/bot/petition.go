@@ -64,21 +64,24 @@ func (b *Bot) petitionPanel(ctx context.Context, c store.Character, key, note st
 
 func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.Duration, busy, key, note string) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Spend %s and **%d gold** on clerks, dinners and copies of your motion, to put a matter before the Senate. ", humanDuration(dur), game.PetitionCost)
-	sb.WriteString("Your petition always reaches the floor: the Senate takes it up at once, as a vote of its own alongside the day's business, with your name on it. ")
-	sb.WriteString("You gain standing if it passes, and look foolish if it fails.\n\n")
-	fmt.Fprintf(&sb, "Laws stand until they are repealed. At most %d can stand at once; when another passes, the oldest lapses.", game.MaxLaws)
+	sb.WriteString("Clerks, dinners and copies of your motion put a law, or its repeal, before the Senate. ")
+	sb.WriteString("Your petition always reaches the floor, as a vote of its own alongside the day's business, with your name on it. ")
+	sb.WriteString("You gain standing if it passes, and look foolish if it fails.")
 	if laws.Full() {
-		fmt.Fprintf(&sb, " All %d stand: the next one to pass pushes out **%s**.", game.MaxLaws, lawName(laws[0].Key))
+		fmt.Fprintf(&sb, "\n\n⚠️ All %d laws stand: the next one to pass pushes out **%s**.", game.MaxLaws, lawName(laws[0].Key))
 	}
 	if busy != "" {
-		sb.WriteString("\n\n" + busy)
+		note = joinNotes("⏳ "+busy, note)
 	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
+	e := actionEmbed(game.KindPetition, withNote(note, sb.String()))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Cost", fmt.Sprintf("%d gold", game.PetitionCost)),
+		fact("Lobbying takes", humanDuration(dur)),
+		fact("Law slots", fmt.Sprintf("%d of %d used", len(laws), game.MaxLaws)),
+		lawsField(laws),
 	}
-	embeds := []*discordgo.MessageEmbed{{Title: "Petition the Senate", Description: sb.String(), Color: colorPanel,
-		Fields: []*discordgo.MessageEmbedField{lawsField(laws)}}}
+	e.Footer = footer(fmt.Sprintf("At most %d laws stand at once; when another passes, the oldest lapses.", game.MaxLaws))
+	embeds := []*discordgo.MessageEmbed{e}
 
 	var opts []discordgo.SelectMenuOption
 	for _, p := range game.Petitions(laws) {
@@ -105,12 +108,12 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 		desc += "\n\n⚠️ If the Senate passes this, " + lapseList(laws, p.Lapses) + " lapses to make room."
 	}
 	if queued {
-		desc += "\n\nThe Senate already has this before it."
+		desc = quote("🔒 The Senate already has this before it.") + "\n\n" + desc
 	}
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: p.Name, Description: desc, Color: colorPanel})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: "📜 " + p.Name, Description: desc, Color: colorSenate})
 	comps = append(comps, row(
-		button(fmt.Sprintf("Petition (%d gold)", game.PetitionCost), "petition:go:"+p.Key, discordgo.SuccessButton,
-			busy != "" || queued || c.Wealth < game.PetitionCost),
+		withEmoji(button(fmt.Sprintf("Petition (%d gold)", game.PetitionCost), "petition:go:"+p.Key, discordgo.SuccessButton,
+			busy != "" || queued || c.Wealth < game.PetitionCost), "📜"),
 		back,
 	))
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: comps}
@@ -144,9 +147,9 @@ func (b *Bot) onStartPetition(ctx context.Context, i *discordgo.InteractionCreat
 		return
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Petition the Senate",
-			Description: fmt.Sprintf("You set about lobbying the clerks to **%s**. You'll know <t:%d:R> whether it reaches the floor, and I'll DM you.",
-				lowerName(p.Name), a.EndsAt.Unix()),
+		Embeds: []*discordgo.MessageEmbed{{Title: "📜 Lobbying the clerks",
+			Description: fmt.Sprintf("You set about lobbying to **%s**. You'll know %s, and I'll DM you.",
+				lowerName(p.Name), relTime(a.EndsAt)),
 			Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
@@ -168,7 +171,7 @@ func (b *Bot) resolvePetition(ctx context.Context, a store.Activity, now time.Ti
 		// The laws changed, or someone beat them to it: the gold is spent, nothing else.
 		if err := b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now); err == nil {
 			_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: "Your petition", Description: "By the time your petition reached the clerks, it was no longer needed.", Color: colorPanel}}})
+				Title: "📜 Your petition", Description: "By the time your petition reached the clerks, it was no longer needed.", Color: colorMuted}}})
 		}
 		return
 	}
@@ -186,17 +189,18 @@ func (b *Bot) resolvePetition(ctx context.Context, a store.Activity, now time.Ti
 	b.postCourt(ctx, a.GuildID, &discordgo.MessageEmbed{
 		Title:       "📜 A petition to the Senate",
 		Description: fmt.Sprintf("**%s** (%s) has petitioned the Senate to **%s**. The Senate takes it up at once, alongside the day's business.", c.FullName(), c.House(), lowerName(p.Name)),
-		Color:       colorPanel,
+		Color:       colorSenate,
 	})
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "Your petition", Description: withDelta(res.Text, res.Delta), Color: colorGood,
+		Title: "📜 Your petition reaches the floor", Description: withDelta(res.Text, res.Delta), Color: colorGood,
 	}}})
 }
 
-// withDelta adds "(effects)" to a line if the delta does anything.
+// withDelta puts what a delta did on its own line under the text, if it
+// does anything.
 func withDelta(text string, d game.Delta) string {
 	if s := d.Describe(); s != "" {
-		return fmt.Sprintf("%s (%s)", text, s)
+		return text + "\n" + effects(s)
 	}
 	return text
 }

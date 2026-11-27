@@ -137,3 +137,16 @@ func withEmoji(b discordgo.Button, emoji string) discordgo.Button {
 	}
 	return b
 }
+
+// effects is what an outcome did, set on its own line in italics.
+func effects(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "*" + s + "*"
+}
+
+// dmNote DMs a player a short titled note, ignoring failures.
+func (b *Bot) dmNote(userID, title, text string, color int) {
+	_, _ = b.dm(userID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{Title: title, Description: text, Color: color}}})
+}
