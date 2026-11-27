@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 
@@ -118,10 +119,11 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 	if err != nil {
 		return noteView("This court has no realm yet.", colorMuted)
 	}
-	// Bars first, in code, so they line up whatever the emoji widths.
+	// Bars first, so they line up.
 	var trackers strings.Builder
 	for _, t := range game.Trackers {
-		fmt.Fprintf(&trackers, "`%s %3s` %s %s\n", bar(st.Trackers[t.Key]), game.Num(st.Trackers[t.Key]), t.Emoji, t.Name)
+		v := st.Trackers[t.Key]
+		fmt.Fprintf(&trackers, "%s **%d** %s %s\n", meter(v), int(math.Round(v)), t.Emoji, t.Name)
 	}
 
 	status := "The Republic stands."
@@ -185,10 +187,12 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 		slog.Error("ownership", "err", err)
 	} else {
 		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "🥧 Who owns the industries", Value: legendLines(cards)})
-		attachChart(data, e, "industries.png", pieGrid(cards))
+		if len(invested(cards)) > 0 { // seven grey rings say nothing
+			attachChart(data, e, "industries.png", pieGrid(cards))
+		}
 	}
 	e.Fields = append(e.Fields,
-		fact("👥 The court", fmt.Sprintf("%d players · %d senators", players, len(sen))),
+		fact("👥 The court", fmt.Sprintf("%d player%s · %d senators", players, plural(players), len(sen))),
 		fact("💀 At 0, everyone loses", strings.Join(fall, ", ")),
 	)
 	return data

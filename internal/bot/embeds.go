@@ -116,11 +116,20 @@ func noteView(msg string, color int) *discordgo.InteractionResponseData {
 	return &discordgo.InteractionResponseData{Content: "", Embeds: []*discordgo.MessageEmbed{{Description: msg, Color: color}}}
 }
 
-// bar is a ten-block meter for a 0–100 value.
-func bar(v float64) string {
-	n := int(v/10 + 0.5)
-	n = max(0, min(10, n))
-	return strings.Repeat("█", n) + strings.Repeat("░", 10-n)
+// meter is a ten-square emoji bar for a 0–100 tracker: green while it's
+// healthy, yellow once it's below half, red where the realm starts warning
+// (game.WarnLow). Emoji squares are the same width everywhere, so the bars
+// line up on any screen.
+func meter(v float64) string {
+	n := max(0, min(10, int(v/10+0.5)))
+	fill := "🟩"
+	switch {
+	case v < game.WarnLow:
+		fill = "🟥"
+	case v < 50:
+		fill = "🟨"
+	}
+	return strings.Repeat(fill, n) + strings.Repeat("⬛", 10-n)
 }
 
 // backTo is a grey Back button to a custom ID.

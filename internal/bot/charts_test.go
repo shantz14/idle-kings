@@ -58,6 +58,20 @@ func TestOwnershipCards(t *testing.T) {
 	if s := empty[0].Slices; len(s) != 1 || s[0].Share != 1 {
 		t.Fatalf("empty sector: %+v", s)
 	}
+	if len(invested(empty)) != 0 || !strings.HasPrefix(legendLines(empty), "Nobody has invested") {
+		t.Fatalf("a court with no investors: %q", legendLines(empty))
+	}
+}
+
+func TestMeter(t *testing.T) {
+	for v, want := range map[float64]string{
+		100: "🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩", 62: "🟩🟩🟩🟩🟩🟩⬛⬛⬛⬛", 44: "🟨🟨🟨🟨⬛⬛⬛⬛⬛⬛",
+		20: "🟥🟥⬛⬛⬛⬛⬛⬛⬛⬛", 0: "⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛",
+	} {
+		if got := meter(v); got != want {
+			t.Errorf("meter(%v) = %s, want %s", v, got, want)
+		}
+	}
 }
 
 func TestChartsRender(t *testing.T) {
