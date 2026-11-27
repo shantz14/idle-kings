@@ -51,7 +51,7 @@ var embezzleCheck = Check{Base: 50, Weights: map[Attr]float64{AttrStewardship: 3
 
 const (
 	embezzleCaughtMargin  = -25
-	embezzleCaughtRenown  = 2.0
+	embezzleCaughtRenown  = 20
 	embezzleCaughtOpinion = -8.0
 	embezzleOutraged      = -15.0 // Incorruptible and Economical senators
 )

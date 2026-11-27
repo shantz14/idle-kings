@@ -31,7 +31,7 @@ func Inherit(name string, stats Stats, renown, influence float64, wealth int) He
 	h := Heir{
 		Name:      name,
 		Stats:     Stats{},
-		Renown:    renown * HeirKeepsRenown,
+		Renown:    math.Round(renown * HeirKeepsRenown),
 		Influence: influence * HeirKeepsInfl,
 		Wealth:    int(float64(wealth) * (1 - DeathDuty)),
 	}

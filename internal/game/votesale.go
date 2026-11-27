@@ -23,7 +23,7 @@ const (
 	scandalPerIntrigue = 2.5  // off, per point of Intrigue
 	scandalMinChance   = 3
 	scandalMaxChance   = 60
-	scandalRenown      = 1.5
+	scandalRenown      = 15
 	scandalInfluence   = 1.0
 	scandalOpinion     = -6.0  // senators who wanted another outcome
 	scandalOutraged    = -12.0 // Incorruptible and Stern senators

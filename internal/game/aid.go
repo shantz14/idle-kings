@@ -45,7 +45,7 @@ const (
 	AidMax          = 5000
 	aidRate         = 25.0   // gold per tracker point, before diminishing returns
 	aidTaper        = 1000.0 // big gifts buy less per coin
-	aidRenown       = 0.02   // per point
+	aidRenown       = 0.2    // per point
 	aidInfluence    = 0.03   // per point
 	AidCrisis       = 25.0   // below this, rewards double
 	aidOpinionPer   = 5.0    // points per +1 opinion with the senators who care

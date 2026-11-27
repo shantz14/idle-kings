@@ -49,15 +49,15 @@ var (
 	huntFriendsCheck = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
 	accidentCheck    = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 4, AttrProwess: 2}}
 
-	huntHostSuccess  = Delta{Renown: 0.3, Stats: Stats{Prowess: 1, Martial: 1}}
-	huntHostFailure  = Delta{Renown: -0.1}
-	huntHostGlory    = Delta{Renown: 0.5}
+	huntHostSuccess  = Delta{Renown: 3, Stats: Stats{Prowess: 1, Martial: 1}}
+	huntHostFailure  = Delta{Renown: -1}
+	huntHostGlory    = Delta{Renown: 5}
 	huntHostSaddle   = Delta{Influence: 1.5}
-	huntGuestGlory   = Delta{Renown: 0.3, Stats: Stats{Prowess: 0.5}}
+	huntGuestGlory   = Delta{Renown: 3, Stats: Stats{Prowess: 0.5}}
 	huntGuestFriends = Delta{Influence: 1}
 
-	accidentRenown     = 0.3 // the victim, thrown in front of everyone
-	accidentCaught     = 0.5 // the culprit, once named
+	accidentRenown     = 3.0 // the victim, thrown in front of everyone
+	accidentCaught     = 5.0 // the culprit, once named
 	accidentCaughtOpin = -2.0
 
 	huntHawkOpinion         = 3.0
@@ -75,7 +75,7 @@ var HuntEvents = []PartyEvent{
 		Prompt: "A huge boar bursts from the bracken, straight at your horse.",
 		Choices: []EventChoice{
 			{Key: "spear", Label: "Stand and take it on the spear", Check: chk(20, AttrProwess, 7),
-				Success: EventOutcome{Text: "The spear holds. The boar is yours, and everyone saw it.", Quality: 10, Delta: Delta{Renown: 0.3}},
+				Success: EventOutcome{Text: "The spear holds. The boar is yours, and everyone saw it.", Quality: 10, Delta: Delta{Renown: 3}},
 				Failure: EventOutcome{Text: "The boar breaks the spear and gores your leg.", Quality: -6, Condition: CondWounded}},
 			{Key: "tree", Label: "Get out of its way",
 				Success: EventOutcome{Text: "You scramble clear. The boar escapes, and so does your dignity.", Quality: -5}},
@@ -87,7 +87,7 @@ var HuntEvents = []PartyEvent{
 		Prompt: "Through the trees: a white stag, the kind songs are written about. It's already running.",
 		Choices: []EventChoice{
 			{Key: "chase", Label: "Give chase", Check: chk(15, AttrProwess, 6),
-				Success: EventOutcome{Text: "A long ride and a clean shot. The court will talk of nothing else.", Quality: 14, Delta: Delta{Renown: 0.5}},
+				Success: EventOutcome{Text: "A long ride and a clean shot. The court will talk of nothing else.", Quality: 14, Delta: Delta{Renown: 5}},
 				Failure: EventOutcome{Text: "Your horse misses a jump. You land hard, and the stag is gone.", Quality: -4, Condition: CondWounded}},
 			{Key: "let_go", Label: "Let it go",
 				Success: EventOutcome{Text: "Some things are better left as stories.", Quality: 0}},
@@ -112,7 +112,7 @@ var HuntEvents = []PartyEvent{
 		Prompt: "Your huntsmen drag a ragged man out of the trees with a royal deer over his shoulders.",
 		Choices: []EventChoice{
 			{Key: "hang", Label: "Hang him from an oak",
-				Success: EventOutcome{Text: "The forest law is kept. Some of your guests look away.", Quality: -2, Delta: Delta{Renown: 0.2}}},
+				Success: EventOutcome{Text: "The forest law is kept. Some of your guests look away.", Quality: -2, Delta: Delta{Renown: 2}}},
 			{Key: "free", Label: "Let him go",
 				Success: EventOutcome{Text: "He kisses your boots and vanishes. The common folk will hear of it.", Quality: 2, Delta: Delta{Influence: 0.3}}},
 			{Key: "hire", Label: "Hire him as a tracker", Check: chk(25, AttrStewardship, 5),

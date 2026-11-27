@@ -66,8 +66,8 @@ func PetitionByKey(key string, ls Laws) (PetitionDef, bool) {
 // Placeholders to tune.
 const (
 	petitionWinInfl    = 1.5 // the motion passes (through ScaleInfluence)
-	petitionWinRenown  = 1.0
-	petitionLoseRenown = 0.5 // the Senate votes it down
+	petitionWinRenown  = 10
+	petitionLoseRenown = 5 // the Senate votes it down
 )
 
 type PetitionResult struct {

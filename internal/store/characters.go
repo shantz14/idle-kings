@@ -442,7 +442,7 @@ func applyDelta(ctx context.Context, tx *sql.Tx, charID int64, d game.Delta) err
 		`UPDATE characters SET stats = ?, influence = MAX(0, influence + ?), renown = MAX(0, renown + ?),
 		        wealth = MAX(0, wealth + ?), daily_income = MAX(0, daily_income + ?)
 		 WHERE id = ?`,
-		string(b), d.Influence, d.Renown, d.Wealth, d.DailyIncome, charID)
+		string(b), d.Influence, game.RoundRenown(d.Renown), d.Wealth, d.DailyIncome, charID)
 	return err
 }
 

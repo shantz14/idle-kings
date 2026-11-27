@@ -5,6 +5,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -24,6 +25,25 @@ const (
 // gear gives +10 or more); NewSheet divides, so Check weights are per
 // StatScale shown points.
 const StatScale = 5
+
+// RenownScale is how renown is stored and shown: ×10, in whole numbers, so
+// nothing ever gives a player a tenth of a point. Checks see renown divided
+// by it (see NewSheet), so their weights are per 10 shown renown.
+const RenownScale = 10
+
+// RoundRenown makes a renown change whole: rounded, but never less than 1
+// either way, so a small gain or loss still counts.
+func RoundRenown(v float64) float64 {
+	switch {
+	case v == 0:
+		return 0
+	case v > 0 && v < 1:
+		return 1
+	case v < 0 && v > -1:
+		return -1
+	}
+	return math.Round(v)
+}
 
 // AllStats is the display order for stats.
 var AllStats = []Stat{Diplomacy, Martial, Stewardship, Intrigue, Prowess}

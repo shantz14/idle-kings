@@ -34,7 +34,7 @@ type Sheet map[Attr]float64
 func NewSheet(stats Stats, influence, renown, estate float64, wealth int) Sheet {
 	s := Sheet{
 		AttrInfluence: influence,
-		AttrRenown:    renown,
+		AttrRenown:    renown / RenownScale,
 		AttrEstate:    EstateScore(estate),
 		AttrWealth:    float64(wealth),
 	}
@@ -97,7 +97,7 @@ func (d Delta) Describe() string {
 		}
 	}
 	add(d.Influence, "influence")
-	add(d.Renown, "renown")
+	add(RoundRenown(d.Renown), "renown")
 	for _, st := range AllStats {
 		add(d.Stats[st], string(st))
 	}

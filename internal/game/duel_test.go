@@ -45,7 +45,7 @@ func TestDuelResolution(t *testing.T) {
 	a, b := duelPeople()
 	dove := Senator{ID: 9, Traits: []Trait{TraitDove}}
 	for n := 0; n < 500; n++ {
-		res := ResolveDuel(r, DuelInput{Challenger: a, Defender: b, ChallengerRenown: 3, DefenderRenown: 3,
+		res := ResolveDuel(r, DuelInput{Challenger: a, Defender: b, ChallengerRenown: 30, DefenderRenown: 30,
 			ChallengerStance: StanceAttack, DefenderStance: StanceTrick, Wager: 50, Senators: []Senator{dove}})
 		w, l := res.Deltas[res.Winner.ID], res.Deltas[res.Loser.ID]
 		if w.Wealth != 100 || l.Wealth != 0 {
@@ -63,7 +63,7 @@ func TestDuelResolution(t *testing.T) {
 	}
 	// Yielding loses, without wounds, and costs half.
 	for n := 0; n < 200; n++ {
-		res := ResolveDuel(r, DuelInput{Challenger: a, Defender: b, ChallengerRenown: 3, DefenderRenown: 3, DefenderStance: StanceYield})
+		res := ResolveDuel(r, DuelInput{Challenger: a, Defender: b, ChallengerRenown: 30, DefenderRenown: 30, DefenderStance: StanceYield})
 		if res.Winner.ID != a.ID || res.Wounded || res.Deltas[b.ID].Renown != -duelRenown/2 {
 			t.Fatalf("yield: %+v", res)
 		}

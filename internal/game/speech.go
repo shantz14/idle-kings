@@ -74,9 +74,9 @@ var speechCheck = Check{Base: 15, Weights: map[Attr]float64{AttrDiplomacy: 4, At
 const (
 	speechGreatMargin = 30
 	speechInfluence   = 1.5
-	speechRenown      = 0.2
+	speechRenown      = 2
 	speechGreatScale  = 1.5
-	speechFailRenown  = -0.3
+	speechFailRenown  = -3
 	speechFailInfl    = -0.3
 
 	cheerQuality    = 5.0
@@ -84,7 +84,7 @@ const (
 	heckleWin       = -12.0 // speech quality when a heckler wins
 	heckleLose      = 3.0   // the speaker's comeback
 	heckleInfluence = 0.5
-	heckleFoolish   = -0.3 // a heckler who loses, in renown
+	heckleFoolish   = -3 // a heckler who loses, in renown
 
 	causePleased = 2.0
 	causeAnnoyed = -1.0

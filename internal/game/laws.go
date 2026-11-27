@@ -52,7 +52,7 @@ const (
 
 	// Law Against Bribery
 	LawBribeFactor       = 1.5  // bribes cost this much more
-	LawBribeExposeRenown = 2.0  // renown lost when a bribe comes out
+	LawBribeExposeRenown = 20   // renown lost when a bribe comes out
 	LawBribeExposeOp     = -10. // Incorruptible and Stern senators, when it does
 
 	// Landed Franchise: vote weight from EstateScore(value)
@@ -66,12 +66,12 @@ const (
 	LawSlanderFine   = 15   // gold a named rumor-monger pays their target
 
 	// Ban on Dueling
-	LawDuelBanRenown  = 1.5 // renown a challenger loses for issuing one
+	LawDuelBanRenown  = 15  // renown a challenger loses for issuing one
 	LawDuelBanOpinion = -5. // Stern senators, toward the challenger
 
 	// Code of Honor
 	LawHonorRenown         = 1.5 // winner's renown multiplier
-	LawHonorDeclineRenown  = 1.5 // renown lost for refusing a challenge
+	LawHonorDeclineRenown  = 15  // renown lost for refusing a challenge
 	LawHonorDeclineOpinion = -4. // Hawk, Stern and Conservative senators
 	LawHonorBetCut         = 0.1 // share of every betting pot the court takes
 

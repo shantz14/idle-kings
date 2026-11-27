@@ -39,11 +39,11 @@ var MisdeedDefs = map[string]MisdeedDef{
 }
 
 const (
-	exposeRenown     = 2.0  // × severity, off the culprit
+	exposeRenown     = 20   // × severity, off the culprit
 	exposeOpinion    = -5.5 // × severity, every senator toward the culprit
 	informersBoost   = 1.5  // the Informers' Law makes exposure hit harder
 	offendedMultiple = 2.0  // offended traits take it this much worse
-	whisperRenown    = 1.0  // × severity: a whisper is softer than going public
+	whisperRenown    = 10   // × severity: a whisper is softer than going public
 	whisperOpinion   = -4.0 // × severity
 )
 

@@ -249,7 +249,7 @@ func goldenCases() map[string]any {
 					Attendees: []Attendee{{Person: b, Goal: GoalMakeFriends}, {Person: c, Goal: GoalSpreadRumors, Target: &bp}}})
 			}
 			for _, st := range []string{"", StanceAttack, StanceTrick, StanceYield} {
-				out[k("duel/"+lname+"/"+st)] = ResolveDuel(sr(), DuelInput{Challenger: a, Defender: b, ChallengerRenown: 5, DefenderRenown: 2,
+				out[k("duel/"+lname+"/"+st)] = ResolveDuel(sr(), DuelInput{Challenger: a, Defender: b, ChallengerRenown: 50, DefenderRenown: 20,
 					ChallengerStance: StanceAttack, DefenderStance: st, Wager: 40, Senators: sen, Laws: ls,
 					Bets: []Bet{{CharacterID: 3, SideID: 1, Amount: 30}}})
 			}

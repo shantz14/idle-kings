@@ -246,7 +246,7 @@ var arcMatters = []MatterEvent{
 			{Key: "field", Label: "Meet them in the field", Hint: "Strike before they reach the farms. Everything rides on the legions.",
 				Leans: L{LeanMilitary: 2, LeanRisk: 1}, Check: chk(15, AttrMilitary, 0.8),
 				Success: MatterOutcome{Text: "The legions hold the line until dawn, and at first light the dead fall where they stand.",
-					Realm: R{AttrMilitary: -6, AttrStability: 3}, Supporters: D{Renown: 0.5}, Roles: roles("officer", D{Renown: 0.5}), FollowUps: next("barrow_dawn", 1)},
+					Realm: R{AttrMilitary: -6, AttrStability: 3}, Supporters: D{Renown: 5}, Roles: roles("officer", D{Renown: 5}), FollowUps: next("barrow_dawn", 1)},
 				Failure: MatterOutcome{Text: "The legions break. The dead march past their bodies toward the farms.",
 					Realm: R{AttrMilitary: -15, AttrStability: -5}, Sectors: SC{SectorAgriculture: {Health: -0.2}}, FollowUps: next("barrow_dawn", 1)}},
 			{Key: "walls", Label: "Hold the city walls", Hint: "Let them come to us. The countryside will suffer.",

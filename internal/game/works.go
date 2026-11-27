@@ -72,7 +72,7 @@ func MonumentValue(keys []string) float64 {
 
 // Placeholders to tune.
 const (
-	workOpeningRenown = 0.3
+	workOpeningRenown = 3
 	workPleased       = 3.0
 )
 

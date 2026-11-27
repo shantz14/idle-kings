@@ -117,8 +117,8 @@ var (
 	targetNotice  = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 5}}                 // rolled with disadvantage
 	hostNotice    = Check{Base: 10, Weights: map[Attr]float64{AttrIntrigue: 5}, Difficulty: 20} // also disadvantage, and harder
 
-	hostSuccess   = Delta{Influence: 2, Renown: 0.1, Stats: Stats{Diplomacy: 1.5}}
-	hostFailure   = Delta{Renown: -0.2}
+	hostSuccess   = Delta{Influence: 2, Renown: 1, Stats: Stats{Diplomacy: 1.5}}
+	hostFailure   = Delta{Renown: -2}
 	hostFriends   = Delta{Influence: 2}
 	hostBusiness  = Delta{DailyIncome: 2, Stats: Stats{Stewardship: 2.5}}
 	guestFriends  = Delta{Influence: 1}
@@ -182,7 +182,7 @@ var PartyEvents = []PartyEvent{
 				Success: EventOutcome{Text: "Fresh casks arrive before anyone notices.", Quality: 8, Delta: Delta{Wealth: -15}}},
 			{Key: "water", Label: "Water it down", Check: chk(25, AttrIntrigue, 6),
 				Success: EventOutcome{Text: "No one can tell the difference.", Quality: 4},
-				Failure: EventOutcome{Text: "A guest spits out their cup. Word spreads.", Quality: -10, Delta: Delta{Renown: -0.2}}},
+				Failure: EventOutcome{Text: "A guest spits out their cup. Word spreads.", Quality: -10, Delta: Delta{Renown: -2}}},
 			{Key: "end", Label: "Call it a night",
 				Success: EventOutcome{Text: "The party ends early. Guests leave disappointed.", Quality: -12}},
 		},
@@ -193,10 +193,10 @@ var PartyEvents = []PartyEvent{
 		Prompt: "Two guests have come to blows over an insult and now stand with blades out in your hall.",
 		Choices: []EventChoice{
 			{Key: "step_in", Label: "Step between them", Check: chk(20, AttrProwess, 7),
-				Success: EventOutcome{Text: "You disarm one with a flourish. The court applauds.", Quality: 8, Delta: Delta{Renown: 0.3}},
+				Success: EventOutcome{Text: "You disarm one with a flourish. The court applauds.", Quality: 8, Delta: Delta{Renown: 3}},
 				Failure: EventOutcome{Text: "You take a cut to the arm and the duel goes on anyway.", Quality: -6}},
 			{Key: "let_them", Label: "Let them settle it",
-				Success: EventOutcome{Text: "Blood on your floor. People will talk about this party, for better or worse.", Quality: -4, Delta: Delta{Renown: 0.2}}},
+				Success: EventOutcome{Text: "Blood on your floor. People will talk about this party, for better or worse.", Quality: -4, Delta: Delta{Renown: 2}}},
 		},
 		Default: "let_them",
 	},
@@ -229,7 +229,7 @@ var PartyEvents = []PartyEvent{
 		Prompt: "Loudly, in front of everyone, a guest mocks your family name.",
 		Choices: []EventChoice{
 			{Key: "wit", Label: "Answer with wit", Check: chk(20, AttrDiplomacy, 7),
-				Success: EventOutcome{Text: "Your reply has the whole hall laughing at them instead.", Quality: 7, Delta: Delta{Renown: 0.2}},
+				Success: EventOutcome{Text: "Your reply has the whole hall laughing at them instead.", Quality: 7, Delta: Delta{Renown: 2}},
 				Failure: EventOutcome{Text: "Your comeback falls flat.", Quality: -5}},
 			{Key: "guards", Label: "Have them thrown out", Check: chk(30, AttrMartial, 6),
 				Success: EventOutcome{Text: "Your guards remove them quickly and quietly.", Quality: 2},

@@ -401,7 +401,7 @@ const (
 	defenceWarned     = 10.0
 	strikeExposed     = -25 // margin at or below: the leader is caught
 	strikeWound       = -10 // margin at or below: a failed murder still wounds
-	exposedRenown     = 2.0 // × the deed's severity
+	exposedRenown     = 20  // × the deed's severity
 	exposedOpinion    = -6.0
 	disgraceInfluence = 1.0 // the leader's share of a senator's fall
 )

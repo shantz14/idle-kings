@@ -42,7 +42,7 @@ func TestBuildFinal(t *testing.T) {
 	if st.Stats[Diplomacy] != 45 || st.Stats[Intrigue] != (2+2+1+1)*StatScale || st.Stats[Martial] != 10 {
 		t.Fatalf("stats: %v", st.Stats)
 	}
-	if st.Influence != 8 || st.Renown != 6 || st.Wealth != 20 || st.DailyIncome != 8 {
+	if st.Influence != 8 || st.Renown != 60 || st.Wealth != 20 || st.DailyIncome != 8 {
 		t.Fatalf("standing: %+v", st)
 	}
 	if len(st.Items) != 2 || st.Items[0] != "crumbling_manor" {

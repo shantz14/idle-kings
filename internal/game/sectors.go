@@ -291,7 +291,7 @@ const (
 var dealStake = map[DealTier]float64{DealBad: 0.6, DealFair: 1.0, DealGreat: 1.5}
 
 // ExposedDelta is what being caught in the Black Market costs.
-var ExposedDelta = Delta{Renown: -1}
+var ExposedDelta = Delta{Renown: -10}
 
 type InvestResult struct {
 	Tier     DealTier

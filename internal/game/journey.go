@@ -63,7 +63,7 @@ var JourneyDests = []JourneyDest{
 		Description: "Ride from town to town, shaking hands and hearing petitions. The countryside remembers who came to see it.",
 		Check:       Check{Base: 35, Weights: map[Attr]float64{AttrDiplomacy: 3, AttrRenown: 1}},
 		Stat:        Diplomacy,
-		Success:     Delta{Influence: 2, Renown: 0.3},
+		Success:     Delta{Influence: 2, Renown: 3},
 		Failure:     Delta{Influence: 0.3},
 		Realm:       Realm{AttrPopularity: 2},
 		GoodText:    "Cheering crowds in every square. The provinces will speak your name for months.",
@@ -86,8 +86,8 @@ var JourneyDests = []JourneyDest{
 		Description: "Ride to the White City and break lances before the King of Gondor. Winners go home rich and famous.",
 		Check:       Check{Base: 25, Weights: map[Attr]float64{AttrProwess: 4, AttrMartial: 2}},
 		Stat:        Prowess,
-		Success:     Delta{Renown: 1, Wealth: 50, Stats: Stats{Prowess: 1.5}},
-		Failure:     Delta{Renown: 0.1},
+		Success:     Delta{Renown: 10, Wealth: 50, Stats: Stats{Prowess: 1.5}},
+		Failure:     Delta{Renown: 1},
 		Realm:       Realm{AttrForeign: 1},
 		Gift:        "gondor_shield",
 		GoodText:    "You unhorsed knight after knight. The King of Gondor himself handed you the prize.",
@@ -98,7 +98,7 @@ var JourneyDests = []JourneyDest{
 		Description: "Spend weeks among the scrolls of the greatest library in the world. You come home wiser, and with secrets.",
 		Check:       Check{Base: 35, Weights: map[Attr]float64{AttrStewardship: 3, AttrIntrigue: 2}},
 		Stat:        Stewardship,
-		Success:     Delta{Renown: 0.3, Stats: Stats{Stewardship: 1.5, Intrigue: 1.5}},
+		Success:     Delta{Renown: 3, Stats: Stats{Stewardship: 1.5, Intrigue: 1.5}},
 		Failure:     Delta{Stats: Stats{Stewardship: 0.5}},
 		Gift:        "alexandrian_scroll",
 		GoodText:    "The librarians opened the locked stacks for you. Your notebooks are full.",
@@ -139,7 +139,7 @@ const (
 	namedPerIntrigue  = 2.5  // the hirer's Intrigue covers their tracks
 	robbedShare       = 0.6  // of the purse, on a full robbery
 	partlyShare       = 0.25 // on a partial one
-	namedRenown       = 1.5  // the hirer, once named
+	namedRenown       = 15   // the hirer, once named
 	namedOpinion      = -4.0 // every senator
 	namedOutraged     = -8.0 // Stern and Incorruptible senators
 )
@@ -189,13 +189,13 @@ type BanditBand struct {
 
 var BanditBands = []BanditBand{
 	{Key: "cutthroats", Name: "A few cutthroats", Price: 40, Strength: 0,
-		Reward: Delta{Renown: 0.3, Stats: Stats{Prowess: 1, Martial: 0.5}},
+		Reward: Delta{Renown: 3, Stats: Stats{Prowess: 1, Martial: 0.5}},
 		Desc:   "Half a dozen desperate men with clubs and knives. Cheap, and easily scared."},
 	{Key: "outlaws", Name: "The Bloody Mummers", Price: 100, Strength: 15,
-		Reward: Delta{Renown: 0.6, Stats: Stats{Prowess: 1.5, Martial: 1}},
+		Reward: Delta{Renown: 6, Stats: Stats{Prowess: 1.5, Martial: 1}},
 		Desc:   "Twenty cutthroats from every land, in motley and stolen armor, who know every pass and ambush on the road."},
 	{Key: "sellswords", Name: "The Black Company", Price: 250, Strength: 30,
-		Reward: Delta{Renown: 1, Stats: Stats{Prowess: 2.5, Martial: 1.5}},
+		Reward: Delta{Renown: 10, Stats: Stats{Prowess: 2.5, Martial: 1.5}},
 		Desc:   "The most famous sellsword company in the world, between wars, armored and mounted. Anyone who beats them will be famous."},
 }
 
@@ -342,7 +342,7 @@ var (
 					Success: EventOutcome{Text: "By the end he's apologizing, and offers you dinner.", Quality: 5},
 					Failure: EventOutcome{Text: "He doubles the price for wasting his time.", Quality: -3, Delta: Delta{Wealth: -30}}},
 				{Key: "force", Label: "Break the chain", Check: chk(15, AttrProwess, 6),
-					Success: EventOutcome{Text: "His many sons take one look at your escort and step aside.", Quality: 4, Delta: Delta{Renown: 0.2}},
+					Success: EventOutcome{Text: "His many sons take one look at your escort and step aside.", Quality: 4, Delta: Delta{Renown: 2}},
 					Failure: EventOutcome{Text: "A scuffle, a bloody nose, and you pay anyway.", Quality: -5, Delta: Delta{Wealth: -15}}},
 			},
 			Default: "pay",
@@ -394,7 +394,7 @@ var (
 					Success: EventOutcome{Text: "You share wine with their leader, who swears you're under his protection.", Quality: 8},
 					Failure: EventOutcome{Text: "They take the parley as an insult, and some of your horses as payment.", Quality: -8}},
 				{Key: "fight", Label: "Charge them", Check: chk(10, AttrProwess, 6),
-					Success: EventOutcome{Text: "They scatter. Your escort will tell this story for years.", Quality: 6, Delta: Delta{Renown: 0.3}},
+					Success: EventOutcome{Text: "They scatter. Your escort will tell this story for years.", Quality: 6, Delta: Delta{Renown: 3}},
 					Failure: EventOutcome{Text: "Horse archers. You lose men and pride.", Quality: -10, Condition: CondWounded}},
 			},
 			Default: "gift",
