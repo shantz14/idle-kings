@@ -188,7 +188,7 @@ func (b *Bot) estatePageNote(c store.Character, note string) *discordgo.Interact
 // to move house, sell, shop and trade.
 func estateView(c store.Character, back bool, note string) *discordgo.InteractionResponseData {
 	e := &discordgo.MessageEmbed{
-		Title: fmt.Sprintf("%s %s · the estate of %s", emojiEstate, c.House(), c.FullName()),
+		Title: fmt.Sprintf("%s · the estate of %s", c.House(), c.FullName()),
 		Color: colorPanel,
 	}
 	desc := "A finer estate makes your parties more successful."
@@ -213,7 +213,7 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 		}
 		line := itemLine(it)
 		if h.ID == home.ID {
-			line = "🏡 " + line + " · *your home*"
+			line = "🏡" + strings.TrimPrefix(line, game.KindByKey(it.Kind).Emoji) + " · *your home*"
 		}
 		byKind[it.Kind] = append(byKind[it.Kind], line)
 		if h.ID == home.ID {

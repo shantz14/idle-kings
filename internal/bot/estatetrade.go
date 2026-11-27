@@ -331,7 +331,7 @@ func offerMessage(o store.EstateOffer, from, to store.Character, give, want []st
 		if len(items) == 0 {
 			return "Nothing"
 		}
-		return truncate(strings.Join(items, "\n"), 1024)
+		return joinLines(items, 1000)
 	}
 	return &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{Title: fmt.Sprintf("%s %s offers you a deal", emojiDeal, from.FullName()),
