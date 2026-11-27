@@ -413,37 +413,104 @@ func encode(img image.Image) []byte {
 	return buf.Bytes()
 }
 
-// drawTile is one industry: a rounded card with its name, a donut, and
-// the headline share in the middle. s scales everything (1 = grid size).
-func drawTile(img *image.RGBA, x, y int, s float64, c pieCard) {
-	w, h := int(360*s), int(410*s)
-	roundRect(img, image.Rect(x, y, x+w, y+h), 28*s, tileRGB)
-	drawText(img, face(40*s), textRGB, x+w/2, y+int(58*s), shortName(c.Sector.Name))
-	cx, cy := float64(x)+float64(w)/2, float64(y)+235*s
-	if len(c.Slices) == 1 { // only the old houses: a plain grey disc, explained in the legend
-		drawDonut(img, cx, cy, 145*s, 0, c.Slices)
-		return
+// keyRows is the most rows a chart's key shows: four players, then the
+// rest together, then the secret investors and the old houses.
+const keyRows = 7
+
+// keySlices is what a chart draws and its key lists: up to four players
+// by name (you always among them), the rest as one "Others" slice, then
+// the secret investors and the old houses. The pie and the key use the
+// same list, so their colors always match.
+func keySlices(c pieCard) []pieSlice {
+	var named, tail []pieSlice
+	var others float64
+	for _, sl := range c.Slices {
+		switch {
+		case sl.Hatch || sl.Mark == "🏛️":
+			tail = append(tail, sl)
+		case sl.Name == "": // small investors already merged
+			others += sl.Share
+		case len(named) < 4 || sl.You:
+			named = append(named, sl)
+		default:
+			others += sl.Share
+		}
 	}
-	drawDonut(img, cx, cy, 145*s, 92*s, c.Slices)
-	big, small := headline(c)
-	drawText(img, face(60*s), textRGB, int(cx), int(cy+12*s), big)
-	drawText(img, face(28*s), mutedRGB, int(cx), int(cy+48*s), small)
+	if others > 0 {
+		named = append(named, pieSlice{Share: others, Color: othersRGB})
+	}
+	return append(named, tail...)
 }
 
-// headline is the number in a donut's middle: your share, or the players'
-// share if you own none.
-func headline(c pieCard) (string, string) {
-	for _, s := range c.Slices {
-		if s.You {
-			return roundPct(s.Share), "yours"
-		}
+// keyName is how a chart's key names a slice.
+func keyName(sl pieSlice) string {
+	switch {
+	case sl.Hatch:
+		return "Secret investors"
+	case sl.Mark == "🏛️":
+		return "Old houses"
+	case sl.Name == "":
+		return "Others"
+	case sl.You:
+		return "You"
 	}
-	for _, s := range c.Slices {
-		if s.Mark == "🏛️" {
-			return roundPct(1 - s.Share), "players"
-		}
+	return sl.Name
+}
+
+// fitText cuts s with "…" until it fits width pixels.
+func fitText(f font.Face, s string, width int) string {
+	if f == nil || font.MeasureString(f, s).Round() <= width {
+		return s
 	}
-	return "", ""
+	r := []rune(s)
+	for len(r) > 1 && font.MeasureString(f, string(r)+"…").Round() > width {
+		r = r[:len(r)-1]
+	}
+	return string(r) + "…"
+}
+
+// drawTextLeft writes text from x, baseline at y.
+func drawTextLeft(img *image.RGBA, f font.Face, c color.RGBA, x, y int, s string) {
+	if f == nil {
+		return
+	}
+	d := &font.Drawer{Dst: img, Src: image.NewUniform(c), Face: f, Dot: fixed.P(x, y)}
+	d.DrawString(s)
+}
+
+// tileHeight is a tile's height with room for rows of key, at scale s.
+func tileHeight(rows int, s float64) int { return int((400 + 46*float64(rows)) * s) }
+
+// drawTile is one industry: a rounded card with its name, a solid pie, and
+// a key under it. rows is the key rows the tile has room for (tiles in a
+// grid share one height). s scales everything (1 = grid size).
+func drawTile(img *image.RGBA, x, y int, s float64, c pieCard, rows int) {
+	w, h := int(360*s), tileHeight(rows, s)
+	roundRect(img, image.Rect(x, y, x+w, y+h), 28*s, tileRGB)
+	drawText(img, face(40*s), textRGB, x+w/2, y+int(58*s), shortName(c.Sector.Name))
+	slices := keySlices(c)
+	drawDonut(img, float64(x)+float64(w)/2, float64(y)+235*s, 145*s, 0, slices)
+
+	f := face(27 * s)
+	top := y + int(412*s)
+	for n, sl := range slices {
+		ry := top + int(46*s*float64(n))
+		box := image.Rect(x+int(28*s), ry-int(24*s), x+int(54*s), ry+int(2*s))
+		roundRect(img, box, 6*s, sl.Color)
+		pctText := roundPct(sl.Share)
+		pw := 0
+		if f != nil {
+			pw = font.MeasureString(f, pctText).Round()
+		}
+		right := x + w - int(28*s)
+		name := fitText(f, keyName(sl), right-pw-int(12*s)-(x+int(66*s)))
+		col := textRGB
+		if !sl.You {
+			col = mutedRGB
+		}
+		drawTextLeft(img, f, col, x+int(66*s), ry, name)
+		drawTextLeft(img, f, col, right-pw, ry, pctText)
+	}
 }
 
 // roundPct is a share as a whole percent, or one decimal under 10%.
@@ -458,22 +525,29 @@ func roundPct(f float64) string {
 // pieImage is one industry's big tile, for the Invest card.
 func pieImage(c pieCard) []byte {
 	const s = 1.4
-	img := image.NewRGBA(image.Rect(0, 0, int(360*s), int(410*s)))
-	drawTile(img, 0, 0, s, c)
+	rows := len(keySlices(c))
+	img := image.NewRGBA(image.Rect(0, 0, int(360*s), tileHeight(rows, s)))
+	drawTile(img, 0, 0, s, c, rows)
 	return encode(img)
 }
 
 // pieGrid is industry tiles four to a row, on a transparent background.
+// Every tile gets room for the longest key.
 func pieGrid(cards []pieCard) []byte {
 	if len(cards) == 0 {
 		return nil
 	}
-	const w, h, gap = 360, 410, 20
+	rows := 1
+	for _, c := range cards {
+		rows = max(rows, len(keySlices(c)))
+	}
+	const w, gap = 360, 20
+	h := tileHeight(rows, 1)
 	cols := min(4, len(cards))
-	rows := (len(cards) + cols - 1) / cols
-	img := image.NewRGBA(image.Rect(0, 0, cols*w+(cols-1)*gap, rows*h+(rows-1)*gap))
+	lines := (len(cards) + cols - 1) / cols
+	img := image.NewRGBA(image.Rect(0, 0, cols*w+(cols-1)*gap, lines*h+(lines-1)*gap))
 	for n, c := range cards {
-		drawTile(img, (n%cols)*(w+gap), (n/cols)*(h+gap), 1, c)
+		drawTile(img, (n%cols)*(w+gap), (n/cols)*(h+gap), 1, c, rows)
 	}
 	return encode(img)
 }
