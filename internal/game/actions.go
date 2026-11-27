@@ -77,8 +77,8 @@ var Actions = []ActionDef{
 		Description: fmt.Sprintf("Lobby to put a lasting law, or its repeal, before the Senate. Takes 2 hours and costs %d gold. It always reaches the floor, and your name goes on it, win or lose.", PetitionCost),
 	},
 	{
-		Key: KindCourt, Name: "Court a Senator", Emoji: "🎩", Category: CatDiplomacy,
-		Description: "Call on a senator and try to win them over. Takes an hour; their opinion of you may rise, or fall.",
+		Key: KindCourt, Name: "Speak to a Senator", Emoji: "🎩", Category: CatDiplomacy,
+		Description: "Call on a senator: ask how they'll vote, bribe them, sell them your vote, or spend an hour courting them. Their opinion of you may rise, or fall.",
 	},
 	{
 		Key: KindCircus, Name: "Bread and Circuses", Emoji: "🎪", Category: CatMonetary, Public: true,

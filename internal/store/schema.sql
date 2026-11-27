@@ -274,3 +274,26 @@ CREATE TABLE IF NOT EXISTS denunciations (
     used_at    INTEGER
 );
 CREATE INDEX IF NOT EXISTS denunciations_owner ON denunciations (owner_id) WHERE used_at IS NULL;
+
+-- Speak to a Senator: how often each player has called on each senator,
+-- for their greeting.
+CREATE TABLE IF NOT EXISTS senator_visits (
+    senator_id   INTEGER NOT NULL REFERENCES senators(id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    visits       INTEGER NOT NULL DEFAULT 0,
+    last_at      INTEGER NOT NULL,
+    PRIMARY KEY (senator_id, character_id)
+);
+
+-- What a senator told a player when asked how they'd vote on a matter
+-- (game.ResolveAsk). Once per matter: asking again repeats the answer.
+CREATE TABLE IF NOT EXISTS vote_asks (
+    matter_id    INTEGER NOT NULL REFERENCES matters(id),
+    senator_id   INTEGER NOT NULL REFERENCES senators(id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    reply        TEXT NOT NULL, -- game.AskReply
+    option       TEXT NOT NULL, -- what they said ("" on a refusal)
+    text         TEXT NOT NULL,
+    asked_at     INTEGER NOT NULL,
+    PRIMARY KEY (matter_id, senator_id, character_id)
+);

@@ -16,7 +16,7 @@ import (
 func init() {
 	registerActivity(game.KindCourt, activityDef{
 		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
-			return b.courtPanel(ctx, c, 0, "")
+			return b.speakPanel(ctx, c, 0, false, "")
 		},
 		resolve: (*Bot).resolveCourt,
 		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
@@ -115,7 +115,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 			chosen = &s
 		}
 	}
-	e := actionEmbed(game.KindCourt, withNote(busyNote(busy, note), intro))
+	e := panelEmbed("💐 Court a Senator", withNote(busyNote(busy, note), intro))
 	e.Fields = []*discordgo.MessageEmbedField{fact("Takes", humanDuration(dur)), fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))}
 	e.Footer = footer("💬 Senators who like you take smaller bribes, pay more for your vote, and may follow your lead.")
 	embeds = append(embeds, e)
@@ -149,6 +149,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 		btns = append(btns, button(label, fmt.Sprintf("court:go:%d:%s", s.ID, a.Key), discordgo.PrimaryButton, busy != "" || cost > c.Wealth))
 	}
 	embeds = append(embeds, &discordgo.MessageEmbed{Title: "🎩 Senator " + s.Name, Description: strings.TrimSpace(desc.String()), Color: colorSenate})
+	back = backTo(fmt.Sprintf("speak:back:%d", s.ID))
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(append(btns, back)...))}
 }
 

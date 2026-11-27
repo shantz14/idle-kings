@@ -49,6 +49,7 @@ const (
 	SecretKindVote        = "vote"
 	SecretKindCourt       = "court"
 	SecretKindCourtResult = "court_result"
+	SecretKindAskVote     = "ask_vote"
 	SecretKindRumor       = "rumor"
 	SecretKindWhisper     = "whisper"
 	SecretKindPlant       = "plant"
@@ -167,6 +168,16 @@ func SecretCourt(actor, senator, approach string) Secret {
 		Vague:   fmt.Sprintf("%s has gone out calling on someone of importance.", actor),
 		Partial: fmt.Sprintf("%s is calling on a senator.", actor),
 		Full:    fmt.Sprintf("%s is calling on **Senator %s** (%s).", actor, senator, approach),
+	}
+}
+
+// SecretAskVote is asking a senator how they'll vote.
+func SecretAskVote(actor, senator, matter string) Secret {
+	return Secret{
+		Kind:    SecretKindAskVote,
+		Vague:   fmt.Sprintf("%s has been asking questions about the Senate.", actor),
+		Partial: fmt.Sprintf("%s asked a senator how they'll vote on *%s*.", actor, matter),
+		Full:    fmt.Sprintf("%s asked **Senator %s** how they'll vote on *%s*.", actor, senator, matter),
 	}
 }
 

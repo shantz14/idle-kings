@@ -100,7 +100,8 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			return
 		}
 		ops, _ := b.store.Opinions(ctx, c.ID)
-		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s, ops[s.ID])}}))
+		b.respond(i, ephemeral(&discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{b.senatorEmbed(ctx, c.GuildID, s, ops[s.ID])},
+			Components: []discordgo.MessageComponent{row(button("Speak to them", fmt.Sprintf("speak:open:%d", s.ID), discordgo.PrimaryButton, false))}}))
 	}
 }
 
@@ -396,7 +397,8 @@ var helpPages = []struct{ title, body string }{
 		"🎭 **Throw a Party** (Diplomacy): pick a goal, Make Friends or Talk Business. Two hours, announced to the court, and others can attend. " +
 		"Something usually goes wrong during the evening; I'll DM you to decide what to do.\n\n" +
 		"🥂 **Attending** a party, you can make friends, talk business, or **spread rumors** about another player. Targets and hosts may notice, and learn who started them.\n\n" +
-		"🎩 **Court a Senator** (Diplomacy): an hour of flattery, gifts, secrets or strategy. Pick the approach that suits their traits; their opinion of you can rise, or fall.\n\n" +
+		"🎩 **Speak to a Senator** (Diplomacy): call on a senator. **Ask how they'll vote** on what's before the Senate (once per matter): depending on what they think of you, your Diplomacy and their character, they may tell you, refuse, or lie. " +
+		"You can bribe them or sell them your vote from there too, or **court** them: an hour of flattery, gifts, secrets or strategy. Pick the approach that suits their traits; their opinion of you can rise, or fall.\n\n" +
 		"📈 **Invest in a Venture** (Monetary): buy a share of one of the realm's industries, from farms to the Black Market, and earn from it every day. " +
 		"What the Senate decides moves these industries, and your income with them.\n\n" +
 		"🛒 **Estate and shop** (`/shop`): houses up to castles, art, relics, weapons and armor. Own several properties but live in one; that's where you host. " +
