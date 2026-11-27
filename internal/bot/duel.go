@@ -111,25 +111,23 @@ func (b *Bot) duelPanel(ctx context.Context, c store.Character, note string) *di
 
 func duelView(t game.DuelTiming, busy, note string) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	sb.WriteString("Call out another player. They have " + humanDuration(t.Answer) + " to answer by DM. ")
-	sb.WriteString("Refusing costs them a little renown, and the hawks in the Senate notice.\n\n")
-	fmt.Fprintf(&sb, "If they accept, you fight %s later, and the court is told and may bet on it. ", humanDuration(t.Bout))
-	sb.WriteString("Partway through the bout you'll each choose a stance. Prowess decides most fights, Martial helps a little.\n\n")
-	sb.WriteString("The winner takes renown from the loser. A bad loss can leave you **wounded** for a few days. ")
-	sb.WriteString("You may put gold on it too: your opponent must match the wager to accept, and the winner takes both.")
-	if busy != "" {
-		sb.WriteString("\n\n" + busy)
+	sb.WriteString("Call out another player. They answer by DM; refusing costs them a little renown, and the hawks in the Senate notice.\n\n")
+	sb.WriteString("Midway through the bout you each choose a stance. Prowess decides most fights, Martial helps a little. ")
+	sb.WriteString("The winner takes renown from the loser, and a bad loss can leave you **wounded** for a few days.")
+	e := actionEmbed(game.KindDuel, withNote(busyNote(busy, note), sb.String()))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("They answer within", humanDuration(t.Answer)),
+		fact("Then you fight in", humanDuration(t.Bout)),
+		fact("Court", "📣 Told, and may bet"),
 	}
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
+	e.Footer = footer("💰 You may wager gold: your opponent must match it to accept, and the winner takes both.")
 	comps := []discordgo.MessageComponent{}
 	if busy == "" {
 		comps = append(comps, userSelect("duel:who", "Choose your opponent…"))
 	}
 	comps = append(comps, row(backButton(game.KindDuel)))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Challenge to a Duel", Description: sb.String(), Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: comps,
 	}
 }
@@ -156,22 +154,20 @@ func (b *Bot) wagerPanel(ctx context.Context, c store.Character, defenderID int6
 }
 
 func wagerView(c, t store.Character, note string) *discordgo.InteractionResponseData {
-	desc := fmt.Sprintf("You will challenge **%s** (%s).\n\nWill you put gold on it? They must match your wager to accept, and the winner takes both.\n\nYou have **%d gold**.",
-		t.FullName(), t.House(), c.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	desc := withNote(note, fmt.Sprintf("You will challenge **%s** (%s).\n\nWill you put gold on it? They must match your wager to accept, and the winner takes both.",
+		t.FullName(), t.House()))
 	var btns []discordgo.MessageComponent
 	for _, g := range game.DuelWagers {
 		label := fmt.Sprintf("%d gold", g)
 		if g == 0 {
 			label = "No wager"
 		}
-		btns = append(btns, button(label, fmt.Sprintf("duel:wager:%d:%d", t.ID, g), discordgo.SuccessButton, g > c.Wealth))
+		btns = append(btns, button(label, fmt.Sprintf("duel:wager:%d:%d", t.ID, g), discordgo.DangerButton, g > c.Wealth))
 	}
-	btns = append(btns, button("Other amount", fmt.Sprintf("duel:custom:%d", t.ID), discordgo.PrimaryButton, c.Wealth < 1))
+	btns = append(btns, withEmoji(button("Other amount", fmt.Sprintf("duel:custom:%d", t.ID), discordgo.PrimaryButton, c.Wealth < 1), "✏️"))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Challenge " + t.FullName(), Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "⚔️ Challenge " + t.FullName(), Description: desc, Color: colorPanel,
+			Fields: []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))}}},
 		Components: []discordgo.MessageComponent{row(btns...),
 			row(backTo("menu:act:" + game.KindDuel))},
 	}
@@ -211,14 +207,14 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 			if err := b.store.ApplyOutcome(ctx, c.GuildID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: d}, Opinions: ops}, now); err != nil {
 				slog.Error("duel ban", "err", err)
 			}
-			lawNote = fmt.Sprintf("\n\nDueling is banned. Calling someone out has cost you. (%s)", d.Describe())
+			lawNote = "\n\n" + quote("🚫 Dueling is banned. Calling someone out has cost you.\n"+effects(d.Describe()))
 		}
 	}
 
 	// The defender is asked by DM.
-	purse := ""
+	purse := "No wager"
 	if wager > 0 {
-		purse = fmt.Sprintf(" They have put **%d gold** on it; you must match it to accept.", wager)
+		purse = fmt.Sprintf("%d gold, which you must match", wager)
 	}
 	refusing := "Refusing, or not answering, costs you a little renown."
 	switch {
@@ -230,60 +226,64 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	b.deferUpdate(i) // the DM and the announcement come before the answer
 	_, dmErr := b.dm(t.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title: "You have been challenged to a duel",
-			Description: fmt.Sprintf("**%s** (%s) demands satisfaction.%s\n\nAnswer <t:%d:R>. %s",
-				c.FullName(), c.House(), purse, a.EndsAt.Unix(), refusing),
-			Color: colorBad,
+			Title:       "⚔️ You have been challenged to a duel",
+			Description: fmt.Sprintf("**%s** (%s) demands satisfaction.", c.FullName(), c.House()),
+			Color:       colorNotice,
+			Fields: []*discordgo.MessageEmbedField{
+				fact("💰 Wager", purse),
+				fact("⏳ Answer", relTime(a.EndsAt)),
+			},
+			Footer: footer(refusing),
 		}},
 		Components: []discordgo.MessageComponent{row(
-			button("Accept", fmt.Sprintf("duel:accept:%d", a.ID), discordgo.DangerButton, false),
+			withEmoji(button("Accept", fmt.Sprintf("duel:accept:%d", a.ID), discordgo.DangerButton, false), "⚔️"),
 			button("Decline", fmt.Sprintf("duel:decline:%d", a.ID), discordgo.SecondaryButton, false),
 		)},
 	})
 
 	where := b.announce(ctx, a, duelAnnouncement(a, c, t, ""), nil)
-	text := fmt.Sprintf("You have challenged **%s**. They have until <t:%d:R> to answer.%s", t.FullName(), a.EndsAt.Unix(), where)
-	if wager > 0 {
-		text += fmt.Sprintf(" Your wager of **%d gold** is held until then.", wager)
-	}
+	text := fmt.Sprintf("You have challenged **%s**.%s", t.FullName(), where)
 	if dmErr != nil {
-		text += "\n\nI couldn't DM them, so they may not see it. They can't answer until they open their DMs."
+		text += "\n\n" + quote("⚠️ I couldn't DM them, so they may not see it. They can't answer until they open their DMs.")
 	}
 	text += lawNote
-	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "The gauntlet is thrown", Description: text, Color: colorGood}},
-		Components: []discordgo.MessageComponent{homeRow()},
-	})
+	fields := []*discordgo.MessageEmbedField{fact("They answer by", relTime(a.EndsAt))}
+	if wager > 0 {
+		fields = append(fields, fact("Wager held", fmt.Sprintf("%d gold", wager)))
+	}
+	b.update(i, startedView("⚔️ The gauntlet is thrown", text, fields...))
 }
 
 // duelAnnouncement is the public post for a duel in its current state.
 // result is the outcome line once it's over.
 func duelAnnouncement(a store.Activity, c, t store.Character, result string) *discordgo.MessageEmbed {
 	e := &discordgo.MessageEmbed{Color: colorPanel}
-	purse := ""
+	var purse []*discordgo.MessageEmbedField
 	if a.Spend > 0 {
-		purse = fmt.Sprintf(" A purse of **%d gold** each rides on it.", a.Spend)
+		purse = append(purse, fact("💰 Purse", fmt.Sprintf("%d gold each", a.Spend)))
 	}
 	switch {
 	case result != "":
-		e.Title = fmt.Sprintf("Duel: %s vs %s", c.FullName(), t.FullName())
+		e.Title = fmt.Sprintf("⚔️ Duel: %s vs %s", c.FullName(), t.FullName())
 		e.Description = result
+		e.Color = colorMuted
 	case a.Goal == game.DuelAccepted:
-		e.Title = fmt.Sprintf("%s and %s will duel", c.FullName(), t.FullName())
-		e.Description = fmt.Sprintf("The challenge is accepted. They fight <t:%d:R>.%s\n\nPlace your bets: whoever backs the winner splits the whole pot.",
-			a.EndsAt.Unix(), purse)
+		e.Title = fmt.Sprintf("⚔️ %s and %s will duel", c.FullName(), t.FullName())
+		e.Description = "The challenge is accepted. **Place your bets**: whoever backs the winner splits the whole pot."
+		e.Fields = append([]*discordgo.MessageEmbedField{fact("⏳ They fight", relTime(a.EndsAt))}, purse...)
 		e.Color = colorBad
 	default:
-		e.Title = fmt.Sprintf("%s challenges %s to a duel", c.FullName(), t.FullName())
-		e.Description = fmt.Sprintf("%s has until <t:%d:R> to answer.%s", t.FullName(), a.EndsAt.Unix(), purse)
+		e.Title = fmt.Sprintf("⚔️ %s challenges %s to a duel", c.FullName(), t.FullName())
+		e.Description = fmt.Sprintf("Will %s accept?", t.FullName())
+		e.Fields = append([]*discordgo.MessageEmbedField{fact("⏳ Answer by", relTime(a.EndsAt))}, purse...)
 	}
 	return e
 }
 
 func betButtons(a store.Activity, c, t store.Character) []discordgo.MessageComponent {
 	return []discordgo.MessageComponent{row(
-		button(truncate("Bet on "+c.FullName(), 80), fmt.Sprintf("duel:bet:%d:%d", a.ID, c.ID), discordgo.PrimaryButton, false),
-		button(truncate("Bet on "+t.FullName(), 80), fmt.Sprintf("duel:bet:%d:%d", a.ID, t.ID), discordgo.PrimaryButton, false),
+		withEmoji(button(truncate("Bet on "+c.FullName(), 80), fmt.Sprintf("duel:bet:%d:%d", a.ID, c.ID), discordgo.PrimaryButton, false), "🎲"),
+		withEmoji(button(truncate("Bet on "+t.FullName(), 80), fmt.Sprintf("duel:bet:%d:%d", a.ID, t.ID), discordgo.PrimaryButton, false), "🎲"),
 	)}
 }
 
@@ -306,9 +306,9 @@ func (b *Bot) duelLine(ctx context.Context, a store.Activity) string {
 		name = t.FullName()
 	}
 	if a.Goal == game.DuelAccepted {
-		return fmt.Sprintf("You duel %s <t:%d:R>.", name, a.EndsAt.Unix())
+		return fmt.Sprintf("You duel %s %s.", name, relTime(a.EndsAt))
 	}
-	return fmt.Sprintf("You have challenged %s. They must answer <t:%d:R>.", name, a.EndsAt.Unix())
+	return fmt.Sprintf("You have challenged %s. They must answer %s.", name, relTime(a.EndsAt))
 }
 
 // ---- answering ----
@@ -352,18 +352,20 @@ func (b *Bot) onDuelAccept(ctx context.Context, i *discordgo.InteractionCreate, 
 		text = err.Error()
 	}
 	if text != "" {
-		b.respond(i, &discordgo.InteractionResponseData{Content: text})
+		b.respond(i, noteView(text, colorMuted))
 		return
 	}
+	stance := footer("🔔 Watch your DMs: you'll choose your stance during the bout.")
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "You accepted the challenge",
-			Description: fmt.Sprintf("You fight **%s** <t:%d:R>. Watch your DMs: you'll choose your stance during the bout.", c.FullName(), ends.Unix()),
-			Color:       colorBad}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "⚔️ You accepted the challenge",
+			Description: fmt.Sprintf("You will fight **%s**.", c.FullName()),
+			Color:       colorBad, Fields: []*discordgo.MessageEmbedField{fact("⏳ You fight", relTime(ends))}, Footer: stance}},
+		Components: []discordgo.MessageComponent{},
 	})
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title:       t.FullName() + " accepts your challenge",
-		Description: fmt.Sprintf("You fight <t:%d:R>. Watch your DMs: you'll choose your stance during the bout.", ends.Unix()),
-		Color:       colorBad,
+		Title:       "⚔️ " + t.FullName() + " accepts your challenge",
+		Description: "The court is placing its bets.",
+		Color:       colorBad, Fields: []*discordgo.MessageEmbedField{fact("⏳ You fight", relTime(ends))}, Footer: stance,
 	}}})
 	b.editDuelAnnouncement(a, c, t, "", betButtons(a, c, t))
 }
@@ -389,15 +391,17 @@ func (b *Bot) onDuelDecline(ctx context.Context, i *discordgo.InteractionCreate,
 		b.reply(i, "That challenge isn't yours to answer.")
 		return
 	}
-	a, err = b.store.DeclineDuel(ctx, a.ID, t.ID, b.declineOutcome(ctx, a.GuildID, t.ID), time.Now())
+	out := b.declineOutcome(ctx, a.GuildID, t.ID)
+	a, err = b.store.DeclineDuel(ctx, a.ID, t.ID, out, time.Now())
 	if err != nil {
-		b.respond(i, &discordgo.InteractionResponseData{Content: "That challenge has already ended."})
+		b.respond(i, noteView("That challenge has already ended.", colorMuted))
 		return
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "You declined the challenge",
-			Description: fmt.Sprintf("You won't fight %s. Some will call it wisdom; others won't. (-%s renown)", c.FullName(), game.Num(game.DuelDeclineRenown)),
-			Color:       colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🏳️ You declined the challenge",
+			Description: withDelta(fmt.Sprintf("You won't fight %s. Some will call it wisdom; others won't.", c.FullName()), out.Deltas[t.ID]),
+			Color:       colorMuted}},
+		Components: []discordgo.MessageComponent{},
 	})
 	b.afterDecline(a, c, t, false)
 }
@@ -410,13 +414,9 @@ func (b *Bot) afterDecline(a store.Activity, c, t store.Character, timedOut bool
 	}
 	refund := ""
 	if a.Spend > 0 {
-		refund = fmt.Sprintf(" Your %d gold wager is returned.", a.Spend)
+		refund = fmt.Sprintf(" Your **%d gold** wager is returned.", a.Spend)
 	}
-	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title:       "Your challenge was refused",
-		Description: fmt.Sprintf("%s %s your challenge.%s", t.FullName(), how, refund),
-		Color:       colorPanel,
-	}}})
+	b.dmNote(c.UserID, "🏳️ Your challenge was refused", fmt.Sprintf("%s %s your challenge.%s", t.FullName(), how, refund), colorMuted)
 	b.editDuelAnnouncement(a, c, t, fmt.Sprintf("**%s** %s **%s**'s challenge.", t.FullName(), how, c.FullName()), nil)
 }
 
@@ -446,18 +446,16 @@ func (b *Bot) onBetPanel(ctx context.Context, i *discordgo.InteractionCreate, id
 }
 
 func betView(a store.Activity, side, me store.Character, note string) *discordgo.InteractionResponseData {
-	desc := fmt.Sprintf("Back **%s**. If they win, you and everyone else who backed them split the whole pot, by how much you each put in.\n\nYou have **%d gold**. One bet per duel.",
-		side.FullName(), me.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	desc := withNote(note, fmt.Sprintf("Back **%s**. If they win, everyone who backed them splits the whole pot, by how much each put in.", side.FullName()))
 	var btns []discordgo.MessageComponent
 	for _, g := range game.DuelBets {
 		btns = append(btns, button(fmt.Sprintf("%d gold", g), fmt.Sprintf("duel:stake:%d:%d:%d", a.ID, side.ID, g), discordgo.SuccessButton, g > me.Wealth))
 	}
-	btns = append(btns, button("Other amount", fmt.Sprintf("duel:betcustom:%d:%d", a.ID, side.ID), discordgo.PrimaryButton, me.Wealth < 1))
+	btns = append(btns, withEmoji(button("Other amount", fmt.Sprintf("duel:betcustom:%d:%d", a.ID, side.ID), discordgo.PrimaryButton, me.Wealth < 1), "✏️"))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🎲 Bet on " + side.FullName(), Description: desc, Color: colorPanel,
+			Fields: []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", me.Wealth)), fact("Betting closes", relTime(a.EndsAt))},
+			Footer: footer("One bet per duel. Betting doesn't use your action.")}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -478,6 +476,7 @@ func (b *Bot) onBet(ctx context.Context, i *discordgo.InteractionCreate, id, sid
 		side = t
 	}
 	var text string
+	color := colorMuted
 	switch err := b.store.PlaceBet(ctx, a.ID, me.ID, side.ID, gold, time.Now()); {
 	case errors.Is(err, store.ErrEnded):
 		text = "Betting on this duel has closed."
@@ -488,10 +487,12 @@ func (b *Bot) onBet(ctx context.Context, i *discordgo.InteractionCreate, id, sid
 	case err != nil:
 		text = err.Error()
 	default:
-		text = fmt.Sprintf("You put **%d gold** on **%s**. You'll hear how it went <t:%d:R>.", gold, side.FullName(), a.EndsAt.Unix())
+		color = colorGood
+		text = fmt.Sprintf("You put **%d gold** on **%s**. You'll hear how it went %s.", gold, side.FullName(), relTime(a.EndsAt))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: text, Color: colorPanel}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "🎲 Bet on " + side.FullName(), Description: text, Color: color}},
+		Components: []discordgo.MessageComponent{},
 	})
 }
 
@@ -504,17 +505,15 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 		return
 	}
 	if a.Goal == game.DuelPending { // nobody answered
-		if a, err = b.store.DeclineDuel(ctx, a.ID, 0, b.declineOutcome(ctx, a.GuildID, t.ID), now); err != nil {
+		out := b.declineOutcome(ctx, a.GuildID, t.ID)
+		if a, err = b.store.DeclineDuel(ctx, a.ID, 0, out, now); err != nil {
 			if !errors.Is(err, store.ErrEnded) {
 				slog.Error("expire duel", "err", err)
 			}
 			return
 		}
-		_, _ = b.dm(t.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-			Title:       "You let a challenge pass",
-			Description: fmt.Sprintf("You never answered %s's challenge. The court noticed. (-%s renown)", c.FullName(), game.Num(game.DuelDeclineRenown)),
-			Color:       colorPanel,
-		}}})
+		b.dmNote(t.UserID, "🏳️ You let a challenge pass",
+			withDelta(fmt.Sprintf("You never answered %s's challenge. The court noticed.", c.FullName()), out.Deltas[t.ID]), colorMuted)
 		b.afterDecline(a, c, t, true)
 		return
 	}
@@ -557,14 +556,8 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 			users[id] = n.UserID
 		}
 	}
-	title := fmt.Sprintf("Duel: %s vs %s", c.FullName(), t.FullName())
-	for id, lines := range res.Notices {
-		if uid, ok := users[id]; ok {
-			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorPanel,
-			}}})
-		}
-	}
+	title := fmt.Sprintf("⚔️ Duel: %s vs %s", c.FullName(), t.FullName())
+	b.dmNotices(res.Notices, users, title)
 	if a.AnnounceChannelID != "" {
 		public := res.Public
 		if n := len(bets); n > 0 {
