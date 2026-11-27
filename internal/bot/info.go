@@ -113,6 +113,10 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 	if err != nil {
 		return noteView("This court has no realm yet.", colorMuted)
 	}
+	active, err := b.store.ActiveHappenings(ctx, guildID)
+	if err != nil {
+		slog.Error("happenings", "err", err)
+	}
 	// Bars first, so they line up.
 	var trackers strings.Builder
 	for _, t := range game.Trackers {
@@ -174,6 +178,7 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 			{Name: "📜 Chronicle", Value: chronicle},
 			lawsField(st.Laws),
 			{Name: "🏭 Industries", Value: industriesBlock(st)},
+			happeningsField(active),
 		},
 	}
 	data := &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}}

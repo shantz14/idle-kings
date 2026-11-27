@@ -149,6 +149,7 @@ type EventOutcome struct {
 	Quality   float64 `json:"quality"`
 	Delta     Delta   `json:"delta"`
 	Condition string  `json:"condition,omitempty"` // given to whoever the event happened to
+	Ends      bool    `json:"ends,omitempty"`      // ends the happening the event belongs to
 }
 
 // EventChoice is one button on an event. With no Check it always gives Success.
@@ -297,7 +298,7 @@ func PartyEventByKey(key string) (PartyEvent, bool) {
 // EventByKey finds an event in any activity's catalogue: parties, hunts
 // and duels share the same DM event machinery.
 func EventByKey(key string) (PartyEvent, bool) {
-	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents, JourneyEvents, JourneyAbroadEvents} {
+	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents, JourneyEvents, JourneyAbroadEvents, happeningEvents} {
 		for _, e := range list {
 			if e.Key == key {
 				return e, true

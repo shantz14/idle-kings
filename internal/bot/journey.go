@@ -62,7 +62,7 @@ func (b *Bot) journeyPanel(ctx context.Context, c store.Character, note string) 
 	} else if c.RealmFallen {
 		busy = "The realm has fallen. Every road is a bandit's road now."
 	}
-	return journeyView(b.t.Journey, c.Wealth, busy, note)
+	return journeyView(b.t.Journey, c.Wealth, busy, joinNotes(b.happeningNote(ctx, c.GuildID, game.MeetJourney, game.MeetJourneyAbroad), note))
 }
 
 func journeyView(t game.PartyTiming, wealth int, busy, note string) *discordgo.InteractionResponseData {
@@ -115,6 +115,11 @@ func (b *Bot) onSetOut(ctx context.Context, i *discordgo.InteractionCreate, key 
 		}
 		events = append(events, store.NewEvent{Key: pool[idx].Key, FiresAt: fires, Deadline: deadline})
 	}
+	meet := game.MeetJourney
+	if d.Abroad {
+		meet = game.MeetJourneyAbroad
+	}
+	events = b.withHappening(ctx, c.GuildID, meet, events)
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindJourney, Goal: d.Key,
 		Public: true, StartedAt: now, EndsAt: ends,

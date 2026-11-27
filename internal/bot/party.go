@@ -153,6 +153,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 		events = append(events, store.NewEvent{Key: pool[idx].Key, FiresAt: fires, Deadline: deadline})
 	}
 
+	events = b.withHappening(ctx, c.GuildID, game.MeetParty, events)
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindParty, Goal: string(goal),
 		Public: true, StartedAt: now, EndsAt: ends,
@@ -420,6 +421,9 @@ func (b *Bot) onEventChoice(ctx context.Context, i *discordgo.InteractionCreate,
 		return
 	}
 	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{eventResultEmbed(b.eventWhere(ctx, e.ActivityID), ev, choice, out, false)}})
+	if out.Ends {
+		b.happeningEnded(ctx, e.Key, e.CharacterID, time.Now())
+	}
 }
 
 // expireEvent applies the default choice to an unanswered event.
@@ -437,6 +441,9 @@ func (b *Bot) expireEvent(ctx context.Context, e store.Event, now time.Time) {
 	choice, out := game.ResolveEventChoice(b.rng, ev, ev.Default, host.Sheet())
 	if err := b.store.ResolveEvent(ctx, e.ID, choice.Key, out, now); err != nil {
 		return // answered in the meantime
+	}
+	if out.Ends {
+		b.happeningEnded(ctx, e.Key, e.CharacterID, now)
 	}
 	if e.DMMessageID != "" {
 		embeds := []*discordgo.MessageEmbed{eventResultEmbed(b.eventWhere(ctx, e.ActivityID), ev, choice, out, true)}

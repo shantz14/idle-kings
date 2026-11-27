@@ -31,6 +31,10 @@ func adminCommand(ctxs *[]discordgo.InteractionContextType, install *[]discordgo
 		return &discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionSubCommand, Name: name, Description: desc,
 			Options: append(opts, player)}
 	}
+	var haps []*discordgo.ApplicationCommandOptionChoice
+	for _, h := range game.HappeningDefs {
+		haps = append(haps, &discordgo.ApplicationCommandOptionChoice{Name: truncate(h.Emoji+" "+h.Name, 100), Value: h.Key})
+	}
 	var stats []*discordgo.ApplicationCommandOptionChoice
 	for _, st := range game.AllStats {
 		stats = append(stats, &discordgo.ApplicationCommandOptionChoice{Name: statName(st), Value: string(st)})
@@ -57,6 +61,9 @@ func adminCommand(ctxs *[]discordgo.InteractionContextType, install *[]discordgo
 				&discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionUser, Name: "target", Description: "Whose court", Required: true},
 				num("amount", "How much (the level is 0 to 100)")),
 			sub("rush", "End a player's running actions now, and move their conspiracy on a day"),
+			sub("happening", "Start a happening in the realm now (a manticore, a troll…)",
+				&discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionString, Name: "happening",
+					Description: "Which one", Required: true, Choices: haps}),
 		},
 	}
 }
@@ -178,6 +185,12 @@ func (b *Bot) cmdAdmin(ctx context.Context, i *discordgo.InteractionCreate) {
 			lvl, _ := b.store.SpyLevel(ctx, c.ID, t.ID)
 			msg = fmt.Sprintf("%s's spies in **%s**'s court: %s (%s).", who, t.FullName(), game.SpyTierOf(lvl).Name, game.Num(lvl))
 		}
+	case "happening":
+		if n := b.startHappening(ctx, c.GuildID, opts.str("happening"), now); n != "" {
+			msg = fmt.Sprintf("**%s** is abroad in the realm. The court has been told.", n)
+		} else {
+			msg = "That happening is already abroad (or doesn't exist)."
+		}
 	case "rush":
 		if err = b.store.RushCharacter(ctx, c.ID, now); err == nil {
 			msg = fmt.Sprintf("%s's actions end at the next tick (within 15 seconds), and their conspiracy moves on a day.", who)
@@ -193,7 +206,7 @@ func (b *Bot) cmdAdmin(ctx context.Context, i *discordgo.InteractionCreate) {
 		return
 	}
 	slog.Info("admin", "cmd", name, "guild", c.GuildID, "character", c.ID)
-	if name != "rush" && name != "spies" && name != "opinion" {
+	if name != "rush" && name != "spies" && name != "opinion" && name != "happening" {
 		if after, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 			msg += "\n" + standingLine(after)
 		}

@@ -63,7 +63,7 @@ func (b *Bot) huntPanel(ctx context.Context, c store.Character, note string) *di
 	} else if c.Wealth < game.HuntCost {
 		busy = fmt.Sprintf("You only have %d gold.", c.Wealth)
 	}
-	return huntView(b.t.Hunt.Duration, busy, note)
+	return huntView(b.t.Hunt.Duration, busy, joinNotes(b.happeningNote(ctx, c.GuildID, game.MeetHunt), note))
 }
 
 func huntView(dur time.Duration, busy, note string) *discordgo.InteractionResponseData {
@@ -116,6 +116,7 @@ func (b *Bot) onHostHunt(ctx context.Context, i *discordgo.InteractionCreate, go
 		}
 		events = append(events, store.NewEvent{Key: game.HuntEvents[idx].Key, FiresAt: fires, Deadline: deadline})
 	}
+	events = b.withHappening(ctx, c.GuildID, game.MeetHunt, events)
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindHunt, Goal: string(goal),
 		Public: true, StartedAt: now, EndsAt: ends,

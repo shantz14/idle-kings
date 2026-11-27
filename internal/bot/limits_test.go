@@ -291,7 +291,21 @@ func TestMartialViewsFitDiscord(t *testing.T) {
 	checkLimits(t, "hire bandits", hireView(a, c, d))
 
 	// Event DMs: one button per choice, all in one row.
-	for _, list := range [][]game.PartyEvent{game.PartyEvents, game.HuntEvents, game.DuelEvents, game.JourneyEvents, game.JourneyAbroadEvents} {
+	var happenings []game.PartyEvent
+	var abroad []store.Happening
+	for _, h := range game.HappeningDefs {
+		for _, m := range h.Meets() {
+			happenings = append(happenings, h.Events[m])
+		}
+		abroad = append(abroad, store.Happening{Key: h.Key, EndsAt: time.Unix(1999999999, 0)})
+		checkLimits(t, "happening "+h.Key, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+			Title: h.Emoji + " " + h.Name, Description: h.Announce + "\n\n" + strings.ReplaceAll(h.Ended, "%s", long+" "+long),
+			Fields: []*discordgo.MessageEmbedField{fact("⏳ Fades", "<t:1999999999:R>"), fact("📋 While it lasts", "x"+happeningEffects(h))},
+			Footer: footer(happeningWhere(h))}}})
+	}
+	checkLimits(t, "happenings field", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{Title: "x",
+		Fields: []*discordgo.MessageEmbedField{happeningsField(abroad), happeningsField(nil)}}}})
+	for _, list := range [][]game.PartyEvent{game.PartyEvents, game.HuntEvents, game.DuelEvents, game.JourneyEvents, game.JourneyAbroadEvents, happenings} {
 		for _, ev := range list {
 			var btns []discordgo.MessageComponent
 			for _, ch := range ev.Choices {

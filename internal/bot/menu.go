@@ -179,7 +179,7 @@ func (b *Bot) partyPanel(ctx context.Context, c store.Character, note string) *d
 		busy = true
 		note = joinNotes(fmt.Sprintf("You only have %s.", goldText(c.Wealth)), note)
 	}
-	note = joinNotes(permitNote(c.Laws), note)
+	note = joinNotes(b.happeningNote(ctx, c.GuildID, game.MeetParty), permitNote(c.Laws), note)
 
 	var btns []discordgo.MessageComponent
 	for _, g := range game.HostGoals {

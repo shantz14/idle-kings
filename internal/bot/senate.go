@@ -156,6 +156,7 @@ func (b *Bot) openMatter(ctx context.Context, court store.Court, st store.RealmS
 	}
 	if !ev.Auto {
 		b.announceMatter(ctx, court, m, ev, st)
+		b.rollHappening(ctx, court.GuildID, now) // a new Senate day: something may stir in the realm
 	}
 }
 

@@ -325,3 +325,17 @@ CREATE TABLE IF NOT EXISTS conspiracy_members (
     PRIMARY KEY (activity_id, member_kind, member_id)
 );
 CREATE INDEX IF NOT EXISTS conspiracy_members_member ON conspiracy_members (member_kind, member_id);
+
+-- Things abroad in the realm for a few days: a manticore, a troll, a circus
+-- (game.HappeningDefs). ended_at is set when it fades or someone ends it.
+CREATE TABLE IF NOT EXISTS happenings (
+    id         INTEGER PRIMARY KEY,
+    guild_id   TEXT NOT NULL REFERENCES courts(guild_id),
+    key        TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ends_at    INTEGER NOT NULL,
+    ended_at   INTEGER,
+    ended_by   INTEGER REFERENCES characters(id) -- who ended it, if anyone
+);
+CREATE INDEX IF NOT EXISTS happenings_open ON happenings (ended_at, ends_at);
+CREATE INDEX IF NOT EXISTS happenings_guild ON happenings (guild_id, ended_at);
