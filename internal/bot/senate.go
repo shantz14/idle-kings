@@ -47,13 +47,20 @@ func (b *Bot) onSenate(ctx context.Context, i *discordgo.InteractionCreate, part
 
 // ---- the daily cycle ----
 
-// ensureRealm gives a running court its realm and senate.
+// ensureRealm gives a running court its realm and senate (the standard
+// Senate, if /start didn't already make one).
 func (b *Bot) ensureRealm(ctx context.Context, guildID string, now time.Time) (store.RealmState, error) {
+	return b.ensureRealmWith(ctx, guildID, now, game.SenateStandard)
+}
+
+// ensureRealmWith is ensureRealm with the admin's choice of Senate. It only
+// matters the first time, when the realm is made.
+func (b *Bot) ensureRealmWith(ctx context.Context, guildID string, now time.Time, kind game.SenateKind) (store.RealmState, error) {
 	st, err := b.store.GetRealm(ctx, guildID)
 	if !errors.Is(err, store.ErrNotFound) {
 		return st, err
 	}
-	senate := game.GenerateSenate(b.rng, game.SenateSize)
+	senate := game.NewSenate(b.rng, kind)
 	if err := b.store.CreateRealm(ctx, guildID, game.StartingRealm(), senate, now.Add(b.senate.FirstDelay)); err != nil {
 		return st, err
 	}

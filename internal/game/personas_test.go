@@ -92,3 +92,33 @@ func TestSectorMindedTraits(t *testing.T) {
 		t.Error("a pious senator should want the temple")
 	}
 }
+
+func TestStandardSenateIsBalanced(t *testing.T) {
+	sen := NewSenate(rand.New(rand.NewPCG(1, 2)), SenateStandard)
+	if len(sen) != SenateSize || len(StandardSenate) != SenateSize {
+		t.Fatalf("%d senators, want %d", len(sen), SenateSize)
+	}
+	count := map[Trait]int{}
+	for _, s := range sen {
+		for _, tr := range s.Traits {
+			count[tr]++
+		}
+	}
+	pairs := [][2]Trait{
+		{TraitHawk, TraitDove}, {TraitEconomical, TraitBigSpender}, {TraitCosmopolitan, TraitIsolationist},
+		{TraitConservative, TraitReckless}, {TraitScheming, TraitIncorruptible},
+	}
+	for _, p := range pairs {
+		if count[p[0]] != count[p[1]] || count[p[0]] == 0 {
+			t.Errorf("%s ×%d against %s ×%d", p[0], count[p[0]], p[1], count[p[1]])
+		}
+	}
+	for _, champ := range []Trait{TraitLandowner, TraitMerchant, TraitStern, TraitPopulist} {
+		if count[champ] != 1 {
+			t.Errorf("%s ×%d, want one champion", champ, count[champ])
+		}
+	}
+	if got := NewSenate(rand.New(rand.NewPCG(1, 2)), SenateRandom); len(got) != SenateSize {
+		t.Errorf("random senate has %d", len(got))
+	}
+}

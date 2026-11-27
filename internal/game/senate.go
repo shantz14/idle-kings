@@ -154,13 +154,54 @@ func GenerateSenate(r Roller, n int) []Senator {
 	perm := shuffle(r, len(Personas))
 	out := make([]Senator, 0, n)
 	for i := 0; i < n && i < len(perm); i++ {
-		p := Personas[perm[i]]
-		out = append(out, Senator{
-			Name:      p.Name,
-			Traits:    append([]Trait(nil), p.Traits...),
-			Influence: float64(senatorInfluenceMin + r.IntN(senatorInfluenceSpan)),
-			BasePrice: senatorPriceMin + r.IntN(senatorPriceSpan),
-		})
+		out = append(out, seat(r, Personas[perm[i]]))
+	}
+	return out
+}
+
+// seat makes a persona a senator, with random influence and bribe price.
+func seat(r Roller, p Persona) Senator {
+	return Senator{
+		Name:      p.Name,
+		Traits:    append([]Trait(nil), p.Traits...),
+		Influence: float64(senatorInfluenceMin + r.IntN(senatorInfluenceSpan)),
+		BasePrice: senatorPriceMin + r.IntN(senatorPriceSpan),
+	}
+}
+
+// SenateKind is how the admin chose the Senate when starting the game.
+type SenateKind string
+
+const (
+	SenateStandard SenateKind = "standard" // StandardSenate, the default
+	SenateRandom   SenateKind = "random"   // SenateSize personas drawn at random
+)
+
+// StandardSenate is a balanced Senate: every opposing pair of traits is
+// one against one, war is two Hawks against two Doves, and the farms, trade
+// and law and order each have a champion (TestStandardSenateIsBalanced).
+var StandardSenate = []string{
+	"Julius Caesar",     // Hawk, Reckless
+	"Tywin Lannister",   // Hawk, Economical
+	"Saruman",           // Scheming, Big spender
+	"Elminster",         // Cosmopolitan, Dove
+	"Denethor",          // Isolationist, Conservative
+	"Eddard Stark",      // Incorruptible, Stern
+	"Tiberius Gracchus", // Populist, Landowner
+	"Atticus",           // Dove, Merchant prince
+}
+
+// NewSenate seats a court's Senate. Each senator still gets a random
+// influence and bribe price, even in the standard Senate.
+func NewSenate(r Roller, kind SenateKind) []Senator {
+	if kind == SenateRandom {
+		return GenerateSenate(r, SenateSize)
+	}
+	out := make([]Senator, 0, len(StandardSenate))
+	for _, name := range StandardSenate {
+		if p, ok := PersonaByName(name); ok {
+			out = append(out, seat(r, p))
+		}
 	}
 	return out
 }

@@ -23,7 +23,7 @@ The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.
 ## Game flow (current)
 
 1. `/claim-admin` — first person to run it becomes the server's admin.
-2. `/start announcements:#channel` — admin only. Posts a **Join the court** button in this channel; public events go to the announcements channel (defaults to this one).
+2. `/start announcements:#channel senate:standard|random` — admin only. Posts a **Join the court** button in this channel; public events go to the announcements channel (defaults to this one). `senate` picks the balanced **standard Senate** (the default: the same 8 senators every game) or **8 drawn at random** from every famous figure.
 3. **Join the court** (or `/join`) opens the character creator, a private popup: name, family name and motto → crest (color + symbol emoji) → assign 6 stat points → background (8 backstories; sets renown, gold and the starting estate) → role. Progress is saved, so a closed popup resumes where it left off. Family names are unique per court.
 4. `/court` (in the server or in a DM with the bot) opens a button menu: Diplomacy, Monetary, Intrigue, Martial, The Senate, My Character, Estate.
 5. Diplomacy → **Speak to a Senator** → pick a senator. They greet you; you can **ask how they'll vote** (once per matter; they may refuse or lie), bribe them, sell them your vote, or **court** them: pick an approach (flatter, gift, share secrets, talk strategy). It takes an hour; the result arrives by DM and changes that senator's opinion of you. A player can run one action (party, courting or investing) at a time.

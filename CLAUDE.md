@@ -15,7 +15,7 @@ cmd/idle-kings   entrypoint, env config
 internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), creation
                  (creation, crest, backgrounds, roles, estate items), party, realm,
                  senate (senators, traits, voting, PickMatter cooldown/themes),
-                 personas.go (the famous figures senators are drawn from, with fixed traits),
+                 personas.go (the famous figures senators are drawn from, with fixed traits; `StandardSenate` is the balanced default, `NewSenate(r, kind)` seats standard or random),
                  matters.go + matters_more.go + matters_magic.go (Senate event catalogue), arcs.go + matters_arcs.go (story arcs, Chronicle), events_magic.go (mystical party/hunt events), catalogue.go (shop items, daily market),
                  opinion.go (senator opinion of players, Court a Senator),
                  askvote.go (asking a senator how they'll vote: truth, lie or refusal), greetings.go (what a senator says when you call),

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/shantz14/idle-kings/internal/game"
 	"github.com/shantz14/idle-kings/internal/store"
 )
 
@@ -29,6 +30,14 @@ func commands() []*discordgo.ApplicationCommand {
 				Type: discordgo.ApplicationCommandOptionChannel, Name: "announcements",
 				Description:  "Channel for public events (defaults to this one)",
 				ChannelTypes: []discordgo.ChannelType{discordgo.ChannelTypeGuildText},
+			},
+			&discordgo.ApplicationCommandOption{
+				Type: discordgo.ApplicationCommandOptionString, Name: "senate",
+				Description: "Who sits in the Senate (defaults to the standard Senate)",
+				Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{Name: "The standard Senate (balanced, the same every game)", Value: string(game.SenateStandard)},
+					{Name: "A random Senate (8 senators drawn from every figure)", Value: string(game.SenateRandom)},
+				},
 			}),
 		cmd("join", "Create your character and join the court", guildOnly),
 		cmd("court", "Open your actions menu (works in DMs too)", anywhere),
@@ -160,7 +169,11 @@ func (b *Bot) cmdStart(ctx context.Context, i *discordgo.InteractionCreate) {
 		b.fail(i, err)
 		return
 	}
-	st, err := b.ensureRealm(ctx, i.GuildID, time.Now())
+	kind := game.SenateStandard
+	if optString(i, "senate") == string(game.SenateRandom) {
+		kind = game.SenateRandom
+	}
+	st, err := b.ensureRealmWith(ctx, i.GuildID, time.Now(), kind)
 	if err != nil {
 		b.fail(i, err)
 		return
@@ -175,6 +188,7 @@ func (b *Bot) cmdStart(ctx context.Context, i *discordgo.InteractionCreate) {
 			Fields: []*discordgo.MessageEmbedField{
 				fact("📣 Announcements", fmt.Sprintf("<#%s>", announce)),
 				fact(emojiSenate+" The Senate first meets", relTime(st.NextMatterAt)),
+				fact(emojiSenate+" The Senate", senateKindName(kind)),
 			},
 			Footer: footer("You can also use /join. New here? /help explains everything."),
 		}},
@@ -309,4 +323,11 @@ func (b *Bot) replyPublic(i *discordgo.InteractionCreate, msg string) {
 func (b *Bot) fail(i *discordgo.InteractionCreate, err error) {
 	slog.Error("interaction failed", "err", err)
 	b.reply(i, emojiWarn+" Something went wrong. Try again in a moment.")
+}
+
+func senateKindName(k game.SenateKind) string {
+	if k == game.SenateRandom {
+		return "Drawn at random"
+	}
+	return "The standard Senate"
 }

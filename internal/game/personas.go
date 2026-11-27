@@ -31,6 +31,8 @@ var Personas = []Persona{
 		[]Trait{TraitScheming, TraitReckless}},
 	{"Cardinal Richelieu", "The red eminence: a churchman who serves the gods and the state, in whatever order suits him.",
 		[]Trait{TraitPious, TraitScheming}},
+	{"Atticus", "A banker with friends on every side of every war. He has never picked a side, and has never been poorer for it.",
+		[]Trait{TraitDove, TraitMerchant}},
 	{"Lorenzo de' Medici", "A banker and patron of the arts, who thinks a city's glory is worth every coin.",
 		[]Trait{TraitMerchant, TraitBigSpender}},
 	{"Thomas Becket", "An archbishop who defied a king for the sake of the temples, and would do it again.",
@@ -55,8 +57,8 @@ var Personas = []Persona{
 		[]Trait{TraitStern, TraitPious}},
 	{"Denethor", "A proud steward who trusts no one beyond his own walls.",
 		[]Trait{TraitIsolationist, TraitConservative}},
-	{"Saruman", "A wizard turned industrialist, who dreams of forges, furnaces and armies.",
-		[]Trait{TraitHawk, TraitBigSpender}},
+	{"Saruman", "A wizard turned industrialist with a voice that could talk a king into anything. He dreams of forges and furnaces, and works through other people's hands.",
+		[]Trait{TraitScheming, TraitBigSpender}},
 
 	// ---- Dungeons & Dragons ----
 	{"Strahd von Zarovich", "A pale count from a misty valley who never leaves his castle by day, and lets nobody leave his lands.",
