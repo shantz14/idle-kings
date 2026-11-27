@@ -100,20 +100,24 @@ func sellConfirm(c store.Character, holdingID int64) *discordgo.InteractionRespo
 	h, ok := c.Holding(holdingID)
 	it, known := h.Item()
 	if !ok || !known {
-		return &discordgo.InteractionResponseData{Content: "You don't own that any more.",
-			Components: []discordgo.MessageComponent{row(backTo("estate:view"))}}
+		v := noteView("You don't own that any more.", colorMuted)
+		v.Components = []discordgo.MessageComponent{row(backTo("estate:view"))}
+		return v
 	}
-	desc := fmt.Sprintf("The shop will give you **%d gold** for **%s** (of its %d gold price).",
-		it.SellBackUnder(c.Laws), it.Name, it.Price)
+	desc := fmt.Sprintf("The shop will buy **%s** from you.", it.Name)
 	if it.Magic && c.Laws.Has(game.LawWitchcraftAct) {
-		desc += "\nUnder the Witchcraft Act, the shop pays more for enchanted things: people are eager to be rid of them."
+		desc += "\n🧙 Under the Witchcraft Act, the shop pays more for enchanted things: people are eager to be rid of them."
 	}
 	if it.Unique {
 		desc += "\nIt goes back on the market, where anyone can buy it."
 	}
-	desc += "\n\nOr sell it to another player for any price you agree on, with **Offer a deal**."
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Sell " + it.Name + "?", Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "💰 Sell " + it.Name + "?", Description: desc, Color: colorBad,
+			Fields: []*discordgo.MessageEmbedField{
+				fact("You get", fmt.Sprintf("%d gold", it.SellBackUnder(c.Laws))),
+				fact("It cost", fmt.Sprintf("%d gold", it.Price)),
+			},
+			Footer: footer(emojiDeal + " Or sell it to another player for any price you agree on, with Offer a deal.")}},
 		Components: []discordgo.MessageComponent{row(
 			button(fmt.Sprintf("Sell for %d gold", it.SellBackUnder(c.Laws)), fmt.Sprintf("estate:sellok:%d", h.ID), discordgo.DangerButton, false),
 			button("Cancel", "estate:view", discordgo.SecondaryButton, false),
@@ -184,20 +188,20 @@ func (b *Bot) estatePageNote(c store.Character, note string) *discordgo.Interact
 // to move house, sell, shop and trade.
 func estateView(c store.Character, back bool, note string) *discordgo.InteractionResponseData {
 	e := &discordgo.MessageEmbed{
-		Title: fmt.Sprintf("%s · the estate of %s", c.House(), c.FullName()),
+		Title: fmt.Sprintf("%s %s · the estate of %s", emojiEstate, c.House(), c.FullName()),
 		Color: colorPanel,
 	}
-	desc := fmt.Sprintf("Estate value **%s**. A finer estate makes your parties more successful. "+
-		"Your home and possessions count fully; other properties count half, and only their income and stats apply.",
-		game.Num(c.EstateValue()))
+	desc := "A finer estate makes your parties more successful."
 	if total := c.Effects().Describe(); total != "" {
-		desc += "\nAll together: " + total
+		desc += "\n**All together:** " + total
 	}
-	desc += fmt.Sprintf("\nYou have **%d gold**.", c.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
+	e.Description = withNote(note, desc)
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Estate value", game.Num(c.EstateValue())),
+		fact("Gold", fmt.Sprint(c.Wealth)),
+		fact("Income", fmt.Sprintf("%d/day", c.TotalIncome())),
 	}
-	e.Description = desc
+	e.Footer = footer("🏡 Your home and possessions count fully; other properties count half, and only their income and stats apply.")
 
 	home, _ := c.Residence()
 	byKind := map[game.ItemKind][]string{}
@@ -255,9 +259,9 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 			Placeholder: "Sell something to the shop…", Options: sellOpts}))
 	}
 	btns := []discordgo.MessageComponent{
-		button("Shop", "shop:open:"+shopProps, discordgo.SuccessButton, false),
-		button("Offer a deal", "deal:start", discordgo.PrimaryButton, false),
-		button("My Character", "menu:char", discordgo.SecondaryButton, false),
+		withEmoji(button("Shop", "shop:open:"+shopProps, discordgo.PrimaryButton, false), emojiShop),
+		withEmoji(button("Offer a deal", "deal:start", discordgo.PrimaryButton, false), emojiDeal),
+		withEmoji(button("My Character", "menu:char", discordgo.SecondaryButton, false), emojiSheet),
 	}
 	if back {
 		btns = append(btns, backTo("menu:home"))

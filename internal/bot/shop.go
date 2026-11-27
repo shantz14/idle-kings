@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -96,7 +97,7 @@ func (b *Bot) shopPanel(ctx context.Context, c store.Character, tab, note string
 	st, err := b.loadShop(ctx, c.GuildID)
 	if err != nil {
 		slog.Error("shop", "err", err)
-		return &discordgo.InteractionResponseData{Content: "The shop is closed. Something went wrong."}
+		return noteView(emojiShop+" The shop is closed. Something went wrong.", colorMuted)
 	}
 	return shopView(c, st, tab, note)
 }
@@ -126,19 +127,16 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 			fixed = append(fixed, line)
 		}
 	}
-	title, intro := "The Shop: "+sec.Name, sec.Intro
-	desc := fmt.Sprintf("%s\n\nNamed pieces are one of a kind: once someone owns one, nobody else can buy it until they sell it. "+
-		"Today's market changes <t:%d:R>.\n\nYou have **%d gold**.", intro, st.ends.Unix(), c.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
-	}
-	e := &discordgo.MessageEmbed{Title: title, Description: desc, Color: colorPanel}
+	title := fmt.Sprintf("%s The Shop · %s %s", emojiShop, sec.Emoji, sec.Name)
+	e := &discordgo.MessageEmbed{Title: title, Description: withNote(note, sec.Intro), Color: colorPanel}
+	e.Fields = []*discordgo.MessageEmbedField{fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)), fact("Market changes", relTime(st.ends))}
 	if len(fixed) > 0 {
-		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "Always in stock", Value: joinSep(fixed, "\n\n", 1000)})
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "📦 Always in stock", Value: joinSep(fixed, "\n\n", 1000)})
 	}
 	if len(market) > 0 {
-		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "Today's market", Value: joinSep(market, "\n\n", 1000)})
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "🌅 Today's market", Value: joinSep(market, "\n\n", 1000)})
 	}
+	e.Footer = footer("✨ Named pieces are one of a kind: once someone owns one, nobody else can buy it until they sell it.")
 	var comps []discordgo.MessageComponent
 	if len(opts) > 0 {
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "shop:pick:" + tab,
@@ -151,7 +149,7 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 		}
 	}
 	nav = append(nav,
-		button("My Estate", "estate:view", discordgo.SecondaryButton, false),
+		withEmoji(button("My Estate", "estate:view", discordgo.SecondaryButton, false), emojiEstate),
 		backTo("menu:home"),
 	)
 	comps = append(comps, row(nav...))
@@ -169,7 +167,7 @@ func (b *Bot) itemPanel(ctx context.Context, c store.Character, key, note string
 	st, err := b.loadShop(ctx, c.GuildID)
 	if err != nil {
 		slog.Error("shop", "err", err)
-		return &discordgo.InteractionResponseData{Content: "The shop is closed. Something went wrong."}
+		return noteView(emojiShop+" The shop is closed. Something went wrong.", colorMuted)
 	}
 	return itemView(c, st, key, note)
 }
@@ -177,49 +175,57 @@ func (b *Bot) itemPanel(ctx context.Context, c store.Character, key, note string
 func itemView(c store.Character, st shopState, key, note string) *discordgo.InteractionResponseData {
 	it, ok := game.ItemByKey(key)
 	tab := string(it.Section())
-	back := button("Back to the shop", "shop:open:"+tab, discordgo.SecondaryButton, false)
+	back := withEmoji(button("Back to the shop", "shop:open:"+tab, discordgo.SecondaryButton, false), "↩️")
 	if !ok {
-		return &discordgo.InteractionResponseData{Content: "That isn't for sale.", Components: []discordgo.MessageComponent{row(back)}}
+		v := noteView("That isn't for sale.", colorMuted)
+		v.Components = []discordgo.MessageComponent{row(back)}
+		return v
 	}
 	inStock := false
 	for _, s := range st.stock {
 		inStock = inStock || s.Key == key
 	}
-	var desc string
-	desc = fmt.Sprintf("*%s*\n\n%s", kindOrTier(it), it.Description)
-	desc += fmt.Sprintf("\n\n**Price** %d gold · **Value** %s · **Sells back for** %d gold", it.PriceUnder(c.Laws), game.Num(it.Value), it.SellBackUnder(c.Laws))
-	if c.Laws.Has(game.LawDebasement) {
-		desc += "\n*Prices are up: the coinage is debased.*"
+	tags := []string{kindOrTier(it)}
+	if it.Unique {
+		tags = append(tags, "✨ one of a kind")
 	}
 	if it.Magic {
-		desc += "\n*Enchanted.*"
-		if c.Laws.Has(game.LawWitchcraftAct) {
-			desc += " *Under the Witchcraft Act, owning it may cost you fines.*"
-		}
+		tags = append(tags, "🔮 enchanted")
 	}
-	if fx := it.Effects.Describe(); fx != "" {
-		desc += "\n**Effects** " + fx
-		if it.IsProperty() {
-			desc += "\n*(Party bonus, rumor-noticing and vote weight only apply while you live there.)*"
-		}
+	desc := fmt.Sprintf("*%s*\n\n%s", strings.Join(tags, " · "), it.Description)
+	var warn []string
+	if c.Laws.Has(game.LawDebasement) {
+		warn = append(warn, "🪙 Prices are up: the coinage is debased.")
 	}
-	if it.Unique {
-		desc += "\nOne of a kind."
+	if it.Magic && c.Laws.Has(game.LawWitchcraftAct) {
+		warn = append(warn, "🧙 Under the Witchcraft Act, owning it may cost you fines.")
 	}
 	owner := st.ownerNote(it, c.ID)
 	if owner != "" {
-		desc += fmt.Sprintf("\n\nThis piece is %s.", owner)
+		warn = append(warn, fmt.Sprintf("🔒 This piece is %s.", owner))
 	} else if !inStock {
-		desc += "\n\nIt isn't in the market today."
+		warn = append(warn, "It isn't in the market today.")
 	}
-	desc += fmt.Sprintf("\n\nYou have **%d gold**.", c.Wealth)
-	if note != "" {
-		desc += "\n\n" + note
+	if len(warn) > 0 {
+		desc += "\n\n" + quote(strings.Join(warn, "\n"))
 	}
 	price := it.PriceUnder(c.Laws)
+	fields := []*discordgo.MessageEmbedField{
+		fact("Price", fmt.Sprintf("%d gold", price)),
+		fact("Value", game.Num(it.Value)),
+		fact("Sells back for", fmt.Sprintf("%d gold", it.SellBackUnder(c.Laws))),
+	}
+	if fx := it.Effects.Describe(); fx != "" {
+		v := fx
+		if it.IsProperty() {
+			v += "\n*Party bonus, rumor-noticing and vote weight only apply while you live there.*"
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{Name: "✨ Effects", Value: v})
+	}
+	fields = append(fields, fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)))
 	buyable := owner == "" && inStock && c.Wealth >= price
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: withNote(note, desc), Color: colorPanel, Fields: fields}},
 		Components: []discordgo.MessageComponent{row(
 			button(fmt.Sprintf("Buy for %d gold", price), "shop:buy:"+it.Key, discordgo.SuccessButton, !buyable),
 			back,
@@ -253,15 +259,16 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 	text := fmt.Sprintf("**%s** is yours.", it.Name)
 	tab := string(it.Section())
 	btns := []discordgo.MessageComponent{
-		button("Keep shopping", "shop:open:"+tab, discordgo.PrimaryButton, false),
-		button("My Estate", "estate:view", discordgo.SecondaryButton, false),
+		withEmoji(button("Keep shopping", "shop:open:"+tab, discordgo.PrimaryButton, false), emojiShop),
+		withEmoji(button("My Estate", "estate:view", discordgo.SecondaryButton, false), emojiEstate),
 	}
 	if it.IsProperty() {
 		text += " You can move in now, or keep living where you are and collect its income."
-		btns = append([]discordgo.MessageComponent{button("Move in", fmt.Sprintf("estate:movein:%d", hid), discordgo.SuccessButton, false)}, btns...)
+		btns = append([]discordgo.MessageComponent{withEmoji(button("Move in", fmt.Sprintf("estate:movein:%d", hid), discordgo.SuccessButton, false), "🏡")}, btns...)
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Bought: " + it.Name, Description: text + fmt.Sprintf("\n\nYou have **%d gold** left.", c.Wealth), Color: colorGood}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "🛍️ Bought: " + it.Name, Description: text, Color: colorGood,
+			Fields: []*discordgo.MessageEmbedField{fact("Paid", fmt.Sprintf("%d gold", price)), fact("Left in your purse", fmt.Sprintf("%d gold", c.Wealth))}}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	})
 

@@ -164,13 +164,11 @@ func (b *Bot) onDealModal(ctx context.Context, i *discordgo.InteractionCreate, p
 }
 
 func dealStart(note string) *discordgo.InteractionResponseData {
-	desc := "Sell, buy or trade properties and possessions with another player, with gold either way. " +
-		"They get your offer by DM and can accept or decline. Offers stay open for a day."
-	if note != "" {
-		desc += "\n\n" + note
-	}
+	desc := withNote(note, "Sell, buy or trade properties and possessions with another player, with gold either way. "+
+		"They get your offer by DM and can accept or decline.")
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Offer a deal", Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: emojiDeal + " Offer a deal", Description: desc, Color: colorPanel,
+			Footer: footer("⏳ Offers stay open for a day.")}},
 		Components: []discordgo.MessageComponent{
 			row(discordgo.SelectMenu{MenuType: discordgo.UserSelectMenu, CustomID: "deal:who", Placeholder: "Who do you want to deal with?"}),
 			row(backTo("estate:view")),
@@ -243,19 +241,20 @@ func dealView(c, other store.Character, dr dealDraft, note string) *discordgo.In
 		}
 		return strings.Join(s, ", ")
 	}
-	gold := "none"
+	gold := "None"
 	switch {
 	case dr.Gold > 0:
-		gold = fmt.Sprintf("they pay you **%d**", dr.Gold)
+		gold = fmt.Sprintf("They pay you **%d**", dr.Gold)
 	case dr.Gold < 0:
-		gold = fmt.Sprintf("you pay them **%d**", -dr.Gold)
+		gold = fmt.Sprintf("You pay them **%d**", -dr.Gold)
 	}
-	desc := fmt.Sprintf("**You give:** %s\n**You ask for:** %s\n**Gold:** %s\n\nYou have **%d gold**.",
-		none(names(c, dr.Give)), none(names(other, dr.Want)), gold, c.Wealth)
-	desc += "\nEveryone has to keep at least one property. If someone trades away the house they live in, they move into their best remaining one."
-	if note != "" {
-		desc += "\n\n" + note
+	fields := []*discordgo.MessageEmbedField{
+		{Name: "📤 You give", Value: truncate(none(names(c, dr.Give)), 1024), Inline: true},
+		{Name: "📥 You ask for", Value: truncate(none(names(other, dr.Want)), 1024), Inline: true},
+		fact("💰 Gold", gold),
+		fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)),
 	}
+	desc := withNote(note, "Pick what changes hands, then send it.")
 	comps := []discordgo.MessageComponent{}
 	if opts := holdingOptions(c, dr.Give); len(opts) > 0 {
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "deal:give",
@@ -267,13 +266,14 @@ func dealView(c, other store.Character, dr dealDraft, note string) *discordgo.In
 	}
 	empty := len(dr.Give) == 0 && len(dr.Want) == 0
 	comps = append(comps, row(
-		button("Ask for gold", "deal:gold:ask", discordgo.SecondaryButton, false),
-		button("Offer gold", "deal:gold:pay", discordgo.SecondaryButton, false),
-		button("Send offer", "deal:send", discordgo.SuccessButton, empty),
+		withEmoji(button("Ask for gold", "deal:gold:ask", discordgo.SecondaryButton, false), "📥"),
+		withEmoji(button("Offer gold", "deal:gold:pay", discordgo.SecondaryButton, false), "📤"),
+		withEmoji(button("Send offer", "deal:send", discordgo.SuccessButton, empty), "✉️"),
 		button("Cancel", "estate:view", discordgo.SecondaryButton, false),
 	))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "A deal with " + other.FullName(), Description: desc, Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: emojiDeal + " A deal with " + other.FullName(), Description: desc, Color: colorPanel, Fields: fields,
+			Footer: footer("🏡 Everyone keeps at least one property. Trade away the house you live in, and you move into your best remaining one.")}},
 		Components: comps,
 	}
 }
@@ -315,35 +315,36 @@ func (b *Bot) onDealSend(ctx context.Context, i *discordgo.InteractionCreate, c 
 	summary := dealSummary(give, want, dr.Gold)
 	b.leak(ctx, c, game.SecretEstateOffer(c.FullName(), other.ID, other.FullName(), summary))
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Offer sent", Color: colorGood,
-			Description: fmt.Sprintf("Your offer to **%s**: %s. It's open until <t:%d:R>; I'll DM you their answer.",
-				other.FullName(), summary, o.ExpiresAt.Unix())}},
-		Components: []discordgo.MessageComponent{row(button("My Estate", "estate:view", discordgo.SecondaryButton, false))},
+		Embeds: []*discordgo.MessageEmbed{{Title: "✉️ Offer sent", Color: colorGood,
+			Description: fmt.Sprintf("Your offer to **%s**: %s. I'll DM you their answer.", other.FullName(), summary),
+			Fields:      []*discordgo.MessageEmbedField{fact("Open until", relTime(o.ExpiresAt))}}},
+		Components: []discordgo.MessageComponent{row(withEmoji(button("My Estate", "estate:view", discordgo.SecondaryButton, false), emojiEstate))},
 	})
 }
 
 // offerMessage is the DM the recipient gets.
 func offerMessage(o store.EstateOffer, from, to store.Character, give, want []string) *discordgo.MessageSend {
-	var lines []string
-	if len(give) > 0 {
-		lines = append(lines, "**They give you:** "+strings.Join(give, ", "))
+	side := func(items []string, gold int) string {
+		if gold > 0 {
+			items = append(items, fmt.Sprintf("**%d** gold", gold))
+		}
+		if len(items) == 0 {
+			return "Nothing"
+		}
+		return truncate(strings.Join(items, "\n"), 1024)
 	}
-	if len(want) > 0 {
-		lines = append(lines, "**They want from you:** "+strings.Join(want, ", "))
-	}
-	switch {
-	case o.Gold > 0:
-		lines = append(lines, fmt.Sprintf("**You pay them:** %d gold", o.Gold))
-	case o.Gold < 0:
-		lines = append(lines, fmt.Sprintf("**They pay you:** %d gold", -o.Gold))
-	}
-	lines = append(lines, fmt.Sprintf("\nYou have %d gold. The offer closes <t:%d:R>.", to.Wealth, o.ExpiresAt.Unix()))
 	return &discordgo.MessageSend{
-		Embeds: []*discordgo.MessageEmbed{{Title: fmt.Sprintf("%s offers you a deal", from.FullName()),
-			Description: strings.Join(lines, "\n"), Color: colorPanel}},
+		Embeds: []*discordgo.MessageEmbed{{Title: fmt.Sprintf("%s %s offers you a deal", emojiDeal, from.FullName()),
+			Description: "Accept and everything changes hands at once.", Color: colorNotice,
+			Fields: []*discordgo.MessageEmbedField{
+				{Name: "📥 You get", Value: side(give, -o.Gold), Inline: true},
+				{Name: "📤 You give", Value: side(want, o.Gold), Inline: true},
+				fact("Your purse", fmt.Sprintf("%d gold", to.Wealth)),
+				fact("⏳ Closes", relTime(o.ExpiresAt)),
+			}}},
 		Components: []discordgo.MessageComponent{row(
-			button("Accept", fmt.Sprintf("deal:yes:%d", o.ID), discordgo.SuccessButton, false),
-			button("Decline", fmt.Sprintf("deal:no:%d", o.ID), discordgo.DangerButton, false),
+			withEmoji(button("Accept", fmt.Sprintf("deal:yes:%d", o.ID), discordgo.SuccessButton, false), "✅"),
+			withEmoji(button("Decline", fmt.Sprintf("deal:no:%d", o.ID), discordgo.DangerButton, false), "✖️"),
 		)},
 	}
 }
@@ -368,26 +369,27 @@ func (b *Bot) onDealAnswer(ctx context.Context, i *discordgo.InteractionCreate, 
 	summary := dealSummary(names(them, o.Give), names(me, o.Want), o.Gold)
 	done := func(text string, color int) {
 		b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-			Title: fmt.Sprintf("%s's offer", them.FullName()), Description: text, Color: color}}})
+			Title: fmt.Sprintf("%s %s's offer", emojiDeal, them.FullName()), Description: text, Color: color}},
+			Components: []discordgo.MessageComponent{}})
 	}
 	if !accept {
 		if err := b.store.DeclineEstateOffer(ctx, o.ID); err != nil {
-			done(estateErr(err), colorPanel)
+			done(estateErr(err), colorMuted)
 			return
 		}
-		done("You declined.", colorPanel)
-		_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf("**%s** declined your deal (%s).", me.FullName(), summary)})
+		done("You declined.", colorMuted)
+		b.dmNote(them.UserID, emojiDeal+" Deal declined", fmt.Sprintf("**%s** declined your deal: %s.", me.FullName(), summary), colorBad)
 		return
 	}
 	if _, err := b.store.AcceptEstateOffer(ctx, o.ID, time.Now()); err != nil {
 		done("The deal fell through: "+estateErr(err), colorBad)
 		if !errors.Is(err, store.ErrHandled) {
-			_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf(
-				"**%s** tried to accept your deal (%s), but it fell through: %s", me.FullName(), summary, estateErr(err))})
+			b.dmNote(them.UserID, emojiDeal+" Deal fell through", fmt.Sprintf(
+				"**%s** tried to accept your deal (%s), but it fell through: %s", me.FullName(), summary, estateErr(err)), colorBad)
 		}
 		return
 	}
-	done("Done. The deal is struck ("+summary+").", colorGood)
-	_, _ = b.dm(them.UserID, &discordgo.MessageSend{Content: fmt.Sprintf("**%s** accepted your deal (%s).", me.FullName(), summary)})
+	done("✅ The deal is struck: "+summary+".", colorGood)
+	b.dmNote(them.UserID, emojiDeal+" Deal struck", fmt.Sprintf("**%s** accepted your deal: %s.", me.FullName(), summary), colorGood)
 	b.leak(ctx, me, game.SecretEstateDeal(me.FullName(), them.ID, them.FullName(), summary))
 }
