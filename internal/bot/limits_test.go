@@ -29,6 +29,7 @@ func checkRouted(t *testing.T, where, customID, url string) {
 // checkLimits fails on anything Discord would reject.
 func checkLimits(t *testing.T, where string, d *discordgo.InteractionResponseData) {
 	t.Helper()
+	recordView(where, d)
 	n := func(s string) int { return utf8.RuneCountInString(s) }
 	if len(d.Components) > 5 {
 		t.Errorf("%s: %d rows", where, len(d.Components))

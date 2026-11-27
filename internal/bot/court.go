@@ -123,7 +123,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Court a Senator", Description: sb.String(), Color: colorGold})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Court a Senator", Description: sb.String(), Color: colorPanel})
 
 	comps := []discordgo.MessageComponent{}
 	if len(opts) > 0 {
@@ -154,7 +154,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 		btns = append(btns, button(label, fmt.Sprintf("court:go:%d:%s", s.ID, a.Key), discordgo.SuccessButton, busy != "" || cost > c.Wealth))
 	}
 	fmt.Fprintf(&desc, "\nYou have **%d gold**.", c.Wealth)
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Senator " + s.Name, Description: desc.String(), Color: colorGold})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Senator " + s.Name, Description: desc.String(), Color: colorPanel})
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(append(btns, back)...))}
 }
 
@@ -198,7 +198,7 @@ func (b *Bot) onCourtGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 		text += fmt.Sprintf(" The gift cost **%d gold**.", cost)
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Courting " + s.Name, Description: text, Color: colorGreen}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Courting " + s.Name, Description: text, Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretCourt(c.FullName(), s.Name, strings.ToLower(a.Name)))
@@ -245,12 +245,12 @@ func (b *Bot) resolveCourt(ctx context.Context, a store.Activity, now time.Time)
 	if res.Delta != 0 {
 		desc += fmt.Sprintf("(%s)", game.OpinionNum(res.Delta))
 	}
-	color := colorGold
+	color := colorPanel
 	switch {
 	case res.Delta > 0:
-		color = colorGreen
+		color = colorGood
 	case res.Delta < 0:
-		color = colorRed
+		color = colorBad
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: "You called on Senator " + s.Name, Description: desc, Color: color,

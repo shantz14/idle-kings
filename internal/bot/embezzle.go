@@ -52,7 +52,7 @@ func (b *Bot) onEmbezzle(ctx context.Context, i *discordgo.InteractionCreate, pa
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Embezzling",
-			Description: fmt.Sprintf("You start cooking the treasury's books. I'll DM you <t:%d:R>.", ends.Unix()), Color: colorGreen}},
+			Description: fmt.Sprintf("You start cooking the treasury's books. I'll DM you <t:%d:R>.", ends.Unix()), Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -78,7 +78,7 @@ func embezzleView(d time.Duration, busy, note string) *discordgo.InteractionResp
 	}
 	btns = append(btns, backButton(game.KindEmbezzle))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Embezzle from the Treasury", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Embezzle from the Treasury", Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -103,12 +103,12 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 		}
 		return
 	}
-	color := colorGold
+	color := colorPanel
 	switch {
 	case res.Success:
-		color = colorGreen
+		color = colorGood
 	case res.Caught:
-		color = colorRed
+		color = colorBad
 	}
 	desc := res.Text
 	if d := res.Delta.Describe(); d != "" {
@@ -119,7 +119,7 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 	}}})
 	if res.Caught {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
-			Title: "A thief in the treasury", Description: res.Public, Color: colorRed,
+			Title: "A thief in the treasury", Description: res.Public, Color: colorBad,
 		})
 	}
 	if res.Success {

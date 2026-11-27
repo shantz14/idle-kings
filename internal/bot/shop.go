@@ -132,7 +132,7 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 	if note != "" {
 		desc += "\n\n" + note
 	}
-	e := &discordgo.MessageEmbed{Title: title, Description: desc, Color: colorGold}
+	e := &discordgo.MessageEmbed{Title: title, Description: desc, Color: colorPanel}
 	if len(fixed) > 0 {
 		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: "Always in stock", Value: joinSep(fixed, "\n\n", 1000)})
 	}
@@ -152,7 +152,7 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 	}
 	nav = append(nav,
 		button("My Estate", "estate:view", discordgo.SecondaryButton, false),
-		button("Back", "menu:home", discordgo.SecondaryButton, false),
+		backTo("menu:home"),
 	)
 	comps = append(comps, row(nav...))
 	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: comps}
@@ -219,7 +219,7 @@ func itemView(c store.Character, st shopState, key, note string) *discordgo.Inte
 	price := it.PriceUnder(c.Laws)
 	buyable := owner == "" && inStock && c.Wealth >= price
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(
 			button(fmt.Sprintf("Buy for %d gold", price), "shop:buy:"+it.Key, discordgo.SuccessButton, !buyable),
 			back,
@@ -261,7 +261,7 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 		btns = append([]discordgo.MessageComponent{button("Move in", fmt.Sprintf("estate:movein:%d", hid), discordgo.SuccessButton, false)}, btns...)
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Bought: " + it.Name, Description: text + fmt.Sprintf("\n\nYou have **%d gold** left.", c.Wealth), Color: colorGreen}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Bought: " + it.Name, Description: text + fmt.Sprintf("\n\nYou have **%d gold** left.", c.Wealth), Color: colorGood}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	})
 
@@ -269,7 +269,7 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 	if it.Unique {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
 			Description: fmt.Sprintf("%s **%s** has bought **%s**.", game.KindByKey(it.Kind).Emoji, c.FullName(), it.Name),
-			Color:       colorGold,
+			Color:       colorPanel,
 		})
 	}
 }

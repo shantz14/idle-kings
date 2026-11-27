@@ -85,7 +85,7 @@ func aidView(st store.RealmState, note string) *discordgo.InteractionResponseDat
 	}
 	btns = append(btns, backButton(game.KindAid))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Aid the Realm", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Aid the Realm", Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -114,9 +114,9 @@ func aidAmountView(c store.Character, t game.AidTarget, current float64, note st
 	}
 	btns = append(btns, button("Other amount", "aid:custom:"+t.Key, discordgo.PrimaryButton, c.Wealth < game.AidMin))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(button("Back", "menu:act:"+game.KindAid, discordgo.SecondaryButton, false))},
+			row(backTo("menu:act:"+game.KindAid))},
 	}
 }
 
@@ -155,12 +155,12 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 		desc += fmt.Sprintf(" (%s)", d)
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorGreen}},
-		Components: []discordgo.MessageComponent{row(button("Back", "menu:act:"+game.KindAid, discordgo.SecondaryButton, false))},
+		Embeds:     []*discordgo.MessageEmbed{{Title: t.Name, Description: desc, Color: colorGood}},
+		Components: []discordgo.MessageComponent{row(backTo("menu:act:"+game.KindAid))},
 	})
 	if res.Public != "" {
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
-			Title: "A gift to the Republic", Description: res.Public, Color: colorGreen,
+			Title: "A gift to the Republic", Description: res.Public, Color: colorGood,
 		})
 	}
 	b.afterRealmChange(ctx, c.GuildID, before)

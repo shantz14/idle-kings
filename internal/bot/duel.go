@@ -129,7 +129,7 @@ func duelView(t game.DuelTiming, busy, note string) *discordgo.InteractionRespon
 	}
 	comps = append(comps, row(backButton(game.KindDuel)))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Challenge to a Duel", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Challenge to a Duel", Description: sb.String(), Color: colorPanel}},
 		Components: comps,
 	}
 }
@@ -171,9 +171,9 @@ func wagerView(c, t store.Character, note string) *discordgo.InteractionResponse
 	}
 	btns = append(btns, button("Other amount", fmt.Sprintf("duel:custom:%d", t.ID), discordgo.PrimaryButton, c.Wealth < 1))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Challenge " + t.FullName(), Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Challenge " + t.FullName(), Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(button("Back", "menu:act:"+game.KindDuel, discordgo.SecondaryButton, false))},
+			row(backTo("menu:act:"+game.KindDuel))},
 	}
 }
 
@@ -233,7 +233,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 			Title: "You have been challenged to a duel",
 			Description: fmt.Sprintf("**%s** (%s) demands satisfaction.%s\n\nAnswer <t:%d:R>. %s",
 				c.FullName(), c.House(), purse, a.EndsAt.Unix(), refusing),
-			Color: colorRed,
+			Color: colorBad,
 		}},
 		Components: []discordgo.MessageComponent{row(
 			button("Accept", fmt.Sprintf("duel:accept:%d", a.ID), discordgo.DangerButton, false),
@@ -251,7 +251,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	}
 	text += lawNote
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "The gauntlet is thrown", Description: text, Color: colorGreen}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "The gauntlet is thrown", Description: text, Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -259,7 +259,7 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 // duelAnnouncement is the public post for a duel in its current state.
 // result is the outcome line once it's over.
 func duelAnnouncement(a store.Activity, c, t store.Character, result string) *discordgo.MessageEmbed {
-	e := &discordgo.MessageEmbed{Color: colorGold}
+	e := &discordgo.MessageEmbed{Color: colorPanel}
 	purse := ""
 	if a.Spend > 0 {
 		purse = fmt.Sprintf(" A purse of **%d gold** each rides on it.", a.Spend)
@@ -272,7 +272,7 @@ func duelAnnouncement(a store.Activity, c, t store.Character, result string) *di
 		e.Title = fmt.Sprintf("%s and %s will duel", c.FullName(), t.FullName())
 		e.Description = fmt.Sprintf("The challenge is accepted. They fight <t:%d:R>.%s\n\nPlace your bets: whoever backs the winner splits the whole pot.",
 			a.EndsAt.Unix(), purse)
-		e.Color = colorRed
+		e.Color = colorBad
 	default:
 		e.Title = fmt.Sprintf("%s challenges %s to a duel", c.FullName(), t.FullName())
 		e.Description = fmt.Sprintf("%s has until <t:%d:R> to answer.%s", t.FullName(), a.EndsAt.Unix(), purse)
@@ -358,12 +358,12 @@ func (b *Bot) onDuelAccept(ctx context.Context, i *discordgo.InteractionCreate, 
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "You accepted the challenge",
 			Description: fmt.Sprintf("You fight **%s** <t:%d:R>. Watch your DMs: you'll choose your stance during the bout.", c.FullName(), ends.Unix()),
-			Color:       colorRed}},
+			Color:       colorBad}},
 	})
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title:       t.FullName() + " accepts your challenge",
 		Description: fmt.Sprintf("You fight <t:%d:R>. Watch your DMs: you'll choose your stance during the bout.", ends.Unix()),
-		Color:       colorRed,
+		Color:       colorBad,
 	}}})
 	b.editDuelAnnouncement(a, c, t, "", betButtons(a, c, t))
 }
@@ -397,7 +397,7 @@ func (b *Bot) onDuelDecline(ctx context.Context, i *discordgo.InteractionCreate,
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "You declined the challenge",
 			Description: fmt.Sprintf("You won't fight %s. Some will call it wisdom; others won't. (-%s renown)", c.FullName(), game.Num(game.DuelDeclineRenown)),
-			Color:       colorGold}},
+			Color:       colorPanel}},
 	})
 	b.afterDecline(a, c, t, false)
 }
@@ -415,7 +415,7 @@ func (b *Bot) afterDecline(a store.Activity, c, t store.Character, timedOut bool
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title:       "Your challenge was refused",
 		Description: fmt.Sprintf("%s %s your challenge.%s", t.FullName(), how, refund),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}}})
 	b.editDuelAnnouncement(a, c, t, fmt.Sprintf("**%s** %s **%s**'s challenge.", t.FullName(), how, c.FullName()), nil)
 }
@@ -457,7 +457,7 @@ func betView(a store.Activity, side, me store.Character, note string) *discordgo
 	}
 	btns = append(btns, button("Other amount", fmt.Sprintf("duel:betcustom:%d:%d", a.ID, side.ID), discordgo.PrimaryButton, me.Wealth < 1))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: desc, Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -465,12 +465,12 @@ func betView(a store.Activity, side, me store.Character, note string) *discordgo
 func (b *Bot) onBet(ctx context.Context, i *discordgo.InteractionCreate, id, sideID int64, gold int) {
 	a, c, t, err := b.duelParties(ctx, id)
 	if err != nil {
-		b.update(i, &discordgo.InteractionResponseData{Content: "That duel is gone."})
+		b.update(i, noteView("That duel is gone.", colorMuted))
 		return
 	}
 	me, err := b.store.GetCharacter(ctx, a.GuildID, userOf(i).ID)
 	if err != nil {
-		b.update(i, &discordgo.InteractionResponseData{Content: "You have no place at this court yet."})
+		b.update(i, noteView("You have no place at this court yet.", colorMuted))
 		return
 	}
 	side := c
@@ -491,7 +491,7 @@ func (b *Bot) onBet(ctx context.Context, i *discordgo.InteractionCreate, id, sid
 		text = fmt.Sprintf("You put **%d gold** on **%s**. You'll hear how it went <t:%d:R>.", gold, side.FullName(), a.EndsAt.Unix())
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: text, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Bet on " + side.FullName(), Description: text, Color: colorPanel}},
 	})
 }
 
@@ -513,7 +513,7 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 		_, _ = b.dm(t.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "You let a challenge pass",
 			Description: fmt.Sprintf("You never answered %s's challenge. The court noticed. (-%s renown)", c.FullName(), game.Num(game.DuelDeclineRenown)),
-			Color:       colorGold,
+			Color:       colorPanel,
 		}}})
 		b.afterDecline(a, c, t, true)
 		return
@@ -561,7 +561,7 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 	for id, lines := range res.Notices {
 		if uid, ok := users[id]; ok {
 			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorGold,
+				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorPanel,
 			}}})
 		}
 	}
@@ -570,7 +570,7 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 		if n := len(bets); n > 0 {
 			public += fmt.Sprintf(" %d bet%s were settled.", n, plural(n))
 		}
-		_, _ = b.s.ChannelMessageSendEmbed(a.AnnounceChannelID, &discordgo.MessageEmbed{Title: title, Description: public, Color: colorRed})
+		_, _ = b.s.ChannelMessageSendEmbed(a.AnnounceChannelID, &discordgo.MessageEmbed{Title: title, Description: public, Color: colorBad})
 		b.editDuelAnnouncement(a, c, t, public, nil)
 	}
 }

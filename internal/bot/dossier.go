@@ -116,7 +116,7 @@ func dossierView(entries []dossierEntry, ls game.Laws) *discordgo.InteractionRes
 		desc = desc[:3999] + "…"
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "📁 Your Dossier", Description: desc, Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "📁 Your Dossier", Description: desc, Color: colorPanel}},
 		Components: comps,
 	}
 }
@@ -131,12 +131,12 @@ func reportView(d store.Denunciation, accused store.Character) *discordgo.Intera
 		Embeds: []*discordgo.MessageEmbed{{
 			Title:       fmt.Sprintf("📁 %s: %s", accused.FullName(), game.MisdeedWord(d.Crime)),
 			Description: fmt.Sprintf("%s\n\n*Your spies reported this <t:%d:R>.* %s", d.Detail, d.CreatedAt.Unix(), force),
-			Color:       colorGold,
+			Color:       colorPanel,
 		}},
 		Components: []discordgo.MessageComponent{row(
 			button(truncate("Denounce "+accused.FullName(), 80), fmt.Sprintf("law:denounce:%d", d.ID), discordgo.DangerButton, false),
 			button("Whisper it", fmt.Sprintf("law:whisper:%d", d.ID), discordgo.PrimaryButton, false),
-			button("Back", "dossier:home", discordgo.SecondaryButton, false),
+			backTo("dossier:home"),
 		)},
 	}
 }

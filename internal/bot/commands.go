@@ -171,7 +171,7 @@ func (b *Bot) cmdStart(ctx context.Context, i *discordgo.InteractionCreate) {
 			Description: "The Republic's great families gather once more. Make your name among them.\n\n" +
 				"Press **Join the court** to create your character: your name and family, your crest, your strengths, " +
 				"your story, and your place at court. (You can also use `/join`.)",
-			Color: colorGold,
+			Color: colorPanel,
 			Fields: []*discordgo.MessageEmbedField{
 				{Name: "Announcements", Value: fmt.Sprintf("<#%s>", announce), Inline: true},
 				{Name: "The Senate first meets", Value: fmt.Sprintf("<t:%d:R>", st.NextMatterAt.Unix()), Inline: true},
@@ -291,15 +291,21 @@ func (b *Bot) update(i *discordgo.InteractionCreate, d *discordgo.InteractionRes
 	b.send(i, discordgo.InteractionResponseUpdateMessage, d)
 }
 
+// reply answers privately with a short note.
 func (b *Bot) reply(i *discordgo.InteractionCreate, msg string) {
-	b.respond(i, ephemeral(&discordgo.InteractionResponseData{Content: msg}))
+	b.respond(i, ephemeral(noteView(msg, colorMuted)))
+}
+
+// replyDone answers privately that something worked.
+func (b *Bot) replyDone(i *discordgo.InteractionCreate, msg string) {
+	b.respond(i, ephemeral(noteView("✅ "+msg, colorGood)))
 }
 
 func (b *Bot) replyPublic(i *discordgo.InteractionCreate, msg string) {
-	b.respond(i, &discordgo.InteractionResponseData{Content: msg})
+	b.respond(i, noteView(msg, colorPanel))
 }
 
 func (b *Bot) fail(i *discordgo.InteractionCreate, err error) {
 	slog.Error("interaction failed", "err", err)
-	b.reply(i, "Something went wrong.")
+	b.reply(i, emojiWarn+" Something went wrong. Try again in a moment.")
 }

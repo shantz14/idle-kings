@@ -237,7 +237,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	for id, lines := range res.Notices {
 		if uid, ok := users[id]; ok {
 			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: "The Senate: " + ev.Title, Description: strings.Join(lines, "\n"), Color: colorGold,
+				Title: "The Senate: " + ev.Title, Description: strings.Join(lines, "\n"), Color: colorPanel,
 			}}})
 		}
 	}
@@ -285,7 +285,7 @@ func billEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.MessageEmb
 	return &discordgo.MessageEmbed{
 		Title:       "The bill comes due: " + ev.Title,
 		Description: desc,
-		Color:       colorRed,
+		Color:       colorBad,
 		Fields:      []*discordgo.MessageEmbedField{{Name: "The realm", Value: trackersLine(res.Realm)}},
 	}
 }
@@ -369,7 +369,7 @@ func matterEmbed(m store.Matter, ev game.MatterEvent, r game.Realm) *discordgo.M
 	return &discordgo.MessageEmbed{
 		Title:       title,
 		Description: sb.String(),
-		Color:       colorGold,
+		Color:       colorPanel,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "The realm", Value: trackersLine(r)},
 			{Name: "Voting closes", Value: fmt.Sprintf("<t:%d:R>. Your vote counts in proportion to your influence. Ties go to *%s*.",
@@ -401,7 +401,7 @@ func matterButtons(m store.Matter, ev game.MatterEvent, roster, back bool) []dis
 		extra = append(extra, button("The Senate", "senate:roster", discordgo.SecondaryButton, false))
 	}
 	if back {
-		extra = append(extra, button("Back", "menu:home", discordgo.SecondaryButton, false))
+		extra = append(extra, backTo("menu:home"))
 	}
 	return []discordgo.MessageComponent{row(votes...), row(extra...)}
 }
@@ -438,9 +438,9 @@ func decisionEmbed(ev game.MatterEvent, res game.MatterResult) *discordgo.Messag
 	if res.Secret {
 		votes = "Votes (secret ballot)"
 	}
-	color := colorGreen
+	color := colorGood
 	if !res.Succeeded {
-		color = colorRed
+		color = colorBad
 	}
 	return &discordgo.MessageEmbed{
 		Title:       "The Senate has decided: " + ev.Title,
@@ -459,11 +459,11 @@ func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.Int
 	if err != nil {
 		return ephemeral(&discordgo.InteractionResponseData{Content: "Something went wrong."})
 	}
-	realm := &discordgo.MessageEmbed{Title: "The realm", Description: trackersLine(st.Trackers), Color: colorGold,
+	realm := &discordgo.MessageEmbed{Title: "The realm", Description: trackersLine(st.Trackers), Color: colorPanel,
 		Fields: []*discordgo.MessageEmbedField{lawsField(st.Laws)}}
 	if !st.Alive() {
 		realm.Description += "\n\n**The realm has fallen.** " + st.FallenReason
-		realm.Color = colorRed
+		realm.Color = colorBad
 	}
 	embeds := []*discordgo.MessageEmbed{realm}
 	var comps []discordgo.MessageComponent
@@ -481,7 +481,7 @@ func (b *Bot) senatePanel(ctx context.Context, c store.Character) *discordgo.Int
 	if comps == nil {
 		comps = []discordgo.MessageComponent{row(
 			button("The Senate", "senate:roster", discordgo.SecondaryButton, false),
-			button("Back", "menu:home", discordgo.SecondaryButton, false),
+			backTo("menu:home"),
 		)}
 	}
 	return ephemeral(&discordgo.InteractionResponseData{Embeds: embeds, Components: comps})
@@ -565,7 +565,7 @@ func (b *Bot) onRoster(ctx context.Context, i *discordgo.InteractionCreate) {
 	}
 	b.respond(i, ephemeral(&discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title: "The Senate", Description: sb.String(), Color: colorGold,
+			Title: "The Senate", Description: sb.String(), Color: colorPanel,
 			Fields: []*discordgo.MessageEmbedField{{Name: "Traits", Value: traits.String()}},
 		}},
 		Components: []discordgo.MessageComponent{row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu,
@@ -657,7 +657,7 @@ func (b *Bot) onBribe(ctx context.Context, i *discordgo.InteractionCreate, matte
 			Title: "Bribe a senator: " + ev.Title,
 			Description: fmt.Sprintf("Pay a senator to vote your way. Each senator can be bought once per matter. "+
 				"The less they like your option, and the less they like you, the more it costs.\n\nYou have **%d gold**.", c.Wealth),
-			Color: colorGold,
+			Color: colorPanel,
 		}},
 		Components: []discordgo.MessageComponent{senatorSelect(m, sen, bribes, ops)},
 	}))
@@ -675,7 +675,7 @@ func findSenator(sen []game.Senator, id int64) (game.Senator, bool) {
 func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, matterID, senatorID int64) {
 	m, ev, c, msg := b.matterFor(ctx, i, matterID)
 	if msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView(msg, colorMuted))
 		return
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
@@ -720,7 +720,7 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 		comps = append(comps, row(btns...))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: s.Name, Description: desc, Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: s.Name, Description: desc, Color: colorPanel}},
 		Components: comps,
 	})
 }
@@ -728,7 +728,7 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterID, senatorID int64, opt string) {
 	m, ev, c, msg := b.matterFor(ctx, i, matterID)
 	if msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView(msg, colorMuted))
 		return
 	}
 	sen, err1 := b.store.Senators(ctx, m.GuildID)
@@ -748,7 +748,7 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, ops[s.ID], st.Laws)
 	if !can {
 		b.update(i, &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: s.Name + " won't take your gold.", Color: colorGold}},
+			Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: s.Name + " won't take your gold.", Color: colorPanel}},
 		})
 		return
 	}
@@ -767,7 +767,7 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 		defer b.leak(ctx, c, game.SecretBribe(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), price))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: text, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: s.Name, Description: text, Color: colorPanel}},
 	})
 }
 
@@ -785,7 +785,7 @@ func (b *Bot) bribeExposure(ctx context.Context, c store.Character, s game.Senat
 	b.postCourt(ctx, c.GuildID, &discordgo.MessageEmbed{
 		Title:       "⚖️ A bribe comes to light",
 		Description: fmt.Sprintf("**%s** (%s) was seen paying Senator **%s**. Bribery is a crime under the law, and the court will not forget.", c.FullName(), c.House(), s.Name),
-		Color:       colorRed,
+		Color:       colorBad,
 	})
 	return fmt.Sprintf("\n\nBut you were seen, and bribery is a crime. The whole court knows. (%s)", d.Describe())
 }

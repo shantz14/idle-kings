@@ -148,7 +148,7 @@ func (b *Bot) onCreator(ctx context.Context, i *discordgo.InteractionCreate, par
 		return
 	}
 	if msg := b.creatorGate(ctx, i); msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView(msg, colorMuted))
 		return
 	}
 	uid := userOf(i).ID
@@ -298,7 +298,7 @@ func (b *Bot) finishCreator(ctx context.Context, i *discordgo.InteractionCreate,
 		b.update(i, b.creatorView(d, fmt.Sprintf("Someone just took House %s. Use **Edit name & motto** to pick another family name.", d.Build.Family)))
 		return
 	case errors.Is(err, store.ErrExists):
-		b.update(i, &discordgo.InteractionResponseData{Content: "You already have a place at court.", Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView("You already have a place at court.", colorMuted))
 		return
 	case err != nil:
 		b.fail(i, err)
@@ -324,7 +324,7 @@ func (b *Bot) finishCreator(ctx context.Context, i *discordgo.InteractionCreate,
 	_, _ = b.s.ChannelMessageSendEmbed(channel, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s %s of House %s joins the court", c.Crest.Emoji(), c.Name, c.FamilyName),
 		Description: desc,
-		Color:       colorGold,
+		Color:       colorPanel,
 	})
 }
 
@@ -379,7 +379,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 	}
 	embed := &discordgo.MessageEmbed{
 		Title: fmt.Sprintf("Create your character · step %d of %d: %s", step+1, len(stepTitles), stepTitles[step]),
-		Color: colorGold,
+		Color: colorPanel,
 	}
 	var sb strings.Builder
 	if note != "" {
@@ -388,7 +388,7 @@ func (b *Bot) creatorView(d draft, note string) *discordgo.InteractionResponseDa
 	sb.WriteString(previewLine(bd) + "\n\n")
 	var comps []discordgo.MessageComponent
 	back := func(to int) discordgo.MessageComponent {
-		return button("Back", fmt.Sprintf("cc:step:%d", to), discordgo.SecondaryButton, false)
+		return backTo(fmt.Sprintf("cc:step:%d", to))
 	}
 	next := func(to int, enabled bool) discordgo.MessageComponent {
 		return button("Next", fmt.Sprintf("cc:step:%d", to), discordgo.PrimaryButton, !enabled)

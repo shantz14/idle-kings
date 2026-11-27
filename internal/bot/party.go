@@ -98,11 +98,11 @@ func (b *Bot) budgetPanel(c store.Character, goal game.Goal, note string) *disco
 			fmt.Sprintf("party:spend:%s:%d", goal, bud.Gold), discordgo.SuccessButton, c.Wealth < bud.Gold))
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Throw a Party", Description: sb.String(), Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Throw a Party", Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{
 			row(btns...),
 			row(button("Custom amount", "party:custom:"+string(goal), discordgo.PrimaryButton, c.Wealth < game.PartyMinSpend),
-				button("Back", "menu:act:"+game.KindParty, discordgo.SecondaryButton, false)),
+				backTo("menu:act:"+game.KindParty)),
 		},
 	}
 }
@@ -167,7 +167,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s is throwing %s %s party", c.FullName(), article(budget), budget),
 		Description: fmt.Sprintf("The doors of House %s's estate are open. The party ends <t:%d:R>.", c.FamilyName, ends.Unix()),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}, []discordgo.MessageComponent{row(button("Attend the party", fmt.Sprintf("party:attend:%d", a.ID), discordgo.SuccessButton, false))})
 
 	b.update(i, &discordgo.InteractionResponseData{
@@ -175,7 +175,7 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 			Title: "Your party has begun",
 			Description: fmt.Sprintf("Goal: **%s**. You spent **%d gold**. It ends <t:%d:R>.%s\nWatch your DMs: I'll message you if anything happens during the evening.%s",
 				game.GoalName(goal), spend, ends.Unix(), where, permit),
-			Color: colorGreen,
+			Color: colorGood,
 		}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
@@ -216,7 +216,7 @@ func (b *Bot) onAttend(ctx context.Context, i *discordgo.InteractionCreate, acti
 		btns = append(btns, button(g.Name, fmt.Sprintf("party:agoal:%d:%s", a.ID, g.Key), discordgo.PrimaryButton, false))
 	}
 	b.respond(i, ephemeral(&discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: fmt.Sprintf("Attend %s's party", host.FullName()), Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: fmt.Sprintf("Attend %s's party", host.FullName()), Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}))
 }
@@ -224,12 +224,12 @@ func (b *Bot) onAttend(ctx context.Context, i *discordgo.InteractionCreate, acti
 func (b *Bot) onAttendGoal(ctx context.Context, i *discordgo.InteractionCreate, activityID int64, goal game.Goal) {
 	a, c, msg := b.attendCheck(ctx, i, activityID)
 	if msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView(msg, colorMuted))
 		return
 	}
 	if goal == game.GoalSpreadRumors {
 		b.update(i, &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{{Title: "Spread Rumors", Description: "Who will you whisper about?", Color: colorGold}},
+			Embeds: []*discordgo.MessageEmbed{{Title: "Spread Rumors", Description: "Who will you whisper about?", Color: colorPanel}},
 			Components: []discordgo.MessageComponent{row(discordgo.SelectMenu{
 				MenuType: discordgo.UserSelectMenu, CustomID: fmt.Sprintf("party:target:%d", a.ID), Placeholder: "Choose a player…",
 			})},
@@ -242,7 +242,7 @@ func (b *Bot) onAttendGoal(ctx context.Context, i *discordgo.InteractionCreate, 
 func (b *Bot) onRumorTarget(ctx context.Context, i *discordgo.InteractionCreate, activityID int64) {
 	a, c, msg := b.attendCheck(ctx, i, activityID)
 	if msg != "" {
-		b.update(i, &discordgo.InteractionResponseData{Content: msg, Embeds: []*discordgo.MessageEmbed{}})
+		b.update(i, noteView(msg, colorMuted))
 		return
 	}
 	vals := i.MessageComponentData().Values
@@ -254,7 +254,7 @@ func (b *Bot) onRumorTarget(ctx context.Context, i *discordgo.InteractionCreate,
 		// Leave the selector up so they can pick again.
 		b.update(i, &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{{Title: "Spread Rumors",
-				Description: "Pick another player who has a place at this court.", Color: colorRed}},
+				Description: "Pick another player who has a place at this court.", Color: colorBad}},
 			Components: []discordgo.MessageComponent{row(discordgo.SelectMenu{
 				MenuType: discordgo.UserSelectMenu, CustomID: fmt.Sprintf("party:target:%d", a.ID), Placeholder: "Choose a player…",
 			})},
@@ -283,7 +283,7 @@ func (b *Bot) joinParty(ctx context.Context, i *discordgo.InteractionCreate, a s
 			}
 		}
 	}
-	b.update(i, &discordgo.InteractionResponseData{Content: text, Embeds: []*discordgo.MessageEmbed{}})
+	b.update(i, noteView(text, colorMuted))
 }
 
 // ---- events during the party ----
@@ -354,7 +354,7 @@ func (b *Bot) fireEvent(ctx context.Context, e store.Event, now time.Time) {
 	def, _ := ev.Choice(ev.Default)
 	msg, err := b.dm(e.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title: b.eventWhere(ctx, e.ActivityID) + ": " + ev.Title, Description: ev.Prompt, Color: colorGold,
+			Title: b.eventWhere(ctx, e.ActivityID) + ": " + ev.Title, Description: ev.Prompt, Color: colorPanel,
 			Fields: []*discordgo.MessageEmbedField{{Name: "Decide", Value: fmt.Sprintf("<t:%d:R>, or I'll assume: *%s*", e.Deadline.Unix(), def.Label)}},
 		}},
 		Components: []discordgo.MessageComponent{row(btns...)},
@@ -376,7 +376,7 @@ func eventResultEmbed(where string, ev game.PartyEvent, choice game.EventChoice,
 	return &discordgo.MessageEmbed{
 		Title:       where + ": " + ev.Title,
 		Description: fmt.Sprintf("%s\n*%s*\n\n%s", ev.Prompt, head, out.Text),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}
 }
 
@@ -498,7 +498,7 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 	for id, lines := range res.Notices {
 		if uid, ok := users[id]; ok {
 			_, _ = b.dm(uid, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorGold,
+				Title: title, Description: strings.Join(lines, "\n\n"), Color: colorPanel,
 			}}})
 		}
 	}
@@ -508,9 +508,9 @@ func (b *Bot) resolveParty(ctx context.Context, a store.Activity, now time.Time)
 		if n := len(parts); n > 0 {
 			public += fmt.Sprintf(" %d guest%s attended.", n, plural(n))
 		}
-		color := colorGreen
+		color := colorGood
 		if !res.Success {
-			color = colorRed
+			color = colorBad
 		}
 		b.announceEnd(a, &discordgo.MessageEmbed{Title: title, Description: public, Color: color})
 	}

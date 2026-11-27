@@ -88,7 +88,7 @@ func journeyView(t game.PartyTiming, wealth int, busy, note string) *discordgo.I
 	}
 	btns = append(btns, backButton(game.KindJourney))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Undertake a Journey", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Undertake a Journey", Description: sb.String(), Color: colorPanel}},
 		Components: rows(btns),
 	}
 }
@@ -131,14 +131,14 @@ func (b *Bot) onSetOut(ctx context.Context, i *discordgo.InteractionCreate, key 
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s %s sets out for %s", d.Emoji, c.FullName(), d.Place),
 		Description: fmt.Sprintf("**%s**: %s. Expected home <t:%d:R>. The roads are long, and not everyone on them is friendly.", d.Name, strings.ToLower(d.Description[:1])+d.Description[1:], ends.Unix()),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}, []discordgo.MessageComponent{row(button("Hire bandits", fmt.Sprintf("journey:hire:%d", a.ID), discordgo.DangerButton, false))})
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title: "On the road",
 			Description: fmt.Sprintf("**%s**. You spent **%d gold**. You'll be home <t:%d:R>.%s\nWatch your DMs: I'll message you when something happens on the road.",
 				d.Name, d.Cost, ends.Unix(), where),
-			Color: colorGreen,
+			Color: colorGood,
 		}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
@@ -188,7 +188,7 @@ func hireView(a store.Activity, c, traveler store.Character) *discordgo.Interact
 	}
 	fmt.Fprintf(&sb, "\nYou have **%d gold**. You can only hire one band for this journey.", c.Wealth)
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: sb.String(), Color: colorRed}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: sb.String(), Color: colorBad}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -219,7 +219,7 @@ func (b *Bot) onHireBand(ctx context.Context, i *discordgo.InteractionCreate, id
 		defer b.leak(ctx, c, game.SecretHiredBandits(c.FullName(), traveler.FullName(), strings.ToLower(band.Name), band.Price))
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: text, Color: colorRed}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Hire bandits", Description: text, Color: colorBad}},
 		Components: []discordgo.MessageComponent{},
 	})
 }
@@ -310,16 +310,16 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 	}
 
 	title := fmt.Sprintf("Home from %s", d.Place)
-	color := colorGreen
+	color := colorGood
 	if !res.Success || robbed > 0 {
-		color = colorGold
+		color = colorPanel
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: title, Description: strings.Join(lines, "\n\n"), Color: color,
 	}}})
 	for _, n := range notes {
 		_, _ = b.dm(n.userID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-			Title: "Word from the road", Description: n.text, Color: colorRed,
+			Title: "Word from the road", Description: n.text, Color: colorBad,
 		}}})
 	}
 

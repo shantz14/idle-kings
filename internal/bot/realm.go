@@ -42,7 +42,7 @@ func (b *Bot) postWarnings(channel string, warnings []string) {
 		return
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, &discordgo.MessageEmbed{
-		Title: "The state of the realm", Description: strings.Join(warnings, "\n"), Color: colorRed,
+		Title: "The state of the realm", Description: strings.Join(warnings, "\n"), Color: colorBad,
 	})
 }
 
@@ -51,7 +51,7 @@ func (b *Bot) announceFall(ctx context.Context, guildID, channel, reason string)
 	fall := &discordgo.MessageEmbed{
 		Title:       "The realm has fallen",
 		Description: reason + "\n\n**All players have lost.**",
-		Color:       colorRed,
+		Color:       colorBad,
 	}
 	if channel != "" {
 		_, _ = b.s.ChannelMessageSendEmbed(channel, fall)

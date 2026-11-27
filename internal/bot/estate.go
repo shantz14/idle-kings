@@ -101,7 +101,7 @@ func sellConfirm(c store.Character, holdingID int64) *discordgo.InteractionRespo
 	it, known := h.Item()
 	if !ok || !known {
 		return &discordgo.InteractionResponseData{Content: "You don't own that any more.",
-			Components: []discordgo.MessageComponent{row(button("Back", "estate:view", discordgo.SecondaryButton, false))}}
+			Components: []discordgo.MessageComponent{row(backTo("estate:view"))}}
 	}
 	desc := fmt.Sprintf("The shop will give you **%d gold** for **%s** (of its %d gold price).",
 		it.SellBackUnder(c.Laws), it.Name, it.Price)
@@ -113,7 +113,7 @@ func sellConfirm(c store.Character, holdingID int64) *discordgo.InteractionRespo
 	}
 	desc += "\n\nOr sell it to another player for any price you agree on, with **Offer a deal**."
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Sell " + it.Name + "?", Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Sell " + it.Name + "?", Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(
 			button(fmt.Sprintf("Sell for %d gold", it.SellBackUnder(c.Laws)), fmt.Sprintf("estate:sellok:%d", h.ID), discordgo.DangerButton, false),
 			button("Cancel", "estate:view", discordgo.SecondaryButton, false),
@@ -185,7 +185,7 @@ func (b *Bot) estatePageNote(c store.Character, note string) *discordgo.Interact
 func estateView(c store.Character, back bool, note string) *discordgo.InteractionResponseData {
 	e := &discordgo.MessageEmbed{
 		Title: fmt.Sprintf("%s · the estate of %s", c.House(), c.FullName()),
-		Color: colorGold,
+		Color: colorPanel,
 	}
 	desc := fmt.Sprintf("Estate value **%s**. A finer estate makes your parties more successful. "+
 		"Your home and possessions count fully; other properties count half, and only their income and stats apply.",
@@ -260,7 +260,7 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 		button("My Character", "menu:char", discordgo.SecondaryButton, false),
 	}
 	if back {
-		btns = append(btns, button("Back", "menu:home", discordgo.SecondaryButton, false))
+		btns = append(btns, backTo("menu:home"))
 	}
 	comps = append(comps, row(btns...))
 	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: comps}

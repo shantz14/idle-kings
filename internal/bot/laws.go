@@ -77,7 +77,7 @@ func (b *Bot) loadReport(ctx context.Context, i *discordgo.InteractionCreate, id
 // reportUsed answers a click on a report that's already been used.
 func (b *Bot) reportUsed(i *discordgo.InteractionCreate) {
 	b.update(i, &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-		Title: "Already used", Description: "You've already used that report.", Color: colorGold}},
+		Title: "Already used", Description: "You've already used that report.", Color: colorPanel}},
 		Components: []discordgo.MessageComponent{}})
 }
 
@@ -103,7 +103,7 @@ func (b *Bot) onWhisper(ctx context.Context, i *discordgo.InteractionCreate, id 
 	_, _ = b.dm(accused.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title:       "🗣️ Someone is talking",
 		Description: fmt.Sprintf("Someone is spreading the rumor that you've been %s. (%s, and the Senate thinks less of you)", word, w.Accused.Describe()),
-		Color:       colorRed,
+		Color:       colorBad,
 	}}})
 	b.leak(ctx, me, game.SecretWhisper(me.FullName(), accused.FullName(), word))
 }
@@ -113,7 +113,7 @@ func whisperedView(d store.Denunciation, accused store.Character, w game.Denunci
 		Title: "You whispered it about",
 		Description: fmt.Sprintf("%s\n\nYou let it slip in the right ears, and the story is spreading. %s only knows that someone is talking, unless their own spies are watching you. (%s: %s)",
 			d.Detail, accused.FullName(), accused.FullName(), w.Accused.Describe()),
-		Color: colorGreen,
+		Color: colorGood,
 	}}, Components: []discordgo.MessageComponent{}}
 }
 
@@ -146,7 +146,7 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 		Title: "You have been denounced",
 		Description: fmt.Sprintf("Someone has exposed you before the whole court. The charge: %s. (%s, and the Senate thinks less of you)",
 			word, den.Accused.Describe()),
-		Color: colorRed,
+		Color: colorBad,
 	}}})
 	public := fmt.Sprintf("Word is going round that **%s** (%s) has been %s. Someone has the proof, and the court is talking.",
 		accused.FullName(), accused.House(), word)
@@ -154,7 +154,7 @@ func (b *Bot) onDenounce(ctx context.Context, i *discordgo.InteractionCreate, id
 		public = fmt.Sprintf("An informer has denounced **%s** (%s) to the magistrates for %s. They have the evidence, and the court is talking.",
 			accused.FullName(), accused.House(), word)
 	}
-	b.postCourt(ctx, d.GuildID, &discordgo.MessageEmbed{Title: "🕵️ Denounced", Description: public, Color: colorRed})
+	b.postCourt(ctx, d.GuildID, &discordgo.MessageEmbed{Title: "🕵️ Denounced", Description: public, Color: colorBad})
 }
 
 func denouncedView(d store.Denunciation, accused store.Character, den game.Denunciation) *discordgo.InteractionResponseData {
@@ -163,7 +163,7 @@ func denouncedView(d store.Denunciation, accused store.Character, den game.Denun
 		text = fmt.Sprintf("%s\n\nThe Informers' Law pays you for your trouble. (%s)", d.Detail, den.Informer.Describe())
 	}
 	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
-		Title: "You denounced " + accused.FullName(), Description: text, Color: colorGreen,
+		Title: "You denounced " + accused.FullName(), Description: text, Color: colorGood,
 	}}, Components: []discordgo.MessageComponent{}}
 }
 

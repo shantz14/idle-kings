@@ -77,7 +77,7 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}
-	embeds := []*discordgo.MessageEmbed{{Title: "Petition the Senate", Description: sb.String(), Color: colorGold,
+	embeds := []*discordgo.MessageEmbed{{Title: "Petition the Senate", Description: sb.String(), Color: colorPanel,
 		Fields: []*discordgo.MessageEmbedField{lawsField(laws)}}}
 
 	var opts []discordgo.SelectMenuOption
@@ -107,7 +107,7 @@ func petitionView(c store.Character, laws game.Laws, agenda []string, dur time.D
 	if queued {
 		desc += "\n\nThe Senate already has this before it."
 	}
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: p.Name, Description: desc, Color: colorGold})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: p.Name, Description: desc, Color: colorPanel})
 	comps = append(comps, row(
 		button(fmt.Sprintf("Petition (%d gold)", game.PetitionCost), "petition:go:"+p.Key, discordgo.SuccessButton,
 			busy != "" || queued || c.Wealth < game.PetitionCost),
@@ -147,7 +147,7 @@ func (b *Bot) onStartPetition(ctx context.Context, i *discordgo.InteractionCreat
 		Embeds: []*discordgo.MessageEmbed{{Title: "Petition the Senate",
 			Description: fmt.Sprintf("You set about lobbying the clerks to **%s**. You'll know <t:%d:R> whether it reaches the floor, and I'll DM you.",
 				lowerName(p.Name), a.EndsAt.Unix()),
-			Color: colorGreen}},
+			Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -168,7 +168,7 @@ func (b *Bot) resolvePetition(ctx context.Context, a store.Activity, now time.Ti
 		// The laws changed, or someone beat them to it: the gold is spent, nothing else.
 		if err := b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now); err == nil {
 			_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-				Title: "Your petition", Description: "By the time your petition reached the clerks, it was no longer needed.", Color: colorGold}}})
+				Title: "Your petition", Description: "By the time your petition reached the clerks, it was no longer needed.", Color: colorPanel}}})
 		}
 		return
 	}
@@ -186,10 +186,10 @@ func (b *Bot) resolvePetition(ctx context.Context, a store.Activity, now time.Ti
 	b.postCourt(ctx, a.GuildID, &discordgo.MessageEmbed{
 		Title:       "📜 A petition to the Senate",
 		Description: fmt.Sprintf("**%s** (%s) has petitioned the Senate to **%s**. The Senate takes it up at once, alongside the day's business.", c.FullName(), c.House(), lowerName(p.Name)),
-		Color:       colorGold,
+		Color:       colorPanel,
 	})
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: "Your petition", Description: withDelta(res.Text, res.Delta), Color: colorGreen,
+		Title: "Your petition", Description: withDelta(res.Text, res.Delta), Color: colorGood,
 	}}})
 }
 

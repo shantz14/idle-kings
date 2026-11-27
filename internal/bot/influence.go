@@ -79,7 +79,7 @@ func (b *Bot) onCanvass(ctx context.Context, i *discordgo.InteractionCreate, par
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Out in the districts",
 			Description: fmt.Sprintf("You head out to shake hands across the city. You'll be back <t:%d:R>, and I'll DM you how it went.", a.EndsAt.Unix()),
-			Color:       colorGreen}},
+			Color:       colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -99,7 +99,7 @@ func canvassView(dur time.Duration, busy, note string) *discordgo.InteractionRes
 		desc += "\n\n" + note
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Canvass the Districts", Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Canvass the Districts", Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(
 			button("Go canvassing", "canvass:go", discordgo.SuccessButton, busy != ""),
 			backButton(game.KindCanvass),
@@ -122,9 +122,9 @@ func (b *Bot) resolveCanvass(ctx context.Context, a store.Activity, now time.Tim
 		}
 		return
 	}
-	color := colorGold
+	color := colorPanel
 	if res.Success {
-		color = colorGreen
+		color = colorGood
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: "Back from the districts", Description: fmt.Sprintf("%s (%s)", res.Text, d.Describe()), Color: color,
@@ -185,7 +185,7 @@ func circusView(c store.Character, dur time.Duration, busy, note string) *discor
 	}
 	btns = append(btns, button("Other amount", "circus:custom", discordgo.PrimaryButton, busy != "" || c.Wealth < game.CircusMin))
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and Circuses", Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and Circuses", Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
 			row(backButton(game.KindCircus))},
 	}
@@ -217,13 +217,13 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s pays for a %s", c.FullName(), lowerName(name)),
 		Description: fmt.Sprintf("House %s throws open its granaries. The celebrations end <t:%d:R>.", c.FamilyName, a.EndsAt.Unix()),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}, nil)
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Bread and circuses",
 			Description: fmt.Sprintf("You spent **%d gold** on a %s. It ends <t:%d:R>, and I'll DM you how the city took it.%s%s",
 				gold, lowerName(name), a.EndsAt.Unix(), where, permit),
-			Color: colorGreen}},
+			Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -249,9 +249,9 @@ func (b *Bot) resolveCircus(ctx context.Context, a store.Activity, now time.Time
 		return
 	}
 	b.afterRealmChange(ctx, a.GuildID, before)
-	color := colorGreen
+	color := colorGood
 	if !res.Success {
-		color = colorRed
+		color = colorBad
 	}
 	desc := fmt.Sprintf("%s (%s)\n\nThe people's mood: +%s popularity.", res.Text, res.Delta.Describe(), game.Num(res.Popularity))
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{

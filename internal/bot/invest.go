@@ -147,7 +147,7 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 	if note != "" {
 		sb.WriteString("\n\n" + note)
 	}
-	embeds := []*discordgo.MessageEmbed{{Title: "Invest in a Venture", Description: sb.String(), Color: colorGold}}
+	embeds := []*discordgo.MessageEmbed{{Title: "Invest in a Venture", Description: sb.String(), Color: colorPanel}}
 
 	var opts []discordgo.SelectMenuOption
 	for _, d := range game.SectorDefs {
@@ -175,7 +175,7 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, busy
 		fmt.Fprintf(&desc, "\nYou own **%s** of it, worth **%s gold/day** to you.", pct(v.Share), game.Num(v.Income))
 	}
 	fmt.Fprintf(&desc, "\n\nYou have **%d gold**. Invest anything from %d to %d.", c.Wealth, game.InvestMin, game.InvestMax)
-	embeds = append(embeds, &discordgo.MessageEmbed{Title: d.Emoji + " " + d.Name, Description: desc.String(), Color: colorGold})
+	embeds = append(embeds, &discordgo.MessageEmbed{Title: d.Emoji + " " + d.Name, Description: desc.String(), Color: colorPanel})
 
 	var btns []discordgo.MessageComponent
 	for _, g := range game.InvestPresets {
@@ -219,7 +219,7 @@ func (b *Bot) onInvestGo(ctx context.Context, i *discordgo.InteractionCreate, c 
 			Title: "Investing in " + d.Name,
 			Description: fmt.Sprintf("You put **%d gold** into %s %s. The deal will be struck <t:%d:R>, and I'll DM you what you got for it.",
 				gold, d.Emoji, d.Name, ends.Unix()),
-			Color: colorGreen,
+			Color: colorGood,
 		}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
@@ -261,12 +261,12 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 			desc += fmt.Sprintf("\n\nYou now own **%s** of %s, worth about **%s gold/day** to you.", pct(v.Share), d.Name, game.Num(v.Income))
 		}
 	}
-	color := colorGold
+	color := colorPanel
 	switch res.Tier {
 	case game.DealGreat:
-		color = colorGreen
+		color = colorGood
 	case game.DealBad:
-		color = colorRed
+		color = colorBad
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: fmt.Sprintf("%s Your investment in %s", d.Emoji, d.Name), Description: desc, Color: color,
@@ -279,7 +279,7 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{
 			Title:       "A scandal in the lower city",
 			Description: fmt.Sprintf("Word is that **%s** has been putting money into smuggling rings and gambling dens.", c.FullName()),
-			Color:       colorRed,
+			Color:       colorBad,
 		})
 	}
 }

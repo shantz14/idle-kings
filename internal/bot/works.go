@@ -88,7 +88,7 @@ func worksView(c store.Character, times map[string]time.Duration, building, note
 	}
 	btns = append(btns, backButton(game.KindWork))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Endow a Public Work", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Endow a Public Work", Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
@@ -115,13 +115,13 @@ func (b *Bot) onBuildWork(ctx context.Context, i *discordgo.InteractionCreate, c
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("%s House %s breaks ground on %s", w.Emoji, c.FamilyName, strings.ToLower(article(w.Name))+" "+strings.ToLower(w.Name)),
 		Description: fmt.Sprintf("%s pays for %s, a gift to the city. It opens <t:%d:R>.", c.FullName(), title, a.EndsAt.Unix()),
-		Color:       colorGold,
+		Color:       colorPanel,
 	}, nil)
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Ground is broken",
 			Description: fmt.Sprintf("You paid **%d gold** for %s. It opens <t:%d:R>, and I'll DM you when it does. You're free to do other things meanwhile.%s",
 				w.Cost, title, a.EndsAt.Unix(), where),
-			Color: colorGreen}},
+			Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 }
@@ -152,9 +152,9 @@ func (b *Bot) resolveWork(ctx context.Context, a store.Activity, now time.Time) 
 		return
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-		Title: game.WorkTitle(c.FamilyName, w) + " is open", Description: res.Text, Color: colorGreen,
+		Title: game.WorkTitle(c.FamilyName, w) + " is open", Description: res.Text, Color: colorGood,
 	}}})
-	b.announceEnd(a, &discordgo.MessageEmbed{Title: game.WorkTitle(c.FamilyName, w), Description: res.Public, Color: colorGreen})
+	b.announceEnd(a, &discordgo.MessageEmbed{Title: game.WorkTitle(c.FamilyName, w), Description: res.Public, Color: colorGood})
 }
 
 // monumentsField lists a character's finished public works, or nil.

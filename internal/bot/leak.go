@@ -59,7 +59,7 @@ func (b *Bot) leakNow(ctx context.Context, actor store.Character, s game.Secret)
 		msg := &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "🕵️ Word from your spies in " + actor.House(),
 			Description: s.Text(d),
-			Color:       colorGold,
+			Color:       colorPanel,
 		}}}
 		if game.CanExpose(s.Kind, d, actor.Laws) {
 			id, err := b.store.CreateDenunciation(ctx, store.Denunciation{

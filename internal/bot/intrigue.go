@@ -172,7 +172,7 @@ func plantView(lines []spyLine, d time.Duration, busy, note string) *discordgo.I
 	}
 	comps = append(comps, row(backButton(game.KindPlantSpies)))
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Plant Spies", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Plant Spies", Description: sb.String(), Color: colorPanel}},
 		Components: comps,
 	}
 }
@@ -204,9 +204,9 @@ func purseView(c, t store.Character, tier game.SpyTier, next, note string) *disc
 		btns = append(btns, button(label, fmt.Sprintf("spy:go:%d:%s", t.ID, p.Key), discordgo.SuccessButton, p.Gold > c.Wealth))
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Plant Spies on " + t.FullName(), Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Plant Spies on " + t.FullName(), Description: desc, Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(btns...),
-			row(button("Back", "menu:act:"+game.KindPlantSpies, discordgo.SecondaryButton, false))},
+			row(backTo("menu:act:"+game.KindPlantSpies))},
 	}
 }
 
@@ -238,7 +238,7 @@ func (b *Bot) onPlantGo(ctx context.Context, i *discordgo.InteractionCreate, c s
 		text += fmt.Sprintf(" You spent **%d gold**.", p.Gold)
 	}
 	b.update(i, &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Planting Spies", Description: text, Color: colorGreen}},
+		Embeds:     []*discordgo.MessageEmbed{{Title: "Planting Spies", Description: text, Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretPlant(c.FullName(), t.ID, t.FullName()))
@@ -269,12 +269,12 @@ func (b *Bot) resolvePlant(ctx context.Context, a store.Activity, now time.Time)
 		return
 	}
 	after := game.SpyTierOf(game.ClampSpy(before + res.Delta))
-	color := colorGold
+	color := colorPanel
 	switch {
 	case res.Success:
-		color = colorGreen
+		color = colorGood
 	case res.Exposure != game.Unseen:
-		color = colorRed
+		color = colorBad
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title:       "Your spies in " + t.House(),
@@ -286,7 +286,7 @@ func (b *Bot) resolvePlant(ctx context.Context, a store.Activity, now time.Time)
 		_, _ = b.dm(t.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "A stranger at your door",
 			Description: "You caught someone trying to plant spies in your court. They slipped away before you learned who sent them.",
-			Color:       colorRed,
+			Color:       colorBad,
 		}}})
 	case game.Caught:
 		desc := fmt.Sprintf("You caught **%s**'s spy in your court.", c.FullName())
@@ -294,7 +294,7 @@ func (b *Bot) resolvePlant(ctx context.Context, a store.Activity, now time.Time)
 			desc += " It was someone very close to you."
 		}
 		_, _ = b.dm(t.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
-			Title: "A spy unmasked", Description: desc, Color: colorRed,
+			Title: "A spy unmasked", Description: desc, Color: colorBad,
 		}}})
 	}
 }
@@ -317,7 +317,7 @@ func rootOutView(d time.Duration, busy, note string) *discordgo.InteractionRespo
 		sb.WriteString("\n\n" + note)
 	}
 	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: "Root Out Spies", Description: sb.String(), Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{{Title: "Root Out Spies", Description: sb.String(), Color: colorPanel}},
 		Components: []discordgo.MessageComponent{row(
 			button("Root them out", "spy:root", discordgo.SuccessButton, busy != ""),
 			backButton(game.KindRootOut),
@@ -340,7 +340,7 @@ func (b *Bot) onRootOutGo(ctx context.Context, i *discordgo.InteractionCreate, c
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "Rooting Out Spies",
-			Description: fmt.Sprintf("You turn your household upside down. I'll DM you <t:%d:R> with what you found.", ends.Unix()), Color: colorGreen}},
+			Description: fmt.Sprintf("You turn your household upside down. I'll DM you <t:%d:R> with what you found.", ends.Unix()), Color: colorGood}},
 		Components: []discordgo.MessageComponent{homeRow()},
 	})
 	b.leak(ctx, c, game.SecretRootOut(c.FullName()))
@@ -402,9 +402,9 @@ func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Tim
 	if len(named) > 0 {
 		fmt.Fprintf(&sb, "\n\nUnder questioning they named their masters: %s.", strings.Join(named, ", "))
 	}
-	color := colorGold
+	color := colorPanel
 	if len(res.Hits) > 0 {
-		color = colorGreen
+		color = colorGood
 	}
 	_, _ = b.dm(c.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 		Title: "You searched your household", Description: sb.String(), Color: color,
@@ -414,7 +414,7 @@ func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Tim
 		_, _ = b.dm(o.UserID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{{
 			Title:       "Silence from " + c.House(),
 			Description: fmt.Sprintf("Your agents in %s's court have gone quiet.", c.FullName()),
-			Color:       colorRed,
+			Color:       colorBad,
 		}}})
 	}
 }

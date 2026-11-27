@@ -65,66 +65,73 @@ func (b *Bot) onMenu(ctx context.Context, i *discordgo.InteractionCreate, parts 
 }
 
 func (b *Bot) homePanel(ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
-	desc := standingLine(c)
+	var lines []string
 	if c.RealmFallen {
-		desc = "**The realm has fallen.** " + c.FallenReason + "\n\n" + desc
+		lines = append(lines, quote("🔥 **The realm has fallen.** "+c.FallenReason))
 	}
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
-		desc += "\n\n" + b.activityLine(ctx, a)
+		lines = append(lines, "⏳ "+b.activityLine(ctx, a))
+	} else {
+		lines = append(lines, "You are free to act. Pick a category below.")
 	}
 	if a, err := b.store.WorkInProgress(ctx, c.ID); err == nil {
-		desc += "\n\n" + b.activityLine(ctx, a)
+		lines = append(lines, "🏗️ "+b.activityLine(ctx, a))
 	}
 	var cats []discordgo.MessageComponent
 	for _, cat := range game.Categories {
-		cats = append(cats, button(cat.Name, "menu:cat:"+string(cat.Key), discordgo.PrimaryButton, false))
+		cats = append(cats, withEmoji(button(cat.Name, "menu:cat:"+string(cat.Key), discordgo.PrimaryButton, false), cat.Emoji))
+	}
+	e := panelEmbed(c.Crest.Emoji()+" "+c.FullName(), strings.Join(lines, "\n\n"))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Influence", game.Num(c.Influence)),
+		fact("Renown", game.Num(c.Renown)),
+		fact("Gold", fmt.Sprintf("%d (+%d/day)", c.Wealth, c.TotalIncome())),
 	}
 	return ephemeral(&discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: c.Crest.Emoji() + " " + c.FullName(), Description: desc, Color: colorGold}},
+		Embeds: []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{
 			row(cats...),
 			row(
-				button("The Senate", "menu:senate", discordgo.SuccessButton, false),
-				button("My Character", "menu:char", discordgo.SecondaryButton, false),
-				button("Estate", "menu:estate", discordgo.SecondaryButton, false),
+				withEmoji(button("The Senate", "menu:senate", discordgo.SuccessButton, false), emojiSenate),
+				withEmoji(button("My Character", "menu:char", discordgo.SecondaryButton, false), emojiSheet),
+				withEmoji(button("Estate", "menu:estate", discordgo.SecondaryButton, false), emojiEstate),
 			),
 		},
 	})
 }
 
 func categoryPanel(cat game.Category, role string) *discordgo.InteractionResponseData {
-	name := string(cat)
-	for _, ci := range game.Categories {
-		if ci.Key == cat {
-			name = ci.Name
-		}
+	info, ok := game.CategoryByKey(cat)
+	if !ok {
+		info = game.CategoryInfo{Key: cat, Name: string(cat)}
 	}
 	actions := game.ActionsFor(cat, role)
 	var sb strings.Builder
 	var btns []discordgo.MessageComponent
 	for _, a := range actions {
-		fmt.Fprintf(&sb, "**%s**%s\n%s\n\n", a.Name, publicTag(a.Public), a.Description)
-		btns = append(btns, button(a.Name, "menu:act:"+a.Key, discordgo.PrimaryButton, false))
+		fmt.Fprintf(&sb, "%s **%s**%s\n%s\n\n", a.Emoji, a.Name, publicTag(a.Public), a.Description)
+		btns = append(btns, withEmoji(button(a.Name, "menu:act:"+a.Key, discordgo.PrimaryButton, false), a.Emoji))
 	}
 	if len(actions) == 0 {
 		sb.WriteString("Nothing here yet. Coming soon.")
 	}
-	btns = append(btns, button("Back", "menu:home", discordgo.SecondaryButton, false))
-	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: name, Description: sb.String(), Color: colorGold}},
-		Components: rows(btns),
+	btns = append(btns, backTo("menu:home"))
+	e := panelEmbed(titled(info.Emoji, info.Name), strings.TrimSpace(sb.String()))
+	if len(actions) > 0 {
+		e.Footer = footer("📣 Public actions are announced to the court, and others can join in.")
 	}
+	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: rows(btns)}
 }
 
 // backButton returns to the menu category an action is listed under.
 func backButton(kind string) discordgo.Button {
 	a, _ := game.ActionByKey(kind)
-	return button("Back", "menu:cat:"+string(a.Category), discordgo.SecondaryButton, false)
+	return backTo("menu:cat:"+string(a.Category))
 }
 
 // homeRow is a row with one Back button to the home panel.
 func homeRow() discordgo.ActionsRow {
-	return row(button("Back", "menu:home", discordgo.SecondaryButton, false))
+	return row(backTo("menu:home"))
 }
 
 // rows lays buttons out five to a row, as Discord allows.
@@ -140,43 +147,50 @@ func rows(btns []discordgo.MessageComponent) []discordgo.MessageComponent {
 
 func publicTag(public bool) string {
 	if public {
-		return " · *public*"
+		return " · 📣"
 	}
 	return ""
+}
+
+// goalList is a bulleted list of goals to pick from.
+func goalList(goals []game.GoalInfo) string {
+	var sb strings.Builder
+	for _, g := range goals {
+		fmt.Fprintf(&sb, "• **%s**: %s\n", g.Name, g.Description)
+	}
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 // partyPanel shows Throw a Party. note is an optional status line.
 func (b *Bot) partyPanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Open your estate to the court for %s. Costs **%d gold** or more: you choose how much to spend after picking a goal.\n",
-		humanDuration(b.timing.Duration), game.PartyMinSpend)
-	sb.WriteString("Its success depends most on your influence, then your estate, your diplomacy, and your renown. ")
-	sb.WriteString("Something will probably go wrong during the evening; I'll DM you when it does.\n")
-	sb.WriteString("The court is told, and others may attend.\n\n**Choose your goal:**\n")
-	for _, g := range game.HostGoals {
-		fmt.Fprintf(&sb, "**%s** — %s\n", g.Name, g.Description)
-	}
+	sb.WriteString("Open your estate to the court for an evening. It goes best with high influence, then a fine estate, diplomacy and renown.\n\n")
+	sb.WriteString("**Choose your goal**\n" + goalList(game.HostGoals))
 
 	busy := false
 	if a, err := b.store.HostedActivity(ctx, c.ID); err == nil {
 		busy = true
-		sb.WriteString("\n" + b.activityLine(ctx, a))
+		note = joinNotes("⏳ "+b.activityLine(ctx, a), note)
 	} else if c.Wealth < game.PartyMinSpend {
 		busy = true
-		fmt.Fprintf(&sb, "\nYou only have %d gold.", c.Wealth)
+		note = joinNotes(fmt.Sprintf("You only have %s.", goldText(c.Wealth)), note)
 	}
 	note = joinNotes(permitNote(c.Laws), note)
-	if note != "" {
-		sb.WriteString("\n\n" + note)
-	}
 
 	var btns []discordgo.MessageComponent
 	for _, g := range game.HostGoals {
-		btns = append(btns, button(g.Name, "party:host:"+string(g.Key), discordgo.SuccessButton, busy))
+		btns = append(btns, button(g.Name, "party:host:"+string(g.Key), discordgo.PrimaryButton, busy))
 	}
 	btns = append(btns, backButton(game.KindParty))
+	e := actionEmbed(game.KindParty, withNote(note, sb.String()))
+	e.Fields = []*discordgo.MessageEmbedField{
+		fact("Cost", fmt.Sprintf("%d+ gold", game.PartyMinSpend)),
+		fact("Lasts", humanDuration(b.timing.Duration)),
+		fact("Guests", "📣 Anyone may attend"),
+	}
+	e.Footer = footer("🔔 Something usually goes wrong during the evening. I'll DM you to decide what to do.")
 	return &discordgo.InteractionResponseData{
-		Embeds:     []*discordgo.MessageEmbed{{Title: "Throw a Party", Description: sb.String(), Color: colorGold}},
+		Embeds:     []*discordgo.MessageEmbed{e},
 		Components: []discordgo.MessageComponent{row(btns...)},
 	}
 }
