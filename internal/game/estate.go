@@ -248,9 +248,9 @@ var Items = []Item{
 	{Key: "warhorse", Name: "Prize Warhorse", Kind: KindEquipment, Value: 5, Price: 80,
 		Description: "A tall gray stallion, the envy of every officer in the city.",
 		Effects:     Effects{Stats: Stats{Martial: 5}}},
-	{Key: "rudis", Name: "The Wooden Sword of Freedom", Kind: KindPossession, Value: 3, Price: 45,
-		Description: "Given to gladiators who win their freedom. The crowds still recognize it.",
-		Effects:     Effects{PartyBonus: 2}},
+	{Key: "champions_trident", Name: "The Champion's Trident and Net", Kind: KindWeapon, Value: 3, Price: 45,
+		Description: "The trident you were holding when forty thousand people screamed for your freedom. When you carry it, they still chant your name.",
+		Effects:     Effects{Stats: Stats{Prowess: 5}, PartyBonus: 2}},
 }
 
 func ItemByKey(key string) (Item, bool) {

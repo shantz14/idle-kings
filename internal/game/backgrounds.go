@@ -70,7 +70,7 @@ var Backgrounds = []Background{
 		Summary:   "You fought your way to freedom in the arena.",
 		Story:     "Sold to the arena as a child, you fought for ten years and won your freedom before a roaring crowd. The crowd hasn't forgotten you. The great houses wish they could.",
 		StatBonus: Stats{Prowess: 10, Martial: 5}, Renown: 40, Wealth: 30,
-		Home: "arena_shack", Items: []string{"rudis"},
+		Home: "arena_shack", Items: []string{"champions_trident"},
 	},
 }
 
