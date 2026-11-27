@@ -123,7 +123,7 @@ func (b *Bot) speakMatters(ctx context.Context, c store.Character, s game.Senato
 			sm.Ask = &a
 		}
 		_, _, sm.Sold = b.store.SoldVote(ctx, m.ID, c.ID)
-		if _, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, op); ok && !st.Laws.Rules().SecretBallot {
+		if _, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, game.Regard(op, c.Renown)); ok && !st.Laws.Rules().SecretBallot {
 			sm.Offer = gold
 		}
 		out = append(out, sm)

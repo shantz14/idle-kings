@@ -163,7 +163,7 @@ func TestVoteOffers(t *testing.T) {
 	if _, _, ok := (Senator{Traits: []Trait{TraitIncorruptible}}).VoteOffer(testMatter, 5, realm, 1); ok {
 		t.Fatal("incorruptible senators don't buy votes")
 	}
-	offers := BestVoteOffers(testMatter, []Senator{hawk, {ID: 1, Traits: []Trait{TraitEconomical}}}, 5, realm, 1, nil)
+	offers := BestVoteOffers(testMatter, []Senator{hawk, {ID: 1, Traits: []Trait{TraitEconomical}}}, 5, realm, 1, nil, 0)
 	if offers["spend"].Senator.ID != 2 || offers["cheap"].Senator.ID != 1 {
 		t.Fatalf("offers: %+v", offers)
 	}

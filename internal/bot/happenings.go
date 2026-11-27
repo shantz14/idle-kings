@@ -127,6 +127,9 @@ func (b *Bot) happeningEnded(ctx context.Context, eventKey string, characterID i
 			}
 		}
 		b.post(ctx, c.GuildID, &discordgo.MessageEmbed{Title: h.Emoji + " " + h.Name, Description: desc, Color: colorGood})
+		if h.Feat != "" {
+			b.awardFeat(ctx, c, game.HappeningFeat(h.Key))
+		}
 		return
 	}
 }

@@ -545,6 +545,7 @@ func (b *Bot) resolveDuel(ctx context.Context, a store.Activity, now time.Time) 
 		}
 		return
 	}
+	b.addDeeds(ctx, a.GuildID, store.Deed{CharacterID: res.Winner.ID, Kind: game.DeedDuelWon, Amount: 1})
 
 	users := map[int64]string{c.ID: c.UserID, t.ID: t.UserID}
 	bettors := make([]int64, 0, len(bets))

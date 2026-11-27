@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestCreateCharacterWithEstate(t *testing.T) {
 		t.Fatalf("loaded: %+v", got)
 	}
 	// Letters of Introduction add vote weight; (base 2 + 4 points + 2 exile + 2 emissary) × 5.
-	if got.VoteWeight() != c.Influence+2 || got.Stats[game.Diplomacy] != 50 || got.EstateValue() != 9+2+6 {
+	if math.Abs(got.VoteWeight()-(c.Influence+2+game.RenownWeight(c.Renown))) > 1e-9 || got.Stats[game.Diplomacy] != 50 || got.EstateValue() != 9+2+6 {
 		t.Fatalf("derived: weight %g diplomacy %g estate %g", got.VoteWeight(), got.Stats[game.Diplomacy], got.EstateValue())
 	}
 	if got.Person().Effects.PartyBonus != 2+3 {

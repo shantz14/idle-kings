@@ -84,20 +84,25 @@ func TestEmbezzle(t *testing.T) {
 	thief := Person{ID: 1, Name: "Vane", Sheet: Sheet{AttrStewardship: 5, AttrIntrigue: 5}} // chance 80
 	sen := []Senator{{ID: 1}, {ID: 2, Traits: []Trait{TraitIncorruptible}}}
 	skim, _ := EmbezzleSizeByKey("skim")
-	res := ResolveEmbezzle(&seq{t: t, vals: []int{0}}, thief, skim, 50, sen)
+	res := ResolveEmbezzle(&seq{t: t, vals: []int{0}}, thief, skim, 50, 0, sen)
 	if !res.Success || res.Treasury != -3 || res.Delta.Wealth != 60 {
 		t.Errorf("skim = %+v", res)
 	}
-	res = ResolveEmbezzle(&seq{t: t, vals: []int{0}}, thief, skim, 2, sen) // only 2 left
+	res = ResolveEmbezzle(&seq{t: t, vals: []int{0}}, thief, skim, 2, 0, sen) // only 2 left
 	if res.Treasury != -2 || res.Delta.Wealth != 40 {
 		t.Errorf("near-empty skim = %+v", res)
 	}
-	res = ResolveEmbezzle(&seq{t: t, vals: []int{90}}, thief, skim, 50, sen) // margin -10
+	res = ResolveEmbezzle(&seq{t: t, vals: []int{90}}, thief, skim, 50, 0, sen) // margin -10
 	if res.Success || res.Caught || res.Treasury != 0 || res.Delta.Wealth != 0 {
 		t.Errorf("quiet miss = %+v", res)
 	}
+	// Three recent thefts put the clerks on guard: the same roll is now caught.
+	res = ResolveEmbezzle(&seq{t: t, vals: []int{90}}, thief, skim, 50, 3, sen) // chance 62, margin -28
+	if !res.Caught {
+		t.Errorf("watchful clerks should catch a margin of -28: %+v", res)
+	}
 	plunder, _ := EmbezzleSizeByKey("plunder") // chance 55
-	res = ResolveEmbezzle(&seq{t: t, vals: []int{99}}, thief, plunder, 50, sen)
+	res = ResolveEmbezzle(&seq{t: t, vals: []int{99}}, thief, plunder, 50, 0, sen)
 	if !res.Caught || res.Treasury != 0 || res.Delta.Renown >= 0 || res.Public == "" || len(res.Opinions) != 2 || res.Opinions[1].Delta != embezzleOutraged {
 		t.Errorf("caught = %+v", res)
 	}

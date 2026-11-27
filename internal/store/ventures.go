@@ -97,7 +97,7 @@ type Investment struct {
 	GuildID     string
 	Sector      game.SectorKey
 	Stake       float64    // stake gained
-	Capacity    float64    // capacity added to the sector
+	Gold        int        // gold invested: grows the sector (SectorDef.Grow)
 	Delta       game.Delta // e.g. renown lost to exposure
 }
 
@@ -127,7 +127,10 @@ func (s *Store) ApplyInvestment(ctx context.Context, inv Investment, now time.Ti
 		return err
 	}
 	sec = sec.Fill()
-	sec.Apply(map[game.SectorKey]game.SectorChange{inv.Sector: {Capacity: inv.Capacity}})
+	if d, ok := game.SectorByKey(inv.Sector); ok {
+		cur := sec[inv.Sector]
+		sec.Apply(map[game.SectorKey]game.SectorChange{inv.Sector: {Capacity: d.Grow(cur.Capacity, inv.Gold) - cur.Capacity}})
+	}
 	b, _ := json.Marshal(sec)
 	if _, err := tx.ExecContext(ctx, `UPDATE realms SET sectors = ? WHERE guild_id = ?`, string(b), inv.GuildID); err != nil {
 		return err

@@ -61,7 +61,7 @@ var JourneyDests = []JourneyDest{
 	{
 		Key: "provinces", Name: "Progress Through the Provinces", Place: "the provinces", Emoji: "🌾", Cost: 20,
 		Description: "Ride from town to town, shaking hands and hearing petitions. The countryside remembers who came to see it.",
-		Check:       Check{Base: 35, Weights: map[Attr]float64{AttrDiplomacy: 3, AttrRenown: 1}},
+		Check:       Check{Base: 35, Weights: map[Attr]float64{AttrDiplomacy: 3, AttrRenown: 2}},
 		Stat:        Diplomacy,
 		Success:     Delta{Influence: 2, Renown: 3},
 		Failure:     Delta{Influence: 0.3},
@@ -168,6 +168,7 @@ func ResolveJourney(r Roller, p Person, d JourneyDest, quality float64) JourneyR
 		res.Delta = d.Failure
 		res.Text = d.BadText
 	}
+	res.Delta = ScaleGain(res.Delta, p.Sheet[AttrInfluence])
 	res.Delta.Merge(Practice(d.Stat, ok))
 	return res
 }

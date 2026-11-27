@@ -51,7 +51,7 @@ func (b *Bot) postWarnings(channel string, warnings []string) {
 func (b *Bot) announceFall(ctx context.Context, guildID, channel, reason string) {
 	fall := &discordgo.MessageEmbed{
 		Title:       "🔥 The realm has fallen",
-		Description: reason + "\n\n💀 **All players have lost.**",
+		Description: reason + "\n\n💀 **All players have lost.** No house will be crowned this season: the great houses fell with the realm.",
 		Color:       colorBad,
 	}
 	if channel != "" {

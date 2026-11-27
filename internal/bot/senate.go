@@ -237,13 +237,26 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		Summary: map[string]any{"winner": res.Winner.Key, "succeeded": res.Succeeded, "tally": res.Tally},
 		Realm:   res.Realm, Sectors: res.Sectors, Laws: res.Laws, Fallen: res.Fallen, FallenReason: res.FallenReason,
 		Deltas: res.Deltas, FollowUps: res.FollowUps, DayLength: b.senate.Interval,
-		Opinions: res.Opinions, OpinionDecay: decay,
+		Opinions: res.Opinions, OpinionDecay: decay, SenateDay: decay != 0,
 	}, now)
 	if err != nil {
 		if !errors.Is(err, store.ErrEnded) {
 			slog.Error("resolve matter", "err", err)
 		}
 		return
+	}
+
+	if !ev.Auto { // Kingmaker counts every vote on the winning side
+		var deeds []store.Deed
+		for id, opt := range votes {
+			if opt == res.Winner.Key {
+				deeds = append(deeds, store.Deed{CharacterID: id, Kind: game.DeedWinningVote, Amount: 1})
+			}
+		}
+		b.addDeeds(ctx, m.GuildID, deeds...)
+	}
+	if decay != 0 && !res.Fallen { // a Senate day: after the posts, the season may be over
+		defer b.checkSeason(ctx, m.GuildID)
 	}
 
 	for id, lines := range res.Notices {
@@ -762,7 +775,7 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 		}
 	} else if _, can := s.BribePrice(ev, ev.Default, st.Trackers, m.ID); !can {
 		desc += "🚫 They cannot be bought."
-	} else if _, can := s.BribePriceUnder(ev, ev.Default, st.Trackers, m.ID, op, st.Laws); !can {
+	} else if _, can := s.BribePriceUnder(ev, ev.Default, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws); !can {
 		desc += "🚫 They won't take your gold. They don't think highly enough of you."
 	} else {
 		if st.Laws.Has(game.LawBribery) {
@@ -770,7 +783,7 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 		}
 		desc += fmt.Sprintf("You have %s. Pick the vote you're paying for:", goldText(c.Wealth))
 		for _, o := range ev.Options {
-			price, _ := s.BribePriceUnder(ev, o.Key, st.Trackers, m.ID, op, st.Laws)
+			price, _ := s.BribePriceUnder(ev, o.Key, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws)
 			btns = append(btns, button(fmt.Sprintf("%s: %d gold", o.Label, price),
 				fmt.Sprintf("senate:pay:%d:%d:%s", m.ID, s.ID, o.Key), discordgo.SuccessButton, price > c.Wealth))
 		}
@@ -805,7 +818,7 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	if _, ok := ev.Option(opt); !ok {
 		return
 	}
-	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, ops[s.ID], st.Laws)
+	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, game.Regard(ops[s.ID], c.Renown), st.Laws)
 	if !can {
 		b.update(i, &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{{Title: "💰 Senator " + s.Name, Description: "🚫 " + s.Name + " won't take your gold.", Color: colorMuted}},

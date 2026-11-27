@@ -35,6 +35,12 @@ func adminCommand(ctxs *[]discordgo.InteractionContextType, install *[]discordgo
 	for _, h := range game.HappeningDefs {
 		haps = append(haps, &discordgo.ApplicationCommandOptionChoice{Name: truncate(h.Emoji+" "+h.Name, 100), Value: h.Key})
 	}
+	var feats []*discordgo.ApplicationCommandOptionChoice
+	for _, t := range game.TitleDefs {
+		if !t.Season && len(feats) < 25 {
+			feats = append(feats, &discordgo.ApplicationCommandOptionChoice{Name: truncate(t.Emoji+" "+t.Name, 100), Value: t.Key})
+		}
+	}
 	var stats []*discordgo.ApplicationCommandOptionChoice
 	for _, st := range game.AllStats {
 		stats = append(stats, &discordgo.ApplicationCommandOptionChoice{Name: statName(st), Value: string(st)})
@@ -64,6 +70,10 @@ func adminCommand(ctxs *[]discordgo.InteractionContextType, install *[]discordgo
 			sub("happening", "Start a happening in the realm now (a manticore, a troll…)",
 				&discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionString, Name: "happening",
 					Description: "Which one", Required: true, Choices: haps}),
+			sub("season", "End the season now and crown its leaders"),
+			sub("title", "Give a player a feat title",
+				&discordgo.ApplicationCommandOption{Type: discordgo.ApplicationCommandOptionString, Name: "title",
+					Description: "Which feat", Required: true, Choices: feats}),
 		},
 	}
 }
@@ -191,6 +201,16 @@ func (b *Bot) cmdAdmin(ctx context.Context, i *discordgo.InteractionCreate) {
 		} else {
 			msg = "That happening is already abroad (or doesn't exist)."
 		}
+	case "season":
+		se, serr := b.store.Season(ctx, c.GuildID)
+		if err = serr; err == nil {
+			b.endSeason(ctx, c.GuildID, se.Number)
+			msg = fmt.Sprintf("Season %d is over; the titles have been announced.", se.Number)
+		}
+	case "title":
+		key := opts.str("title")
+		b.awardFeat(ctx, c, key)
+		msg = fmt.Sprintf("%s holds **%s**.", who, game.Title{Key: key}.Label())
 	case "rush":
 		if err = b.store.RushCharacter(ctx, c.ID, now); err == nil {
 			msg = fmt.Sprintf("%s's actions end at the next tick (within 15 seconds), and their conspiracy moves on a day.", who)
@@ -206,7 +226,7 @@ func (b *Bot) cmdAdmin(ctx context.Context, i *discordgo.InteractionCreate) {
 		return
 	}
 	slog.Info("admin", "cmd", name, "guild", c.GuildID, "character", c.ID)
-	if name != "rush" && name != "spies" && name != "opinion" && name != "happening" {
+	if name != "rush" && name != "spies" && name != "opinion" && name != "happening" && name != "season" && name != "title" {
 		if after, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
 			msg += "\n" + standingLine(after)
 		}

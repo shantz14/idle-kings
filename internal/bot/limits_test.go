@@ -464,8 +464,9 @@ func TestSheetAndChronicleFitDiscord(t *testing.T) {
 
 func TestPerilViewsFitDiscord(t *testing.T) {
 	busy := "You are cooking the treasury's books. You'll be done <t:9999999999:R>."
-	checkLimits(t, "embezzle", embezzleView(2*time.Hour, "", "a note"))
-	checkLimits(t, "embezzle busy", embezzleView(2*time.Hour, busy, ""))
+	checkLimits(t, "embezzle", embezzleView(2*time.Hour, "", "a note", false))
+	checkLimits(t, "embezzle busy", embezzleView(2*time.Hour, busy, "", false))
+	checkLimits(t, "embezzle watchful", embezzleView(2*time.Hour, "", "", true))
 	st := store.RealmState{Status: "alive", Trackers: game.StartingRealm()}
 	checkLimits(t, "aid", aidView(st, "a note"))
 	checkLimits(t, "aid fallen", aidView(store.RealmState{Status: "fallen", Trackers: game.StartingRealm()}, ""))
@@ -603,4 +604,38 @@ func TestConspiracyViewsFitDiscord(t *testing.T) {
 	}
 	checkLimits(t, "conspiracy steal", stealView(tgt))
 	checkLimits(t, "conspiracy ask senator", askSenatorView(c, senators[0], -40, "a note"))
+}
+
+func TestTitleViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	var entries []boardEntry
+	for n := 0; n < 40; n++ { // more than a select menu holds
+		entries = append(entries, boardEntry{
+			Character: store.Character{ID: int64(n + 1), Name: long, FamilyName: long, Role: "officer", Background: "foreign_exile",
+				Crest: game.Crest{Color: "red", Symbol: "lion"}},
+			Line: "Prestige **12345** · Renown 1234 · Influence 123.4",
+		})
+	}
+	se := store.Season{Number: 12, SenateDays: 7}
+	for _, tab := range boardTabs {
+		checkLimits(t, "players "+tab.key, playersView(tab.key, entries, se, "Ranked by weight in the Senate."))
+	}
+	checkLimits(t, "players empty", playersView(boardDuels, nil, se, ""))
+
+	var awards []seasonAward
+	for _, def := range game.SeasonTitles() {
+		awards = append(awards, seasonAward{Title: def, Winners: []store.Character{entries[0].Character, entries[1].Character}})
+	}
+	checkLimits(t, "season end", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{seasonEndEmbed(12, awards)}})
+	checkLimits(t, "season end, nobody", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{seasonEndEmbed(1, nil)}})
+
+	var all []game.Title
+	for n, def := range game.TitleDefs {
+		all = append(all, game.Title{Key: def.Key, Season: n % 3})
+	}
+	checkLimits(t, "titles field", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+		Title: "x", Fields: []*discordgo.MessageEmbedField{titlesField(all)}}}})
+	if titlesField(nil) != nil {
+		t.Fatal("no titles, no field")
+	}
 }

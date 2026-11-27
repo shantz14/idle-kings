@@ -43,7 +43,7 @@ func HuntGoalName(g Goal) string {
 
 var (
 	// Host success: prowess > martial > renown = estate (horses and hounds).
-	huntCheck = Check{Base: 15, Weights: map[Attr]float64{AttrProwess: 2.0, AttrMartial: 1.5, AttrRenown: 0.5, AttrEstate: 0.5}}
+	huntCheck = Check{Base: 15, Weights: map[Attr]float64{AttrProwess: 2.0, AttrMartial: 1.5, AttrRenown: 1.0, AttrEstate: 0.5}}
 
 	huntGloryCheck   = Check{Base: 20, Weights: map[Attr]float64{AttrProwess: 5}}
 	huntFriendsCheck = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
@@ -180,6 +180,7 @@ func ResolveHunt(r Roller, in HuntInput) PartyResult {
 		case GoalSaddleTalk:
 			hd.Merge(huntHostSaddle)
 		}
+		hd = ScaleGain(hd, host.Sheet[AttrInfluence])
 		res.notice(host.ID, "%s", withEffects("Your hunt was a triumph.", hd))
 		res.Public = fmt.Sprintf("**%s**'s hunt rode home with a cart full of game.", host.Name)
 		res.Opinions = append(res.Opinions, TraitReactions(in.Senators, host.ID,
@@ -210,8 +211,9 @@ func ResolveHunt(r Roller, in HuntInput) PartyResult {
 			}
 		case GoalRideFriends:
 			if ok, _ := huntFriendsCheck.Roll(r, a.Sheet, mod, Normal); ok {
-				res.delta(a.ID, huntGuestFriends)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends on %s's hunt.", host.Name), huntGuestFriends))
+				g := ScaleGain(huntGuestFriends, a.Sheet[AttrInfluence])
+				res.delta(a.ID, g)
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends on %s's hunt.", host.Name), g))
 			} else {
 				res.notice(a.ID, "You rode alongside the others on %s's hunt, but nobody had much to say.", host.Name)
 			}

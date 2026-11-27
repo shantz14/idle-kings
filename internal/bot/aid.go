@@ -145,6 +145,9 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 		b.update(i, b.aidAmountPanel(ctx, c, key, err.Error()))
 		return
 	}
+	if res.Crisis { // Saviour of the Realm counts gifts to a realm in danger
+		b.addDeeds(ctx, c.GuildID, store.Deed{CharacterID: c.ID, Kind: game.DeedCrisisAid, Amount: float64(gold)})
+	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "🤲 " + t.Name, Description: withDelta(res.Text, res.Delta), Color: colorGood}},
 		Components: []discordgo.MessageComponent{row(backTo("menu:act:" + game.KindAid))},

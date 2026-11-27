@@ -428,11 +428,12 @@ const (
 const VoteOfferRate = 1.2
 
 // BestVoteOffers is, per option, the senator paying the most for it.
-// ops is the senators' opinions of the voter (nil = all neutral).
-func BestVoteOffers(ev MatterEvent, senators []Senator, voterInfluence float64, realm Realm, matterID int64, ops Opinions) map[string]VoteOfferFrom {
+// ops is the senators' opinions of the voter (nil = all neutral), and
+// renown the voter's, for their Regard.
+func BestVoteOffers(ev MatterEvent, senators []Senator, voterInfluence float64, realm Realm, matterID int64, ops Opinions, renown float64) map[string]VoteOfferFrom {
 	out := map[string]VoteOfferFrom{}
 	for _, s := range senators {
-		opt, gold, ok := s.VoteOfferFor(ev, voterInfluence, realm, matterID, ops[s.ID])
+		opt, gold, ok := s.VoteOfferFor(ev, voterInfluence, realm, matterID, Regard(ops[s.ID], renown))
 		if ok && gold > out[opt].Gold {
 			out[opt] = VoteOfferFrom{Senator: s, Gold: gold}
 		}
@@ -673,6 +674,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 			d.Merge(Delta{Influence: WinningSideInfluence})
 			d.Merge(out.Supporters)
 		}
+		d = ScaleGain(d, p.Sheet[AttrInfluence])
 		if desc := d.Describe(); desc != "" {
 			res.delta(p.ID, d)
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("The Senate voted to **%s**. For you: %s", strings.ToLower(winner.Label), desc))
@@ -778,7 +780,7 @@ func resolveAuto(r Roller, in MatterInput, res MatterResult) MatterResult {
 	res.applyOutcome(in)
 	out := res.Outcome
 	for _, p := range in.Players {
-		if d := out.forPlayer(p); d.Describe() != "" {
+		if d := ScaleGain(out.forPlayer(p), p.Sheet[AttrInfluence]); d.Describe() != "" {
 			res.Deltas[p.ID] = d
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("%s For you: %s", out.Text, d.Describe()))
 		}

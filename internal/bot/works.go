@@ -145,6 +145,9 @@ func (b *Bot) resolveWork(ctx context.Context, a store.Activity, now time.Time) 
 		Title: w.Emoji + " " + game.WorkTitle(c.FamilyName, w) + " is open", Description: res.Text, Color: colorGood,
 	}}})
 	b.announceEnd(a, &discordgo.MessageEmbed{Title: w.Emoji + " " + game.WorkTitle(c.FamilyName, w), Description: res.Public, Color: colorGood})
+	if game.PatronEarned(append(c.Monuments, w.Key)) {
+		b.awardFeat(ctx, c, game.FeatPatron)
+	}
 }
 
 // monumentsField lists a character's finished public works, or nil.

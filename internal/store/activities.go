@@ -571,3 +571,13 @@ func (s *Store) RushCharacter(ctx context.Context, charID int64, now time.Time) 
 		return err
 	})
 }
+
+// RecentEmbezzlements counts the embezzlements anyone at a court finished
+// since a time, caught or not.
+func (s *Store) RecentEmbezzlements(ctx context.Context, guildID string, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM activities WHERE guild_id = ? AND kind = ? AND resolved_at >= ?`,
+		guildID, game.KindEmbezzle, since.Unix()).Scan(&n)
+	return n, err
+}

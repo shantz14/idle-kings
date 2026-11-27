@@ -109,7 +109,7 @@ func GoalName(g Goal) string {
 
 var (
 	// Host success: influence > estate > diplomacy > renown.
-	partyCheck = Check{Base: 5, Weights: map[Attr]float64{AttrInfluence: 2.0, AttrEstate: 1.5, AttrDiplomacy: 1.0, AttrRenown: 0.5}}
+	partyCheck = Check{Base: 5, Weights: map[Attr]float64{AttrInfluence: 2.0, AttrEstate: 1.5, AttrDiplomacy: 1.0, AttrRenown: 0.9}}
 
 	businessCheck = Check{Base: 20, Weights: map[Attr]float64{AttrStewardship: 6}}
 	friendsCheck  = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
@@ -416,7 +416,7 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 				hd.Merge(hostBusiness)
 			}
 		}
-		hd = hd.Scale(PartyRewardScale(in.Spend))
+		hd = ScaleGain(hd.Scale(PartyRewardScale(in.Spend)), host.Sheet[AttrInfluence])
 		res.notice(host.ID, "%s", withEffects("Your party was a success.", hd))
 		res.Public = fmt.Sprintf("**%s**'s party was the talk of the court.", host.Name)
 		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: host.ID, Delta: OpinionPartySuccess})
@@ -439,8 +439,9 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		switch a.Goal {
 		case GoalMakeFriends:
 			if ok, _ := friendsCheck.Roll(r, a.Sheet, mod, Normal); ok {
-				res.delta(a.ID, guestFriends)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends at %s's party.", host.Name), guestFriends))
+				g := ScaleGain(guestFriends, a.Sheet[AttrInfluence])
+				res.delta(a.ID, g)
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends at %s's party.", host.Name), g))
 			} else {
 				res.notice(a.ID, "You mingled at %s's party, but made no new friends.", host.Name)
 			}

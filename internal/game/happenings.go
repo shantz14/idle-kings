@@ -43,6 +43,7 @@ type HappeningDef struct {
 	Sectors  map[SectorKey]SectorChange // a shock when it begins
 	Realm    Realm                      // tracker changes when it begins
 	Trophy   string                     // an item the one who ends it takes home ("" none)
+	Feat     string                     // the title the one who ends it earns (titles.go)
 	Events   map[string]PartyEvent      // by where it's met (Meet…)
 }
 
@@ -140,6 +141,7 @@ func check2(base float64, a Attr, wa float64, b Attr, wb float64) *Check {
 var HappeningDefs = []HappeningDef{
 	{
 		Key: "manticore", Name: "A Manticore in the Royal Forest", Emoji: "🦁", Weight: 1, MinDays: 3, MaxDays: 5,
+		Feat:     "Manticore-Slayer",
 		Announce: "Woodcutters swear they have seen it: a lion's body, a man's face, a tail of poisoned spikes. **A manticore** hunts in the royal forest. Whoever kills it will never buy their own wine again.",
 		Ended:    "⚔️ **%s** has slain the manticore of the royal forest! Its spiked tail hangs in their hall.",
 		Fade:     "The manticore has not been seen for days. Perhaps it has gone back to whatever desert bred it.",
@@ -173,6 +175,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "wyvern", Name: "A Wyvern over the Western Hills", Emoji: "🐉", Weight: 1, MinDays: 3, MaxDays: 5,
+		Feat:     "Wyvern-Slayer",
 		Announce: "A **wyvern** circles over the western hills, taking sheep and the occasional shepherd. The miners won't go up to the workings.",
 		Ended:    "⚔️ **%s** has brought down the wyvern of the western hills! The miners are going back up.",
 		Fade:     "The wyvern has flown north. The miners count their sheep and go back to work.",
@@ -207,6 +210,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "white_hart", Name: "The White Hart", Emoji: "🦌", Weight: 0.8, MinDays: 2, MaxDays: 3,
+		Feat:     "Friend of the White Hart",
 		Announce: "Foresters have seen **the White Hart**, the stag of the old stories, pale as frost. They say whoever catches it will be remembered forever. They say a lot of things.",
 		Ended:    "🦌 **%s** has run down the White Hart! The court is already writing songs.",
 		Fade:     "The White Hart is gone, as it always goes, back into the stories.",
@@ -226,6 +230,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "boar", Name: "The Erymanthian Boar", Emoji: "🐗", Weight: 1, MinDays: 3, MaxDays: 4,
+		Feat:     "Tamer of the Erymanthian Boar",
 		Announce: "A **boar the size of an ox** is tearing up the farms east of the city. The farmers call it the Erymanthian Boar, and want a Hercules.",
 		Ended:    "🐗 **%s** has taken the Erymanthian Boar! The eastern farms are safe.",
 		Fade:     "The great boar has gone back into the mountains. The farmers replant.",
@@ -249,6 +254,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "troll", Name: "A Troll under the North Bridge", Emoji: "🧌", Weight: 1, MinDays: 3, MaxDays: 5,
+		Feat:     "Who Freed the North Bridge",
 		Announce: "A **troll** has moved in under the north bridge and charges a toll to cross: gold, a goat, or a riddle it can't answer. Caravans are going the long way round.",
 		Ended:    "🧌 **%s** has rid the north bridge of its troll! The caravans are crossing again.",
 		Fade:     "The troll under the north bridge has wandered off, or turned to stone at dawn. Nobody is sure which.",
@@ -272,6 +278,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "grendel", Name: "Grendel Stalks the Feast Halls", Emoji: "👹", Weight: 0.8, MinDays: 2, MaxDays: 4,
+		Feat:     "Bane of Grendel",
 		Announce: "Something came to a feast in the upper city last night and left with three guests. Nobody saw it clearly, but the old soldiers have a name for it: **Grendel**. Hosts are barring their doors.",
 		Ended:    "👹 **%s** has torn the arm from Grendel in their own feast hall! The city can party again.",
 		Fade:     "Grendel has gone back to its fen. The feast halls light their lamps again.",
@@ -293,6 +300,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "horseman", Name: "The Headless Horseman", Emoji: "🎃", Weight: 0.8, MinDays: 2, MaxDays: 3,
+		Feat:     "Who Outrode the Headless Horseman",
 		Announce: "Travellers on the night roads tell of a rider in a black cloak, with a carved pumpkin where his head should be. **The Headless Horseman** rides.",
 		Ended:    "🎃 **%s** has outridden the Headless Horseman to the bridge, and he is gone!",
 		Fade:     "No one has seen the Headless Horseman for nights. The roads are only dangerous in the usual ways.",
@@ -315,6 +323,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "piper", Name: "The Pied Piper Comes to Town", Emoji: "🐀", Weight: 0.8, MinDays: 2, MaxDays: 3,
+		Feat:     "Who Piped the Rats Away",
 		Announce: "Rats are pouring out of the granaries, and a stranger in a coat of many colors has arrived, offering to pipe them away for a price. **The Pied Piper** is in town.",
 		Ended:    "🐀 **%s** has paid the Pied Piper his price, and he has led every rat in the city into the river.",
 		Fade:     "The Pied Piper has moved on, unpaid. The rats have not. Parents are keeping an eye on their children.",
@@ -337,6 +346,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "kraken", Name: "The Kraken off the Coast", Emoji: "🌊", Weight: 0.8, MinDays: 3, MaxDays: 5,
+		Feat:     "Kraken-Slayer",
 		Announce: "Two merchantmen have gone down in calm water, dragged under by arms as long as masts. **The Kraken** has risen off the coast. No captain will sail.",
 		Ended:    "🌊 **%s** has driven the Kraken back into the deep! The harbor is open again.",
 		Fade:     "The Kraken has sunk back into the deep. The captains sail again, carefully.",
@@ -360,6 +370,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "werewolf", Name: "The Werewolf of the Ashwood", Emoji: "🐺", Weight: 1, MinDays: 2, MaxDays: 4,
+		Feat:     "Bane of the Ashwood Werewolf",
 		Announce: "The moon is full, and in the Ashwood something howls that is not a wolf. Two charcoal-burners are dead. The priests are blessing silver. **A werewolf** walks.",
 		Ended:    "🐺 **%s** has put a silver arrow through the werewolf of the Ashwood! The charcoal-burners can sleep.",
 		Fade:     "The moon wanes, and the werewolf of the Ashwood is only someone, somewhere, with a bad conscience.",
@@ -450,6 +461,7 @@ var HappeningDefs = []HappeningDef{
 	},
 	{
 		Key: "mummers", Name: "The Bloody Mummers Ride", Emoji: "🗡️", Weight: 0.8, MinDays: 3, MaxDays: 4,
+		Feat:     "Breaker of the Bloody Mummers",
 		Announce: "**The Bloody Mummers**, sellswords turned brigands, are riding the roads in their motley, burning farms and robbing anyone they meet. The roads are not safe.",
 		Ended:    "🗡️ **%s** has scattered the Bloody Mummers! The roads are safe again, or as safe as they get.",
 		Fade:     "The Bloody Mummers have taken their loot and gone to sell their swords to someone else.",

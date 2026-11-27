@@ -62,4 +62,5 @@ var (
 	schemeIndex    = newIndex(&SchemeDefs, func(s SchemeDef) string { return s.Key })
 	sectorIndex    = newIndex(&SectorDefs, func(d SectorDef) SectorKey { return d.Key })
 	arcIndex       = newIndex(&Arcs, func(a ArcDef) string { return a.Key })
+	titleIndex     = newIndex(&TitleDefs, func(t TitleDef) string { return t.Key })
 )

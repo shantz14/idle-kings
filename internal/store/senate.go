@@ -587,6 +587,9 @@ type MatterResolution struct {
 	DayLength    time.Duration // how long a follow-up "day" is
 	Opinions     []game.OpinionChange
 	OpinionDecay float64 // share of every opinion kept (applied before Opinions); 0 = no decay
+	// SenateDay counts the matter toward the season and fades influence
+	// (game.InfluenceDecay) before Deltas. False for petitions and bills.
+	SenateDay bool
 }
 
 // ResolveMatter applies a decision once: realm, players, follow-ups.
@@ -626,6 +629,11 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 	}
 	if r.Fallen {
 		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = ? WHERE guild_id = ?`, courtFallen, m.GuildID); err != nil {
+			return err
+		}
+	}
+	if r.SenateDay {
+		if err := senateDay(ctx, tx, m.GuildID); err != nil {
 			return err
 		}
 	}

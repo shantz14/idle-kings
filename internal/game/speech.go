@@ -69,7 +69,7 @@ func SpeechGoalName(g Goal) string {
 
 // ---- numbers (placeholders to tune) ----
 
-var speechCheck = Check{Base: 15, Weights: map[Attr]float64{AttrDiplomacy: 4, AttrRenown: 1}}
+var speechCheck = Check{Base: 15, Weights: map[Attr]float64{AttrDiplomacy: 4, AttrRenown: 2}}
 
 const (
 	speechGreatMargin = 30
@@ -92,7 +92,7 @@ const (
 
 // HeckleChance is the heckler's percent chance to win the exchange.
 func HeckleChance(heckler, speaker Sheet) int {
-	f := 50 + 5*(heckler[AttrDiplomacy]-speaker[AttrDiplomacy]) + 0.5*(heckler[AttrRenown]-speaker[AttrRenown])
+	f := 50 + 5*(heckler[AttrDiplomacy]-speaker[AttrDiplomacy]) + 1.5*(heckler[AttrRenown]-speaker[AttrRenown])
 	return int(math.Max(MinChance, math.Min(MaxChance, f)))
 }
 

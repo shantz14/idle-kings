@@ -120,9 +120,10 @@ func (c Character) EstateValue() float64 {
 	return game.EstateValue(c.Items) + game.MonumentValue(c.Monuments)
 }
 
-// VoteWeight is how much this character's vote counts in the Senate.
+// VoteWeight is how much this character's vote counts in the Senate:
+// influence, items and monuments, the Landed Franchise, and renown.
 func (c Character) VoteWeight() float64 {
-	return c.Influence + c.Effects().VoteWeight + game.FranchiseWeight(c.EstateValue(), c.Laws)
+	return c.Influence + c.Effects().VoteWeight + game.FranchiseWeight(c.EstateValue(), c.Laws) + game.RenownWeight(c.Renown)
 }
 
 // TotalIncome is gold per day: base income, estate items and ventures,

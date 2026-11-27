@@ -142,7 +142,7 @@ func (b *Bot) investAmountPanel(ctx context.Context, c store.Character, key game
 // roll, so it's shown; the deal odds never are.
 func investView(c store.Character, st store.RealmState, key game.SectorKey, own *pieCard, busy, note string, dur time.Duration) *discordgo.InteractionResponseData {
 	intro := "Put gold into one of the realm's industries. It grows the sector and buys you a share of what it earns every day; " +
-		"how big a share depends on how well you negotiate."
+		"how big a share depends on how well you negotiate. An industry that has already grown far past its old size grows less for each new coin."
 	e := actionEmbed(game.KindInvest, withNote(busyNote(busy, note), intro))
 	e.Fields = []*discordgo.MessageEmbedField{
 		fact("Deal takes", humanDuration(dur)),
@@ -176,6 +176,9 @@ func investView(c store.Character, st store.RealmState, key game.SectorKey, own 
 			fact("Earns", game.Num(st.Sectors.Revenue(d, st.Trackers, st.Laws))+" gold/day"),
 			fact("Condition", st.Sectors.Condition(d, st.Trackers, st.Laws)),
 		}}
+	if grown := st.Sectors[d.Key].Capacity; grown >= 2*d.BaseRevenue {
+		card.Description += "\n\n" + quote("📈 It has grown far past its old size: new money grows it less than it used to.")
+	}
 	if v, ok := c.Ventures[d.Key]; ok {
 		card.Fields = append(card.Fields, fact("You own", fmt.Sprintf("%s · %s gold/day", pct(v.Share), game.Num(v.Income))))
 	}
@@ -245,7 +248,7 @@ func (b *Bot) resolveInvest(ctx context.Context, a store.Activity, now time.Time
 	}
 	res := game.Invest(b.rng, c.Sheet(), d, a.Spend)
 	inv := store.Investment{ActivityID: a.ID, CharacterID: c.ID, GuildID: c.GuildID, Sector: d.Key,
-		Stake: res.Stake, Capacity: res.Capacity}
+		Stake: res.Stake, Gold: a.Spend}
 	inv.Delta = res.Practice
 	if res.Exposed {
 		inv.Delta.Merge(game.ExposedDelta)

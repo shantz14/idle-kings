@@ -78,6 +78,27 @@ func OpinionPriceFactor(op float64) float64 { return 1 - ClampOpinion(op)/200 }
 // half at -100.
 func OpinionOfferFactor(op float64) float64 { return 1 + ClampOpinion(op)/200 }
 
+// Senators treat a famous house a little better than their opinion alone
+// says: +1 per regardPer renown, at most regardMax. It's hidden, and the
+// opinion shown to players doesn't include it.
+const (
+	regardPer = 10.0
+	regardMax = 25.0
+)
+
+// RenownRegard is the hidden warmth renown earns with every senator.
+func RenownRegard(renown float64) float64 {
+	return math.Min(regardMax, math.Max(renown, 0)/regardPer)
+}
+
+// Regard is a senator's opinion of a player plus the warmth of their renown:
+// what prices their bribes, what the senator pays for their vote, and how
+// well courting and asking go. Pass it wherever opinion prices a deal.
+func Regard(op, renown float64) float64 { return ClampOpinion(op + RenownRegard(renown)) }
+
+// sheetRenown is the renown on a sheet, in shown units.
+func sheetRenown(s Sheet) float64 { return s[AttrRenown] * RenownScale }
+
 // OpinionCheckMod is the success bonus, in percent, for checks against a
 // senator: ±20 at the extremes.
 func OpinionCheckMod(op float64) float64 { return ClampOpinion(op) / 5 }
@@ -193,7 +214,7 @@ type Approach struct {
 var Approaches = []Approach{
 	{
 		Key: "flatter", Name: "Flatter", Description: "Praise their speeches and their family. Uses Diplomacy. Traditionalists enjoy it; schemers see through it.",
-		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrRenown: 0.5}},
+		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrRenown: 1.5}},
 		Likes:    map[Trait]float64{TraitConservative: 10, TraitPopulist: 5, TraitPious: 5, TraitScheming: -10, TraitIncorruptible: -5},
 		Practice: Diplomacy,
 	},
@@ -214,7 +235,7 @@ var Approaches = []Approach{
 	},
 	{
 		Key: "war", Name: "Talk Strategy", Description: "Talk soldiers, borders and old campaigns. Uses Martial. Hawks love it; doves hate it.",
-		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrMartial: 5, AttrRenown: 0.5}},
+		Check:    Check{Base: 20, Weights: map[Attr]float64{AttrMartial: 5, AttrRenown: 1.5}},
 		Likes:    map[Trait]float64{TraitHawk: 15, TraitIsolationist: 5, TraitStern: 5, TraitDove: -15, TraitCosmopolitan: -5},
 		Practice: Martial,
 	},
@@ -284,7 +305,7 @@ func ResolveCourt(r Roller, in CourtInput) CourtResult {
 
 func resolveCourt(r Roller, in CourtInput) CourtResult {
 	s, a := in.Senator, in.Approach
-	ok, margin := a.Check.Roll(r, in.Player.Sheet, CourtMod(a, s, in.Opinion), Normal)
+	ok, margin := a.Check.Roll(r, in.Player.Sheet, CourtMod(a, s, Regard(in.Opinion, sheetRenown(in.Player.Sheet))), Normal)
 	scale := 1.0
 	if in.Opinion > 0 {
 		scale = 1 - in.Opinion/150

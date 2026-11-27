@@ -339,3 +339,36 @@ CREATE TABLE IF NOT EXISTS happenings (
 );
 CREATE INDEX IF NOT EXISTS happenings_open ON happenings (ended_at, ends_at);
 CREATE INDEX IF NOT EXISTS happenings_guild ON happenings (guild_id, ended_at);
+CREATE INDEX IF NOT EXISTS activities_guild_kind ON activities (guild_id, kind, resolved_at);
+
+-- Seasons: SeasonDays Senate days each. senate_days counts this season's.
+CREATE TABLE IF NOT EXISTS seasons (
+    guild_id    TEXT PRIMARY KEY REFERENCES courts(guild_id),
+    season      INTEGER NOT NULL DEFAULT 1,
+    senate_days INTEGER NOT NULL DEFAULT 0
+);
+
+-- What the season's deed titles count (game.Deed…): duels won, votes on the
+-- winning side, gold given to a realm in danger.
+CREATE TABLE IF NOT EXISTS deeds (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL REFERENCES courts(guild_id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    kind         TEXT NOT NULL,
+    amount       REAL NOT NULL,
+    season       INTEGER NOT NULL,
+    at           INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS deeds_season ON deeds (guild_id, season, kind);
+
+-- Titles held (game.TitleDefs). season is 0 for a feat, earned once.
+CREATE TABLE IF NOT EXISTS titles (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL REFERENCES courts(guild_id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    key          TEXT NOT NULL,
+    season       INTEGER NOT NULL,
+    earned_at    INTEGER NOT NULL,
+    UNIQUE (character_id, key, season)
+);
+CREATE INDEX IF NOT EXISTS titles_character ON titles (character_id);

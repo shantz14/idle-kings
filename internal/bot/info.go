@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -43,7 +42,7 @@ func (b *Bot) onInfoCommand(ctx context.Context, i *discordgo.InteractionCreate,
 		}
 		show(b.realmPage(ctx, c.GuildID, viewer))
 	case "players":
-		show(b.playersPage(ctx, c.GuildID))
+		show(b.playersPage(ctx, c.GuildID, boardInfluence))
 	case "profile":
 		target := c
 		if uid := optString(i, "player"); uid != "" && uid != c.UserID {
@@ -70,6 +69,12 @@ func (b *Bot) onInfo(ctx context.Context, i *discordgo.InteractionCreate, parts 
 			n = int(atoi(parts[1]))
 		}
 		b.update(i, helpPage(n))
+	case "board":
+		c, ok := b.myCharacter(ctx, i)
+		if !ok || len(parts) < 2 {
+			return
+		}
+		b.update(i, b.playersPage(ctx, c.GuildID, parts[1]))
 	case "profile":
 		vals := i.MessageComponentData().Values
 		if len(vals) == 0 {
@@ -197,35 +202,6 @@ func (b *Bot) realmPage(ctx context.Context, guildID string, viewer int64) *disc
 
 // ---- players ----
 
-func (b *Bot) playersPage(ctx context.Context, guildID string) *discordgo.InteractionResponseData {
-	chars, err := b.store.CharactersInCourt(ctx, guildID)
-	if err != nil || len(chars) == 0 {
-		return noteView("Nobody has joined the court yet.", colorMuted)
-	}
-	sort.Slice(chars, func(a, c int) bool { return chars[a].VoteWeight() > chars[c].VoteWeight() })
-	sen, _ := b.store.Senators(ctx, guildID)
-	total := senateTotalOf(sen, chars)
-	var sb strings.Builder
-	var opts []discordgo.SelectMenuOption
-	for n, c := range chars {
-		role, _ := game.RoleByKey(c.Role)
-		bg, _ := game.BackgroundByKey(c.Background)
-		fmt.Fprintf(&sb, "**%d.** %s **%s** · %s\n*Influence %s (%s%% of the Senate) · Renown %s · Estate %s*\n\n",
-			n+1, c.Crest.Emoji(), c.FullName(), role.Name, game.Num(c.Influence),
-			game.Num(percentOf(c.VoteWeight(), total)), game.Num(c.Renown), game.Num(c.EstateValue()))
-		if len(opts) < 25 {
-			opts = append(opts, discordgo.SelectMenuOption{Label: truncate(c.FullName(), 100), Value: fmt.Sprint(c.ID),
-				Description: truncate(role.Name+" · "+bg.Name, 100)})
-		}
-	}
-	return &discordgo.InteractionResponseData{
-		Embeds: []*discordgo.MessageEmbed{{Title: titled(emojiCourt, "The Court"), Description: truncate(sb.String(), 4000), Color: colorPanel,
-			Footer: footer("Ranked by weight in the Senate.")}},
-		Components: []discordgo.MessageComponent{row(discordgo.SelectMenu{
-			MenuType: discordgo.StringSelectMenu, CustomID: "info:profile", Placeholder: "Open a profile…", Options: opts})},
-	}
-}
-
 // profileEmbed is a player's public profile; private adds stats and gold.
 func (b *Bot) profileEmbed(ctx context.Context, c store.Character, private bool) *discordgo.MessageEmbed {
 	role, _ := game.RoleByKey(c.Role)
@@ -270,6 +246,11 @@ func (b *Bot) profileEmbed(ctx context.Context, c store.Character, private bool)
 	}
 	if f := monumentsField(c); f != nil {
 		e.Fields = append(e.Fields, f)
+	}
+	if ts, err := b.store.TitlesOf(ctx, []int64{c.ID}); err == nil {
+		if f := titlesField(ts[c.ID]); f != nil {
+			e.Fields = append(e.Fields, f)
+		}
 	}
 	if private {
 		e.Fields = append(e.Fields,
@@ -327,6 +308,10 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 	if eff.VoteWeight != 0 {
 		weight += fmt.Sprintf("\n*+%s vote weight from estate*", game.Num(eff.VoteWeight))
 	}
+	if rw := game.RenownWeight(c.Renown); rw >= 0.05 {
+		weight += fmt.Sprintf("\n*+%s vote weight from renown*", game.Num(rw))
+	}
+	weight += "\n*Fades a little each Senate day if you rest on it.*"
 	income := fmt.Sprintf("%d gold/day", c.TotalIncome())
 	if eff.DailyIncome != 0 || c.VentureIncome > 0 {
 		parts := []string{fmt.Sprintf("%d base", c.DailyIncome)}
@@ -363,6 +348,11 @@ func (b *Bot) characterPage(ctx context.Context, c store.Character, back bool) *
 	}
 	if f := monumentsField(c); f != nil {
 		e.Fields = append(e.Fields, f)
+	}
+	if ts, err := b.store.TitlesOf(ctx, []int64{c.ID}); err == nil {
+		if f := titlesField(ts[c.ID]); f != nil {
+			e.Fields = append(e.Fields, f)
+		}
 	}
 	btns := []discordgo.MessageComponent{withEmoji(button("Estate", "menu:estate", discordgo.SecondaryButton, false), emojiEstate)}
 	if back {
@@ -411,12 +401,14 @@ var helpPages = []struct{ title, body string }{
 	{"Welcome to Idle Kings", "You belong to one of the great families at the court of the Republic. " +
 		"Grow your **influence**, your family's **renown** and your **gold** through parties, deals and votes in the Senate.\n\n" +
 		"⏳ Most things take real time: a party lasts two hours, and the Senate meets once a day. Start something, then come back later.\n\n" +
-		"⚠️ The realm is shared. If it goes bankrupt, loses its army, falls into lawlessness or rises against the Senate, **everyone loses**."},
+		"🏆 Every **season** (" + fmt.Sprint(game.SeasonDays) + " Senate days) the court crowns its leaders: the **Great House** (most prestige), the **Master of Coin** (the richest), the **Champion of the Arena** (most duels won) and more. " +
+		"Titles are kept for good. Great deeds, like slaying a beast abroad in the realm, earn titles of their own. See `/players`.\n\n" +
+		"⚠️ The realm is shared. If it goes bankrupt, loses its army, falls into lawlessness or rises against the Senate, **everyone loses**, and nobody is crowned that season."},
 	{"Your character", "**Stats** decide your odds whenever you try something. Rolls happen in the background and are never shown.\n" +
 		"• **Diplomacy**: parties and persuasion\n• **Martial**: soldiers and guards\n• **Stewardship**: money\n" +
 		"• **Intrigue**: rumors and schemes\n• **Prowess**: your own sword arm\n\n" +
-		"**Influence** is your weight in the Senate. Newcomers barely count; with enough, your vote decides matters.\n" +
-		"**Renown** is your family's fame. **Gold** comes in as **income** every real day.\n" +
+		"**Influence** is your weight in the Senate. Newcomers barely count; with enough, your vote decides matters. It fades a little each Senate day, so keep at it, and it comes harder the more you have.\n" +
+		"**Renown** is your family's fame. Senators treat famous houses better, it helps your parties, speeches and hunts, it adds a little Senate weight, and the grandest houses only sell to families of renown. **Gold** comes in as **income** every real day.\n" +
 		"**Estate** is your home and possessions. Its value helps your parties, and many pieces have small bonuses of their own."},
 	{"Actions and parties", "Open your actions with `/court`, in the server or in a DM with me.\n\n" +
 		"🎭 **Throw a Party** (Diplomacy): pick a goal, Make Friends or Talk Business. Two hours, announced to the court, and others can attend. " +

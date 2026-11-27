@@ -166,6 +166,9 @@ func shopLine(it game.Item, note string, laws game.Laws) string {
 		s += fmt.Sprintf(" (%s)", it.Tier)
 	}
 	s += fmt.Sprintf(" — **%d gold**", it.PriceUnder(laws))
+	if need := game.RenownNeeded(it); need > 0 {
+		s += fmt.Sprintf(" · 👑 %s renown", game.Num(need))
+	}
 	if note != "" {
 		s += " · *" + note + "*"
 	}
