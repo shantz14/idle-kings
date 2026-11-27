@@ -39,6 +39,7 @@ internal/bot     Discord: commands.go (registration + dispatch), creator, menu, 
 Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init` (`componentRoutes["hunt"] = (*Bot).onHunt`, `modalRoutes` for modals; see `routes.go`), and documents its IDs at the top. Handlers always get at least one part. `limits_test.go` fails on any tested button with no route.
 
 ## Conventions
+- Popup style lives in `internal/bot/embeds.go`: pick colors by meaning (`colorPanel`, `colorGood`/`colorBad` via `resultColor`, `colorNotice` for DMs that ask for a decision, `colorSecret` for private schemes, `colorSenate`, `colorMuted` for closed/small replies). Title action panels with `actionEmbed(kind, …)` (emoji from `ActionDef.Emoji`), put numbers in inline `fact` fields, status lines on top with `withNote(busyNote(busy, note), …)`, small print in `footer`, outcomes with `withDelta`/`effects`, timestamps with `relTime`. Confirm a started action with `startedView`, DM results with `dmNote`/`dmNotices`, and one-line answers with `b.reply`/`noteView` (never bare `Content`). Buttons: Primary chooses, Success commits a spend, Danger is hostile or irreversible, Secondary navigates (`backTo`).
 - Content and numbers are Go data in `internal/game`; keep it data-driven.
 - Rolls are hidden from players; never show chances in Discord.
 - Stats are stored and shown ×`game.StatScale` (5): characters start at 10, gear gives +5 to +15. `NewSheet` divides by it, so `Check` weights and the duel formula are per 5 shown points. Write stat bonuses, rewards and practice in shown units.
@@ -68,6 +69,7 @@ Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init
 go vet ./... && go test ./...
 IDLE_KINGS_SIM=1 go test ./internal/game -run TestBalance -v   # after changing Senate events/numbers
 ```
+`IDLE_KINGS_VIEWS=/tmp/views.txt go test ./internal/bot` writes every tested popup as text, to review wording and layout without Discord.
 `internal/bot/limits_test.go` checks every popup against Discord's component and embed limits; add new views to it.
 The bot can't be exercised without Isaac's token. Run it with `IDLE_KINGS_FAST=1 DISCORD_TOKEN=... go run ./cmd/idle-kings` (short timers).
 
