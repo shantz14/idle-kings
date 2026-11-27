@@ -15,15 +15,15 @@ type Role struct {
 // Roles is the list offered in the character creator. Placeholder numbers.
 var Roles = []Role{
 	{Key: "cupbearer", Name: "Cupbearer", Description: "Pours the wine and hears everything said over it.",
-		StatBonus: Stats{Intrigue: 5, Diplomacy: 5}, Influence: 8, Salary: 8},
+		StatBonus: Stats{Intrigue: 5, Diplomacy: 5}, Influence: 8, Salary: 16},
 	{Key: "officer", Name: "Officer", Description: "A junior commander with soldiers who answer to them.",
-		StatBonus: Stats{Martial: 10}, Influence: 6, Salary: 10},
+		StatBonus: Stats{Martial: 10}, Influence: 6, Salary: 20},
 	{Key: "merchant", Name: "Merchant", Description: "Trades on behalf of the court, and on their own behalf too.",
-		StatBonus: Stats{Stewardship: 10}, Influence: 4, Salary: 12},
+		StatBonus: Stats{Stewardship: 10}, Influence: 4, Salary: 24},
 	{Key: "emissary", Name: "Foreign Emissary", Description: "Speaks for the Republic to foreign powers.",
-		StatBonus: Stats{Diplomacy: 10}, Influence: 7, Salary: 9},
+		StatBonus: Stats{Diplomacy: 10}, Influence: 7, Salary: 18},
 	{Key: "scribe", Name: "Scribe", Description: "Keeps the records, and knows which ones went missing.",
-		StatBonus: Stats{Stewardship: 5, Intrigue: 5}, Influence: 6, Salary: 8},
+		StatBonus: Stats{Stewardship: 5, Intrigue: 5}, Influence: 6, Salary: 16},
 }
 
 // RoleByKey looks up a role.

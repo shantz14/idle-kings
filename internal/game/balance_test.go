@@ -99,7 +99,7 @@ func TestBalance(t *testing.T) {
 			}
 			survivors++
 			for _, d := range SectorDefs {
-				sectorEnd[d.Key] += sectors.Revenue(d, realm, nil) / d.BaseRevenue
+				sectorEnd[d.Key] += sectors.Revenue(d, realm, nil) / (d.BaseRevenue * IncomeScale)
 			}
 		}
 	}

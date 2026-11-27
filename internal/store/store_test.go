@@ -113,7 +113,7 @@ func TestPayIncome(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.GetCharacterByID(ctx, c.ID)
-	if got.Wealth != c.Wealth+2*c.TotalIncome() || c.TotalIncome() != 12+3+3 {
+	if got.Wealth != c.Wealth+2*c.TotalIncome() || c.TotalIncome() != 24+3+3 {
 		t.Fatalf("wealth %d", got.Wealth)
 	}
 	_ = s.PayIncome(ctx, time.Now().Add(50*time.Hour)) // same day: nothing more

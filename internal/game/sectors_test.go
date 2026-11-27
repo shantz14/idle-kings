@@ -58,12 +58,12 @@ func TestVentureIncome(t *testing.T) {
 	realm := Realm{AttrPopularity: 50, AttrStability: 50, AttrForeign: 50, AttrMilitary: 50}
 	mine := Stakes{SectorAgriculture: 300}
 	got := VentureIncome(s, realm, nil, mine, Stakes{SectorAgriculture: 300})
-	if !near(got, 0.2*50) {
+	if !near(got, 0.2*50*IncomeScale) {
 		t.Fatalf("income %v", got)
 	}
 	// A shock halves it.
 	s.Apply(map[SectorKey]SectorChange{SectorAgriculture: {Health: -0.5}})
-	if !near(VentureIncome(s, realm, nil, mine, Stakes{SectorAgriculture: 300}), 0.2*25) {
+	if !near(VentureIncome(s, realm, nil, mine, Stakes{SectorAgriculture: 300}), 0.2*25*IncomeScale) {
 		t.Fatal("shock")
 	}
 }
@@ -123,7 +123,7 @@ func TestInvestTiers(t *testing.T) {
 	}
 }
 
-// A fair deal in a steady sector should pay for itself in about a month.
+// A fair deal in a steady sector should pay for itself in about two weeks.
 func TestInvestPayback(t *testing.T) {
 	realm := StartingRealm()
 	for _, d := range SectorDefs {
@@ -131,7 +131,7 @@ func TestInvestPayback(t *testing.T) {
 		s.Apply(map[SectorKey]SectorChange{d.Key: {Capacity: 100 * d.Growth}})
 		inc := VentureIncome(s, realm, nil, Stakes{d.Key: 100}, Stakes{d.Key: 100})
 		days := 100 / inc
-		if days < 15 || days > 40 {
+		if days < 8 || days > 20 {
 			t.Errorf("%s: 100 gold pays back in %.0f days", d.Key, days)
 		}
 	}

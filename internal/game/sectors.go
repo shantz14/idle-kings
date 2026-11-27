@@ -117,6 +117,11 @@ const (
 	trackerModMax = 1.5
 )
 
+// IncomeScale is how many gold a day each point of capacity earns. Raising
+// it pays every industry more, in running games too, without changing how
+// big a Senate event's capacity change is next to the sector.
+const IncomeScale = 2.0
+
 // SectorState is every sector in a realm.
 type SectorState map[SectorKey]Sector
 
@@ -190,7 +195,7 @@ func (d SectorDef) Modifier(realm Realm) float64 {
 // Revenue is the sector's gold per day, before it is split between owners.
 func (s SectorState) Revenue(d SectorDef, realm Realm, laws Laws) float64 {
 	sec := s[d.Key]
-	return sec.Capacity * sec.Health * d.Modifier(realm) * LawRevenue(laws, d.Key)
+	return sec.Capacity * sec.Health * d.Modifier(realm) * LawRevenue(laws, d.Key) * IncomeScale
 }
 
 // Condition is a sector's fortunes in a word, relative to its capacity.
@@ -352,7 +357,7 @@ func DescribeChanges(ch map[SectorKey]SectorChange) string {
 			parts = append(parts, fmt.Sprintf("%s %s %s%%", d.Emoji, d.Name, signed(c.Health*100)))
 		}
 		if c.Capacity != 0 {
-			parts = append(parts, fmt.Sprintf("%s %s %s gold/day for good", d.Emoji, d.Name, signed(c.Capacity)))
+			parts = append(parts, fmt.Sprintf("%s %s %s gold/day for good", d.Emoji, d.Name, signed(c.Capacity*IncomeScale)))
 		}
 	}
 	return strings.Join(parts, " · ")
