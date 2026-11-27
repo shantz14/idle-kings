@@ -343,8 +343,13 @@ func previewLine(bd game.Build) string {
 func statsBlock(st game.Stats, extra map[game.Stat]string) string {
 	var sb strings.Builder
 	sb.WriteString("```\n")
+	// Pad numbers to the widest one so the bars line up (22.8 is wider than 10).
+	width := 0
 	for _, s := range game.AllStats {
-		fmt.Fprintf(&sb, "%-12s %2s  %-10s %s\n", s, game.Num(st[s]), strings.Repeat("■", int(st[s]/game.StatScale)), extra[s])
+		width = max(width, len(game.Num(st[s])))
+	}
+	for _, s := range game.AllStats {
+		fmt.Fprintf(&sb, "%-12s %-*s  %-10s %s\n", s, width, game.Num(st[s]), strings.Repeat("■", int(st[s]/game.StatScale)), extra[s])
 	}
 	sb.WriteString("```")
 	return sb.String()
