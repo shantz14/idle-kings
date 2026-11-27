@@ -224,10 +224,22 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 			sellOpts = append(sellOpts, opt)
 		}
 	}
+	// Properties and estate goods by kind; the armory's weapons, armor and
+	// mounts together in one field.
+	var armory []string
 	for _, k := range game.Kinds {
-		if lines := byKind[k.Kind]; len(lines) > 0 {
+		lines := byKind[k.Kind]
+		switch {
+		case len(lines) == 0:
+		case k.Section == game.SectionArmory:
+			armory = append(armory, lines...)
+		default:
 			e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: k.Emoji + " " + k.Name, Value: joinLines(lines, 1000)})
 		}
+	}
+	if len(armory) > 0 {
+		sec, _ := game.SectionByKey(game.SectionArmory)
+		e.Fields = append(e.Fields, &discordgo.MessageEmbedField{Name: sec.Emoji + " " + sec.Name, Value: joinLines(armory, 1000)})
 	}
 	if f := venturesField(c, true); f != nil {
 		e.Fields = append(e.Fields, f)

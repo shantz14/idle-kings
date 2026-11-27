@@ -65,22 +65,57 @@ const (
 	KindEquipment  ItemKind = "equipment"
 )
 
-// KindInfo is how a kind is shown.
-type KindInfo struct {
-	Kind  ItemKind
-	Name  string // plural, for headings
+// Section is where a kind of item lives: a shop tab, a market pool and a
+// part of the estate page.
+type Section string
+
+const (
+	SectionProperties Section = "props"
+	SectionGoods      Section = "goods"  // art, artifacts, relics, keepsakes
+	SectionArmory     Section = "armory" // weapons, armor and mounts
+)
+
+// SectionInfo is how a section is shown.
+type SectionInfo struct {
+	Key   Section
+	Name  string
 	Emoji string
+	Intro string // the shop tab's blurb
 }
 
+var Sections = []SectionInfo{
+	{SectionProperties, "Properties", "🏠", "Houses, villas, palaces and castles. You can own several; you live in one, and that's where you throw your parties."},
+	{SectionGoods, "Estate Goods", "🏺", "Art, artifacts, war relics and keepsakes for your halls."},
+	{SectionArmory, "Armory", "⚔️", "Weapons, armor and mounts. They make you deadlier in duels, on hunts and on the road."},
+}
+
+func SectionByKey(k Section) (SectionInfo, bool) {
+	for _, s := range Sections {
+		if s.Key == k {
+			return s, true
+		}
+	}
+	return SectionInfo{}, false
+}
+
+// KindInfo is how a kind is shown.
+type KindInfo struct {
+	Kind    ItemKind
+	Name    string // plural, for headings
+	Emoji   string
+	Section Section
+}
+
+// Kinds is in display order, grouped by section.
 var Kinds = []KindInfo{
-	{KindProperty, "Properties", "🏠"},
-	{KindArt, "Art", "🖼️"},
-	{KindArtifact, "Artifacts", "🏺"},
-	{KindRelic, "War relics", "🚩"},
-	{KindWeapon, "Weapons", "⚔️"},
-	{KindArmor, "Armor", "🛡️"},
-	{KindEquipment, "Equipment", "🐎"},
-	{KindPossession, "Keepsakes", "📦"},
+	{KindProperty, "Properties", "🏠", SectionProperties},
+	{KindArt, "Art", "🖼️", SectionGoods},
+	{KindArtifact, "Artifacts", "🏺", SectionGoods},
+	{KindRelic, "War relics", "🚩", SectionGoods},
+	{KindPossession, "Keepsakes", "📦", SectionGoods},
+	{KindWeapon, "Weapons", "⚔️", SectionArmory},
+	{KindArmor, "Armor", "🛡️", SectionArmory},
+	{KindEquipment, "Mounts and equipment", "🐎", SectionArmory},
 }
 
 func KindByKey(k ItemKind) KindInfo {
@@ -89,7 +124,7 @@ func KindByKey(k ItemKind) KindInfo {
 			return ki
 		}
 	}
-	return KindInfo{k, string(k), "📦"}
+	return KindInfo{k, string(k), "📦", SectionGoods}
 }
 
 // Shelf is where the shop sells an item.
@@ -135,6 +170,9 @@ type Item struct {
 }
 
 func (it Item) IsProperty() bool { return it.Kind == KindProperty }
+
+// Section is the shop tab and estate section the item belongs to.
+func (it Item) Section() Section { return KindByKey(it.Kind).Section }
 
 // SellBackRate is the share of an item's price the shop pays to buy it back.
 const SellBackRate = 0.6
@@ -189,7 +227,7 @@ var Items = []Item{
 	{Key: "signet_ring", Name: "Ancestral Signet Ring", Kind: KindPossession, Value: 4, Price: 60,
 		Description: "The seal of your house, older than the Republic.",
 		Effects:     Effects{Stats: Stats{Diplomacy: 5}}},
-	{Key: "fathers_sword", Name: "Father's Sword", Kind: KindPossession, Value: 3, Price: 45,
+	{Key: "fathers_sword", Name: "Father's Sword", Kind: KindWeapon, Value: 3, Price: 45,
 		Description: "Plain, well kept, and notched from three campaigns.",
 		Effects:     Effects{Stats: Stats{Prowess: 5}}},
 	{Key: "ledger", Name: "Ledger of Debts", Kind: KindPossession, Value: 3, Price: 60,
@@ -207,7 +245,7 @@ var Items = []Item{
 	{Key: "tapestry", Name: "Exotic Tapestry", Kind: KindPossession, Value: 6, Price: 90,
 		Description: "A woven hunting scene from your homeland. Guests always ask about it.",
 		Effects:     Effects{PartyBonus: 3}},
-	{Key: "warhorse", Name: "Prize Warhorse", Kind: KindPossession, Value: 5, Price: 80,
+	{Key: "warhorse", Name: "Prize Warhorse", Kind: KindEquipment, Value: 5, Price: 80,
 		Description: "A tall gray stallion, the envy of every officer in the city.",
 		Effects:     Effects{Stats: Stats{Martial: 5}}},
 	{Key: "rudis", Name: "The Wooden Sword of Freedom", Kind: KindPossession, Value: 3, Price: 45,

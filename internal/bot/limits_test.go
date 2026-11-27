@@ -345,7 +345,7 @@ func TestEstateViewsFitDiscord(t *testing.T) {
 		}
 	}
 	for _, c := range []store.Character{rich, poor} {
-		for _, tab := range []string{shopProps, shopGoods} {
+		for _, tab := range []string{shopProps, shopGoods, shopArmory} {
 			checkLimits(t, "shop "+tab, shopView(c, st, tab, "a note"))
 		}
 		for _, it := range game.Items {

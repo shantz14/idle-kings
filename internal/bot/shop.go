@@ -17,13 +17,14 @@ func init() {
 }
 
 // Shop custom IDs:
-//   shop:open:<tab>     the shop, on a tab (props | goods)
+//   shop:open:<tab>     the shop, on a tab (a game.Section: props | goods | armory)
 //   shop:pick:<tab>     (select) an item → its detail view
 //   shop:buy:<key>      buy it
 
 const (
-	shopProps = "props"
-	shopGoods = "goods"
+	shopProps  = string(game.SectionProperties)
+	shopGoods  = string(game.SectionGoods)
+	shopArmory = string(game.SectionArmory)
 )
 
 func (b *Bot) onShop(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
@@ -101,11 +102,14 @@ func (b *Bot) shopPanel(ctx context.Context, c store.Character, tab, note string
 }
 
 func shopView(c store.Character, st shopState, tab, note string) *discordgo.InteractionResponseData {
-	wantProps := tab != shopGoods
+	sec, ok := game.SectionByKey(game.Section(tab))
+	if !ok {
+		sec = game.Sections[0]
+	}
 	var fixed, market []string
 	var opts []discordgo.SelectMenuOption
 	for _, it := range st.stock {
-		if it.IsProperty() != wantProps {
+		if it.Section() != sec.Key {
 			continue
 		}
 		o := st.ownerNote(it, c.ID)
@@ -122,12 +126,7 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 			fixed = append(fixed, line)
 		}
 	}
-	title, other, otherTab := "The Shop: Properties", "Possessions", shopGoods
-	intro := "Houses, villas, palaces and castles. You can own several; you live in one, and that's where you throw your parties."
-	if !wantProps {
-		title, other, otherTab = "The Shop: Possessions", "Properties", shopProps
-		intro = "Art, artifacts, war relics, weapons, armor and equipment. Weapons and armor make you deadlier in duels and hunts."
-	}
+	title, intro := "The Shop: "+sec.Name, sec.Intro
 	desc := fmt.Sprintf("%s\n\nNamed pieces are one of a kind: once someone owns one, nobody else can buy it until they sell it. "+
 		"Today's market changes <t:%d:R>.\n\nYou have **%d gold**.", intro, st.ends.Unix(), c.Wealth)
 	if note != "" {
@@ -145,11 +144,17 @@ func shopView(c store.Character, st shopState, tab, note string) *discordgo.Inte
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "shop:pick:" + tab,
 			Placeholder: "Take a closer look…", Options: opts}))
 	}
-	comps = append(comps, row(
-		button(other, "shop:open:"+otherTab, discordgo.PrimaryButton, false),
+	var nav []discordgo.MessageComponent
+	for _, s := range game.Sections {
+		if s.Key != sec.Key {
+			nav = append(nav, button(s.Emoji+" "+s.Name, "shop:open:"+string(s.Key), discordgo.PrimaryButton, false))
+		}
+	}
+	nav = append(nav,
 		button("My Estate", "estate:view", discordgo.SecondaryButton, false),
 		button("Back", "menu:home", discordgo.SecondaryButton, false),
-	))
+	)
+	comps = append(comps, row(nav...))
 	return &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{e}, Components: comps}
 }
 
@@ -171,10 +176,7 @@ func (b *Bot) itemPanel(ctx context.Context, c store.Character, key, note string
 
 func itemView(c store.Character, st shopState, key, note string) *discordgo.InteractionResponseData {
 	it, ok := game.ItemByKey(key)
-	tab := shopGoods
-	if it.IsProperty() {
-		tab = shopProps
-	}
+	tab := string(it.Section())
 	back := button("Back to the shop", "shop:open:"+tab, discordgo.SecondaryButton, false)
 	if !ok {
 		return &discordgo.InteractionResponseData{Content: "That isn't for sale.", Components: []discordgo.MessageComponent{row(back)}}
@@ -249,10 +251,7 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 		defer b.leak(ctx, c, game.SecretMagic(c.FullName(), it.Name))
 	}
 	text := fmt.Sprintf("**%s** is yours.", it.Name)
-	tab := shopGoods
-	if it.IsProperty() {
-		tab = shopProps
-	}
+	tab := string(it.Section())
 	btns := []discordgo.MessageComponent{
 		button("Keep shopping", "shop:open:"+tab, discordgo.PrimaryButton, false),
 		button("My Estate", "estate:view", discordgo.SecondaryButton, false),

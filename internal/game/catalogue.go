@@ -106,19 +106,31 @@ var shopItems = []Item{
 	prop("camelot", "Camelot", TierCastle, 60, 8000, ShelfMarket, true, Effects{PartyBonus: 6, VoteWeight: 3},
 		"A shining castle with a round table where nobody sits at the head. Owning it makes some senators nervous."),
 
-	// ---------- possessions: always in stock ----------
+	// ---------- estate goods: always in stock ----------
 	good("painted_vase", "A Painted Vase", KindArt, 2, 40, ShelfFixed, false, Effects{},
 		"Pretty, well made, and exactly like the one your neighbor has."),
 	good("ancestor_bust", "Bronze Bust of an Ancestor", KindArt, 3, 90, ShelfFixed, false, Effects{PartyBonus: 1},
 		"A stern bronze face for the entrance hall. Guests feel watched, in a good way."),
+	good("magna_carta", "The Magna Carta", KindArtifact, 10, 1500, ShelfFixed, true, Effects{VoteWeight: 3},
+		"The great charter that told a king he wasn't above the law. Senators lower their voices near it."),
+	good("wine_cellar", "A Cellar of Fine Wine", KindPossession, 4, 250, ShelfFixed, false, Effects{PartyBonus: 1},
+		"Racks of good red from the southern hills. Guests stay later, and talk more."),
+	good("scroll_shelf", "A Shelf of Scrolls", KindPossession, 4, 450, ShelfFixed, false, Effects{Stats: Stats{Stewardship: 5}},
+		"Histories, treatises on farming and a merchant's guide to every port. Dull, and very useful."),
+
+	// ---------- armory: always in stock ----------
+	good("hunting_spear", "A Hunting Spear", KindWeapon, 2, 150, ShelfFixed, false, Effects{Stats: pro(3)},
+		"Ash shaft, iron head, a crossbar to stop the boar running up it."),
 	good("gladius", "Legionary's Gladius", KindWeapon, 3, 300, ShelfFixed, false, Effects{Stats: pro(5)},
 		"A short, well-balanced sword from the legion armories."),
 	good("damascus_blade", "A Damascus Steel Blade", KindWeapon, 5, 650, ShelfFixed, false, Effects{Stats: Stats{Prowess: 7, Martial: 5}},
 		"Watered steel from the eastern forges, patterned like smoke. It holds an edge through a whole campaign."),
 	good("mail_shirt", "Mail Shirt", KindArmor, 3, 350, ShelfFixed, false, Effects{Stats: pro(5)},
 		"Heavy, hot and worth every link when someone swings at you."),
-	good("magna_carta", "The Magna Carta", KindArtifact, 10, 1500, ShelfFixed, true, Effects{VoteWeight: 3},
-		"The great charter that told a king he wasn't above the law. Senators lower their voices near it."),
+	good("breastplate", "A Steel Breastplate", KindArmor, 5, 600, ShelfFixed, false, Effects{Stats: pro(6)},
+		"Polished steel from the city forges, fitted to you by a smith who knows his trade."),
+	good("destrier", "A Trained Destrier", KindEquipment, 5, 500, ShelfFixed, false, Effects{Stats: Stats{Prowess: 3, Martial: 5}},
+		"A heavy warhorse that doesn't flinch at steel or shouting."),
 
 	// ---------- the market: art ----------
 	good("mona_lisa", "The Mona Lisa", KindArt, 8, 500, ShelfMarket, true, Effects{PartyBonus: 2},
@@ -137,6 +149,17 @@ var shopItems = []Item{
 		"A map of the city that shows where everyone in it is, if you know the words.")),
 	magic(good("lyre_orpheus", "The Lyre of Orpheus", KindArt, 6, 400, ShelfMarket, true, Effects{PartyBonus: 2},
 		"It once charmed the lord of the dead. Your guests are easier.")),
+
+	good("laocoon", "The Laocoön", KindArt, 13, 1000, ShelfMarket, true, Effects{PartyBonus: 3},
+		"A priest and his sons wrestling sea serpents in marble. Guests can't look away."),
+	good("lamassu", "The Lamassu of Nimrud", KindArt, 10, 800, ShelfMarket, true, Effects{PartyBonus: 2},
+		"A winged bull with a king's bearded head, taller than two men. It guarded an Assyrian palace gate."),
+	good("book_of_kells", "The Book of Kells", KindArt, 9, 700, ShelfMarket, true, Effects{PartyBonus: 2, Stats: Stats{Stewardship: 5}},
+		"The gospels in gold and lapis, every page a maze of knots and beasts. Monks kept its accounts in the margins."),
+	good("terracotta_squad", "A Squad of the Terracotta Army", KindArt, 14, 1200, ShelfMarket, true, Effects{PartyBonus: 3, Stats: Stats{Martial: 5}},
+		"Twelve clay soldiers, no two faces alike, still standing in formation for a dead emperor."),
+	magic(good("dorian_gray", "The Portrait of Dorian Gray", KindArt, 11, 900, ShelfMarket, true, Effects{PartyBonus: 3, Stats: Stats{Diplomacy: 5}},
+		"A beautiful young man in oils. Keep it in the attic. Somehow you look younger every year.")),
 
 	// ---------- the market: artifacts ----------
 	good("iron_throne", "The Iron Throne", KindArtifact, 15, 1400, ShelfMarket, true, Effects{VoteWeight: 3},
@@ -166,6 +189,19 @@ var shopItems = []Item{
 	magic(good("one_ring", "The One Ring", KindArtifact, 15, 2000, ShelfMarket, true, Effects{Stats: Stats{Intrigue: 10}},
 		"Plain gold, warm to the touch, and very hard to take off. Nobody notices you when you wear it.")),
 
+	good("arkenstone", "The Arkenstone", KindArtifact, 16, 1500, ShelfMarket, true, Effects{PartyBonus: 4, VoteWeight: 1},
+		"The Heart of the Mountain, a white jewel that drinks the light. Dwarf kings went to war over it."),
+	magic(good("silmaril", "A Silmaril", KindArtifact, 17, 1600, ShelfMarket, true, Effects{PartyBonus: 3, VoteWeight: 2},
+		"A jewel holding the light of two lost trees. Every oath sworn over it has ended badly.")),
+	magic(good("philosophers_stone", "The Philosopher's Stone", KindArtifact, 12, 1600, ShelfMarket, true, Effects{DailyIncome: 10},
+		"Blood-red and heavier than it looks. Lead goes into your cellar and gold comes out.")),
+	good("golden_fleece", "The Golden Fleece", KindArtifact, 15, 1400, ShelfMarket, true, Effects{PartyBonus: 3, VoteWeight: 1},
+		"Stolen from a dragon at the edge of the world by a crew of heroes. It proves the right to rule."),
+	magic(good("pandoras_box", "Pandora's Box", KindArtifact, 9, 900, ShelfMarket, true, Effects{Stats: Stats{Intrigue: 5}, RumorNotice: 6},
+		"Never open it. You've opened it a little. Now you hear every secret in the city.")),
+	magic(good("aladdins_lamp", "Aladdin's Lamp", KindArtifact, 10, 1000, ShelfMarket, true, Effects{DailyIncome: 5, PartyBonus: 1},
+		"A dented brass lamp. Rub it and something vast and amused grants small favors, mostly gold.")),
+
 	// ---------- the market: war relics ----------
 	good("leonidas_shield", "The Shield of Leonidas", KindRelic, 10, 900, ShelfMarket, true, Effects{Stats: Stats{Martial: 5}, VoteWeight: 1},
 		"Come back with your shield, or on it. Three hundred stood behind this one."),
@@ -175,8 +211,17 @@ var shopItems = []Item{
 		"Carried over the mountains to the gates of Rome, and kept as a warning."),
 	good("napoleons_bicorne", "Napoleon's Bicorne", KindRelic, 6, 450, ShelfMarket, true, Effects{RumorNotice: 5, Stats: Stats{Martial: 5}},
 		"A short general's tall hat. Wearing it, you see the whole battlefield."),
-	good("alexanders_helm", "The Helm of Alexander", KindRelic, 8, 700, ShelfMarket, true, Effects{Stats: Stats{Martial: 5, Prowess: 5}},
+	good("alexanders_helm", "The Helm of Alexander", KindArmor, 8, 700, ShelfMarket, true, Effects{Stats: Stats{Martial: 5, Prowess: 5}},
 		"Worn by the king who conquered the known world before he was thirty."),
+
+	good("eagle_ninth", "The Eagle of the Ninth Legion", KindRelic, 10, 900, ShelfMarket, true, Effects{Stats: Stats{Martial: 5}, VoteWeight: 1},
+		"The lost standard of a legion that marched into the northern mists and never came back. Until now."),
+	good("caesars_wreath", "Caesar's Laurel Wreath", KindRelic, 13, 1200, ShelfMarket, true, Effects{VoteWeight: 2, Stats: Stats{Diplomacy: 5}},
+		"He wore it to every triumph, and to hide his thinning hair. Senators bow to it out of habit."),
+	good("spirit_banner", "Genghis Khan's Spirit Banner", KindRelic, 13, 1300, ShelfMarket, true, Effects{Stats: Stats{Martial: 10}},
+		"Horsehair tails on a spear. Where it went, the greatest empire the world has seen followed."),
+	good("torc_vercingetorix", "The Torc of Vercingetorix", KindRelic, 7, 600, ShelfMarket, true, Effects{Stats: Stats{Martial: 5}, PartyBonus: 1},
+		"A twisted gold neck ring from the Gaulish king who nearly beat Caesar."),
 
 	// ---------- the market: weapons ----------
 	magic(good("excalibur", "Excalibur", KindWeapon, 8, 1200, ShelfMarket, true, Effects{Stats: Stats{Prowess: 14, Martial: 5}},
@@ -196,6 +241,25 @@ var shopItems = []Item{
 	good("robin_hoods_bow", "Robin Hood's Longbow", KindWeapon, 6, 650, ShelfMarket, true, Effects{Stats: pro(6)},
 		"It once split an arrow down the middle. It still prefers to rob the rich."),
 
+	good("anduril", "Andúril, Flame of the West", KindWeapon, 11, 1400, ShelfMarket, true, Effects{Stats: Stats{Prowess: 13, Martial: 5}},
+		"The sword that was broken, forged anew for the heir of kings. Armies of the dead answer to it."),
+	good("glamdring", "Glamdring", KindWeapon, 10, 1200, ShelfMarket, true, Effects{Stats: Stats{Prowess: 11, Martial: 5}},
+		"The Foe-hammer, an elven blade from a fallen city. Goblins know it, and run."),
+	good("durendal", "Durendal", KindWeapon, 9, 1100, ShelfMarket, true, Effects{Stats: pro(11)},
+		"Roland's sword. He tried to break it on a rock so the enemy wouldn't have it, and the rock broke."),
+	good("ice", "Ice", KindWeapon, 8, 1000, ShelfMarket, true, Effects{Stats: pro(10)},
+		"A greatsword of smoky Valyrian steel, as long as a man is tall. Its lords use it for executions themselves."),
+	magic(good("gungnir", "Gungnir", KindWeapon, 11, 1400, ShelfMarket, true, Effects{Stats: pro(12)},
+		"Odin's spear, carved with runes. Once thrown, it never misses.")),
+	magic(good("blackrazor", "Blackrazor", KindWeapon, 10, 1300, ShelfMarket, true, Effects{Stats: Stats{Prowess: 12, Intrigue: 5}},
+		"A black sword that sings softly and hungers for souls. It gives you ideas.")),
+	magic(good("sword_of_kas", "The Sword of Kas", KindWeapon, 12, 1600, ShelfMarket, true, Effects{Stats: pro(16)},
+		"Forged for a vampire lord's champion, who used it to betray him. It still wants a master to turn on.")),
+	good("legolas_bow", "Legolas's Bow", KindWeapon, 7, 900, ShelfMarket, true, Effects{Stats: pro(8)},
+		"A long bow of the Galadhrim. Its owner counts his kills out loud."),
+	good("tells_crossbow", "William Tell's Crossbow", KindWeapon, 5, 600, ShelfMarket, true, Effects{Stats: pro(6)},
+		"It shot an apple off a boy's head, and then a tyrant through the heart."),
+
 	// ---------- the market: armor ----------
 	good("spartacus_helm", "The Helm of Spartacus", KindArmor, 5, 450, ShelfMarket, true, Effects{Stats: pro(5)},
 		"Worn by the gladiator who made Rome tremble."),
@@ -206,6 +270,17 @@ var shopItems = []Item{
 	magic(good("plate_plus_one", "Plate Armor +1", KindArmor, 12, 1100, ShelfMarket, true, Effects{Stats: pro(6), PartyBonus: 2},
 		"Shiny, enchanted, and exactly one better than ordinary plate. Guests can't stop staring.")),
 
+	good("achilles_shield", "The Shield of Achilles", KindArmor, 13, 1300, ShelfMarket, true, Effects{Stats: pro(11), PartyBonus: 1},
+		"Forged by a god, with the whole world worked into its bronze: cities, weddings, harvests and war."),
+	magic(good("aegis", "The Aegis", KindArmor, 12, 1200, ShelfMarket, true, Effects{Stats: Stats{Prowess: 9, Martial: 5}},
+		"Athena's goatskin shield with a gorgon's face at its center. Enemies falter at the sight of it.")),
+	magic(good("dragon_scale_mail", "Dragon Scale Mail", KindArmor, 10, 1100, ShelfMarket, true, Effects{Stats: pro(10)},
+		"Made from a red dragon's hide. Fire slides off it, and so do swords.")),
+	magic(good("elven_chain", "Elven Chain", KindArmor, 8, 800, ShelfMarket, true, Effects{Stats: Stats{Prowess: 7, Intrigue: 5}},
+		"Mail so fine it folds into a pocket and makes no sound when you move.")),
+	good("black_prince_armor", "The Black Prince's Armor", KindArmor, 9, 900, ShelfMarket, true, Effects{Stats: Stats{Prowess: 8, Martial: 5}},
+		"Blackened plate from the prince who won his spurs at sixteen and never lost a battle."),
+
 	// ---------- the market: equipment ----------
 	good("direwolf_pup", "A Direwolf Pup", KindEquipment, 5, 500, ShelfMarket, true, Effects{Stats: pro(5)},
 		"It will be the size of a horse within a year. Feed it well."),
@@ -215,15 +290,22 @@ var shopItems = []Item{
 		"The horse only Alexander could tame. He's yours now, if he agrees."),
 	magic(good("flying_carpet", "A Flying Carpet", KindEquipment, 10, 1000, ShelfMarket, true, Effects{Stats: pro(5), PartyBonus: 2},
 		"Woven in a far desert city. Guests remember the night you arrived by air.")),
+	good("shadowfax", "Shadowfax", KindEquipment, 10, 1000, ShelfMarket, true, Effects{Stats: Stats{Prowess: 7, Martial: 5}},
+		"The lord of all horses. He runs faster than the wind and chooses his own rider."),
+	good("incitatus", "Incitatus", KindEquipment, 7, 700, ShelfMarket, true, Effects{Stats: pro(3), VoteWeight: 1},
+		"The emperor's favorite horse, with a marble stable and an ivory manger. He was nearly made a consul."),
+	magic(good("boots_of_speed", "Boots of Speed", KindEquipment, 6, 700, ShelfMarket, true, Effects{Stats: pro(6)},
+		"Click the heels together and the world slows down around you.")),
+	magic(good("cloak_elvenkind", "A Cloak of Elvenkind", KindEquipment, 6, 650, ShelfMarket, true, Effects{Stats: Stats{Prowess: 4, Intrigue: 5}},
+		"Grey-green and light as a leaf. Wrapped in it, you vanish against any wall.")),
+	magic(good("ogre_gauntlets", "Gauntlets of Ogre Power", KindEquipment, 7, 850, ShelfMarket, true, Effects{Stats: pro(8)},
+		"Thick iron gloves that make you as strong as an ogre. Shaking hands takes practice.")),
 }
 
 // ---- the rotating market ----
 
-// How many market pieces are on sale each period.
-const (
-	MarketProperties  = 2
-	MarketPossessions = 2
-)
+// How many market pieces of each section are on sale each period.
+const MarketPerSection = 2
 
 // MarketPeriod is which rotation now falls in, and when it ends.
 func MarketPeriod(now time.Time, rotation time.Duration) (int64, time.Time) {
@@ -238,22 +320,19 @@ func Market(guildID string, period int64) []Item {
 	h := fnv.New64a()
 	h.Write([]byte(guildID))
 	r := rand.New(rand.NewPCG(h.Sum64(), uint64(period)))
-	var props, goods []Item
+	pools := map[Section][]Item{}
 	for _, it := range Items {
-		if it.Shelf != ShelfMarket {
-			continue
-		}
-		if it.IsProperty() {
-			props = append(props, it)
-		} else {
-			goods = append(goods, it)
+		if it.Shelf == ShelfMarket {
+			pools[it.Section()] = append(pools[it.Section()], it)
 		}
 	}
-	pick := func(pool []Item, n int) []Item {
+	var out []Item
+	for _, s := range Sections {
+		pool := pools[s.Key]
 		r.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
-		return pool[:min(n, len(pool))]
+		out = append(out, pool[:min(MarketPerSection, len(pool))]...)
 	}
-	return append(pick(props, MarketProperties), pick(goods, MarketPossessions)...)
+	return out
 }
 
 // FixedShelf is everything always in stock.

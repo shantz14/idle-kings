@@ -70,7 +70,7 @@ func TestCatalogueConsistency(t *testing.T) {
 			t.Errorf("%s: bad home %s", b.Key, b.Home)
 		}
 		for _, k := range b.Items {
-			if it, ok := ItemByKey(k); !ok || it.Kind != KindPossession {
+			if it, ok := ItemByKey(k); !ok || it.IsProperty() {
 				t.Errorf("%s: bad item %s", b.Key, k)
 			}
 		}
