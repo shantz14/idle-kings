@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,7 +43,9 @@ func init() {
 //   consp:sen:<scheme>                             (select) a senator target
 //   consp:item:<target>                            (select) what to steal (0 = their coffers)
 //   consp:go:<scheme>:<p|s>:<target>:<item>:<purse> start the plot
-//   consp:inv                                      (user select) invite a player
+//   consp:inv                                      (user select) invite a player → terms panel
+//   consp:offer:<player>:<gold>:<share>:<g|s>      change the terms offered (g/s: which row)
+//   consp:send:<player>:<gold>:<share>             send the invitation on those terms
 //   consp:invsen                                   (select) invite a senator → ask panel
 //   consp:ask:<senator>:<gift 0|1>                 put it to the senator
 //   consp:strike                                   strike (takes your action)
@@ -94,6 +97,17 @@ func (b *Bot) onConspiracy(ctx context.Context, i *discordgo.InteractionCreate, 
 		b.onPlotStart(ctx, i, c, parts[1:])
 	case parts[0] == "inv":
 		b.onInvitePlayer(ctx, i, c)
+	case (parts[0] == "offer" || parts[0] == "send") && len(parts) > 3:
+		t, err := b.store.GetCharacterByID(ctx, atoi(parts[1]))
+		if err != nil || t.GuildID != c.GuildID {
+			return
+		}
+		terms := game.PlotTerms{Gold: int(atoi(parts[2])), Share: int(atoi(parts[3]))}
+		if parts[0] == "offer" {
+			b.update(i, termsView(c, t, terms, ""))
+		} else {
+			b.sendInvite(ctx, i, c, t, terms)
+		}
 	case parts[0] == "invsen":
 		vals := i.MessageComponentData().Values
 		if len(vals) > 0 {
@@ -570,12 +584,62 @@ func (b *Bot) onInvitePlayer(ctx context.Context, i *discordgo.InteractionCreate
 		b.update(i, b.conspiracyPanel(ctx, c, "You can hardly ask them to plot against themselves."))
 		return
 	}
+	b.update(i, termsView(c, t, game.PlotTerms{}, ""))
+}
+
+// termsView is where the leader decides what to offer a player for joining.
+func termsView(c, t store.Character, terms game.PlotTerms, note string) *discordgo.InteractionResponseData {
+	desc := fmt.Sprintf("What will you offer **%s** to join you? Gold is paid from your purse the moment they join; a share of the haul is paid only if the plot works. "+
+		"Generous terms make a yes likelier, and a betrayal costlier to them.", t.FullName())
+	offer := terms.Describe()
+	if offer == "" {
+		offer = "Nothing but the pleasure of it"
+	}
+	// The last part only keeps the two rows' IDs apart.
+	id := func(gold, share int, row string) string { return fmt.Sprintf("consp:offer:%d:%d:%d:%s", t.ID, gold, share, row) }
+	var golds, shares []discordgo.MessageComponent
+	for _, g := range game.PlotGoldOffers {
+		style := discordgo.SecondaryButton
+		if g == terms.Gold {
+			style = discordgo.PrimaryButton
+		}
+		golds = append(golds, button(fmt.Sprintf("%d gold", g), id(g, terms.Share, "g"), style, g > c.Wealth))
+	}
+	for _, s := range game.PlotShareOffers {
+		style := discordgo.SecondaryButton
+		if s == terms.Share {
+			style = discordgo.PrimaryButton
+		}
+		shares = append(shares, button(fmt.Sprintf("%d%% of the haul", s), id(terms.Gold, s, "s"), style, false))
+	}
+	e := &discordgo.MessageEmbed{Title: "🕸️ Inviting " + t.FullName(), Description: withNote(note, desc), Color: colorSecret,
+		Fields: []*discordgo.MessageEmbedField{fact("Your offer", offer), fact("Your purse", fmt.Sprintf("%d gold", c.Wealth))},
+		Footer: footer("A share is of stolen gold, or of a stolen piece's worth (paid from your purse). A senator's fall shares its influence with every member anyway.")}
+	return &discordgo.InteractionResponseData{
+		Embeds: []*discordgo.MessageEmbed{e},
+		Components: []discordgo.MessageComponent{row(golds...), row(shares...), row(
+			withEmoji(button("Send the invitation", fmt.Sprintf("consp:send:%d:%d:%d", t.ID, terms.Gold, terms.Share), discordgo.SuccessButton, false), "✉️"),
+			backTo("consp:home"),
+		)},
+	}
+}
+
+// sendInvite asks a player into the plot the leader runs, on terms.
+func (b *Bot) sendInvite(ctx context.Context, i *discordgo.InteractionCreate, c, t store.Character, terms game.PlotTerms) {
+	k, err := b.store.LedConspiracy(ctx, c.ID)
+	if err != nil || t.ID == c.ID || (k.TargetKind == game.TargetPlayer && t.ID == k.TargetID) {
+		b.update(i, b.conspiracyPanel(ctx, c, ""))
+		return
+	}
+	if !validTerms(terms) {
+		return
+	}
 	pv, err := b.loadPlot(ctx, k)
 	if err != nil {
 		b.fail(i, err)
 		return
 	}
-	if err := b.store.InviteMember(ctx, k.ID, store.MemberPlayer, t.ID, store.MemberInvited, 0, time.Now()); errors.Is(err, store.ErrInvited) {
+	if err := b.store.InvitePlayer(ctx, k.ID, t.ID, terms, time.Now()); errors.Is(err, store.ErrInvited) {
 		b.update(i, b.conspiracyPanel(ctx, c, fmt.Sprintf("You've already asked **%s**.", t.FullName())))
 		return
 	} else if err != nil {
@@ -584,18 +648,27 @@ func (b *Bot) onInvitePlayer(ctx context.Context, i *discordgo.InteractionCreate
 	}
 	b.deferUpdate(i)
 	_, _ = b.dm(t.UserID, &discordgo.MessageSend{
-		Embeds:     []*discordgo.MessageEmbed{inviteEmbed(pv)},
+		Embeds:     []*discordgo.MessageEmbed{inviteEmbed(pv, terms)},
 		Components: []discordgo.MessageComponent{inviteButtons(k.ID)},
 	})
 	b.update(i, b.conspiracyPanel(ctx, c, fmt.Sprintf("A sealed letter goes to **%s**. You'll hear when they answer.", t.FullName())))
 }
 
-func inviteEmbed(pv plotView) *discordgo.MessageEmbed {
+// validTerms reports whether terms are among the offers the panel shows.
+func validTerms(t game.PlotTerms) bool {
+	return slices.Contains(game.PlotGoldOffers, t.Gold) && slices.Contains(game.PlotShareOffers, t.Share)
+}
+
+func inviteEmbed(pv plotView, terms game.PlotTerms) *discordgo.MessageEmbed {
 	desc := fmt.Sprintf("**%s** has taken you aside. They are plotting to %s **%s**, and want you in.\n\n%s",
 		pv.Leader.FullName(), pv.Scheme.Verb(), pv.targetName(), pv.Scheme.Desc)
+	offer := terms.Describe()
+	if offer == "" {
+		offer = "Nothing but the pleasure of it"
+	}
 	return &discordgo.MessageEmbed{
 		Title: "🕸️ An invitation to a conspiracy", Description: desc, Color: colorNotice,
-		Fields: []*discordgo.MessageEmbedField{fact("It falls apart", relTime(pv.K.EndsAt))},
+		Fields: []*discordgo.MessageEmbedField{fact("They offer", offer), fact("It falls apart", relTime(pv.K.EndsAt))},
 		Footer: footer("🔒 Joining doesn't take your action. If the plot is found out, your name may be too. You can always leave, or betray it."),
 	}
 }
@@ -771,12 +844,22 @@ func (b *Bot) onPlotMember(ctx context.Context, i *discordgo.InteractionCreate, 
 	case "plot":
 		b.update(i, memberView(pv, m.Status, ""))
 	case "join":
-		if err := b.store.SetMemberStatus(ctx, id, store.MemberPlayer, c.ID, store.MemberInvited, store.MemberJoined); err != nil {
+		terms, err := b.store.JoinPlot(ctx, id, c.ID)
+		switch {
+		case errors.Is(err, store.ErrLeaderShort):
+			b.update(i, memberView(pv, m.Status, fmt.Sprintf("**%s** can't pay what they promised you. You can wait, or decline.", pv.Leader.FullName())))
+			b.dmNote(pv.Leader.UserID, "💸 A promise you can't keep", fmt.Sprintf("**%s** wants to join, but you don't have the gold you offered them.", c.FullName()), colorBad)
+			return
+		case err != nil:
 			b.update(i, memberView(pv, m.Status, "You've already answered."))
 			return
 		}
+		joined := "You're in. Keep it quiet."
+		if terms.Gold > 0 {
+			joined = fmt.Sprintf("You're in, and **%d gold** richer. Keep it quiet.", terms.Gold)
+		}
 		b.dmNote(pv.Leader.UserID, "🤝 A new conspirator", fmt.Sprintf("**%s** is with you against **%s**.", c.FullName(), pv.targetName()), colorGood)
-		b.update(i, memberView(pv, store.MemberJoined, "You're in. Keep it quiet."))
+		b.update(i, memberView(pv, store.MemberJoined, joined))
 		b.leak(ctx, c, game.SecretConspire(c.FullName(), pv.Leader.FullName(), pv.Scheme.Verb(), pv.targetName()))
 	case "decline":
 		if err := b.store.SetMemberStatus(ctx, id, store.MemberPlayer, c.ID, store.MemberInvited, store.MemberDeclined); err != nil {
@@ -1097,6 +1180,9 @@ func (b *Bot) resolveStrike(ctx context.Context, a store.Activity, now time.Time
 			extra = fmt.Sprintf("\n\n**Senator %s** takes the empty seat.", newSen.Name)
 			if pv.Scheme.Key == game.SchemeDisgrace {
 				addDelta(leaderID, game.DisgraceReward(pv.Leader.Influence))
+				for _, m := range pv.Members { // the members share in the fall
+					addDelta(m.ID, game.DisgraceMemberReward(len(pv.Members), m.Influence))
+				}
 			}
 		case pv.Scheme.Key == game.SchemeFrame:
 			forgery = game.PickForgery(b.rng)
@@ -1105,10 +1191,12 @@ func (b *Bot) resolveStrike(ctx context.Context, a store.Activity, now time.Time
 			extra = fmt.Sprintf("\n\n📁 The evidence says **%s**. It's filed in your dossier: denounce them or whisper it whenever it suits you.", game.MisdeedWord(forgery.Crime))
 		case pv.Scheme.Key == game.SchemeSteal:
 			t := pv.Target
+			haul, inGold := 0, true // what the members' shares are of
 			if h, ok := t.Holding(k.TargetItem); ok && k.TargetItem != 0 {
 				if it, ok := h.Item(); ok && !it.IsProperty() {
 					out.Transfers = []store.ItemTransfer{{HoldingID: h.ID, From: t.ID, To: leaderID}}
 					stolen = "**" + it.Name + "**"
+					haul, inGold = it.Price, false
 				}
 			}
 			if stolen == "" {
@@ -1116,8 +1204,23 @@ func (b *Bot) resolveStrike(ctx context.Context, a store.Activity, now time.Time
 				addDelta(t.ID, game.Delta{Wealth: -gold})
 				addDelta(leaderID, game.Delta{Wealth: gold})
 				stolen = fmt.Sprintf("**%d gold**", gold)
+				haul = gold
+			}
+			cuts := b.plotCuts(ctx, pv, haul, inGold)
+			for id, g := range cuts {
+				addDelta(leaderID, game.Delta{Wealth: -g})
+				addDelta(id, game.Delta{Wealth: g})
 			}
 			extra = fmt.Sprintf("\n\nThey came back with %s.", stolen)
+		}
+		if pv.Target != nil { // the victim's enemies in the Senate are glad of it
+			if tops, err := b.store.Opinions(ctx, pv.Target.ID); err == nil {
+				ids := make([]int64, len(pv.Members))
+				for n, m := range pv.Members {
+					ids[n] = m.ID
+				}
+				out.Opinions = append(out.Opinions, game.EnemiesPleased(pv.Senate, tops, leaderID, ids)...)
+			}
 		}
 	}
 	if res.Wounded {
@@ -1139,7 +1242,7 @@ func (b *Bot) resolveStrike(ctx context.Context, a store.Activity, now time.Time
 		memberText = fmt.Sprintf("The plot against **%s** worked.%s", pv.targetName(), extra)
 	}
 	for _, m := range pv.Members {
-		b.dmNote(m.UserID, pv.Scheme.Emoji+" The plot struck", memberText, color)
+		b.dmNote(m.UserID, pv.Scheme.Emoji+" The plot struck", withDelta(memberText, out.Deltas[m.ID]), color)
 	}
 	if res.Exposed {
 		b.post(ctx, k.GuildID, &discordgo.MessageEmbed{Title: "📢 A plot foiled", Description: res.Public, Color: colorBad})
@@ -1262,4 +1365,30 @@ func (b *Bot) onHeirModal(ctx context.Context, i *discordgo.InteractionCreate, p
 	b.reply(i, fmt.Sprintf("**%s %s** takes up the house. Long may they live.", name, c.FamilyName))
 	b.post(ctx, c.GuildID, &discordgo.MessageEmbed{Title: "👶 An heir is named", Color: colorPanel,
 		Description: fmt.Sprintf("The heir of %s is **%s %s**.", c.House(), name, c.FamilyName)})
+}
+
+// plotCuts is each member's share of a theft's haul, worth haul gold. A
+// stolen piece's shares come out of the leader's purse, as far as it goes.
+func (b *Bot) plotCuts(ctx context.Context, pv plotView, haul int, inGold bool) map[int64]int {
+	terms, err := b.store.PlotTerms(ctx, pv.K.ID)
+	if err != nil || len(terms) == 0 {
+		return nil
+	}
+	shares := map[int64]int{}
+	for _, m := range pv.Members {
+		if t := terms[m.ID]; t.Share > 0 {
+			shares[m.ID] = t.Share
+		}
+	}
+	cuts := game.SplitHaul(haul, shares)
+	if !inGold { // paid from the leader's own gold
+		purse := pv.Leader.Wealth
+		for _, m := range pv.Members {
+			if g, ok := cuts[m.ID]; ok {
+				cuts[m.ID] = min(g, max(purse, 0))
+				purse -= cuts[m.ID]
+			}
+		}
+	}
+	return cuts
 }

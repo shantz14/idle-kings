@@ -22,6 +22,8 @@ type Timings struct {
 	Petition time.Duration // Petition the Senate
 	Journey  PartyTiming   // Undertake a Journey (abroad takes twice as long)
 	Strike   time.Duration // a conspiracy's leader striking
+	Sabotage time.Duration // Sabotage
+	Smear    time.Duration // Smear Campaign
 }
 
 var (
@@ -36,6 +38,8 @@ var (
 		Petition: DefaultPetitionDuration,
 		Journey:  DefaultJourneyTiming,
 		Strike:   DefaultStrikeDuration,
+		Sabotage: DefaultSabotageDuration,
+		Smear:    DefaultSmearDuration,
 	}
 	FastTimings = Timings{
 		Party: FastPartyTiming, Senate: FastSenateTiming,
@@ -48,5 +52,7 @@ var (
 		Petition: FastPetitionDuration,
 		Journey:  FastJourneyTiming,
 		Strike:   FastStrikeDuration,
+		Sabotage: FastSabotageDuration,
+		Smear:    FastSmearDuration,
 	}
 )

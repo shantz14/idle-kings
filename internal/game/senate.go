@@ -368,6 +368,18 @@ func (s Senator) BribePrice(ev MatterEvent, optKey string, realm Realm, matterID
 	return int(math.Ceil(base * (1 + gap))), true
 }
 
+// A senator someone has already paid can be bought out from under them, for
+// at least this much more: the bigger purse wins (store.PayBribe).
+const (
+	outbidStep    = 0.1 // share of the standing bribe
+	outbidMinStep = 5   // gold
+)
+
+// OutbidPrice is the least it takes to outbid a standing bribe.
+func OutbidPrice(standing int) int {
+	return standing + max(outbidMinStep, int(math.Ceil(float64(standing)*outbidStep)))
+}
+
 // wantScore is the score of the option a briber wants. An unknown option
 // scores as the zero option did before (no leans, no effects).
 func (s Senator) wantScore(sc map[string]float64, optKey string, realm Realm, matterID int64) float64 {

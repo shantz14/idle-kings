@@ -700,7 +700,7 @@ func senatorSelect(m store.Matter, senators []game.Senator, bribes map[int64]sto
 	for _, s := range senators {
 		desc := fmt.Sprintf("Opinion %s · %s · influence %s", game.OpinionNum(ops[s.ID]), s.TraitNames(), game.Num(s.Influence))
 		if _, paid := bribes[s.ID]; paid {
-			desc += " · already paid"
+			desc += " · already paid (can be outbid)"
 		}
 		opts = append(opts, discordgo.SelectMenuOption{Label: s.Name, Value: fmt.Sprint(s.ID), Description: truncate(desc, 100)})
 	}
@@ -767,12 +767,9 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 
 	desc := fmt.Sprintf("*%s* · influence %s\n**Their opinion of you**\n%s\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
 	var btns []discordgo.MessageComponent
-	if br, paid := bribes[s.ID]; paid {
-		if br.CharacterID == c.ID {
-			desc += fmt.Sprintf("✅ You've already paid them to vote to **%s**.", strings.ToLower(optionLabel(ev, br.Option)))
-		} else {
-			desc += "🔒 Someone has already paid them for this matter."
-		}
+	br, paid := bribes[s.ID]
+	if paid && br.CharacterID == c.ID {
+		desc += fmt.Sprintf("✅ You've already paid them to vote to **%s**. Someone could still outbid you.", strings.ToLower(optionLabel(ev, br.Option)))
 	} else if _, can := s.BribePrice(ev, ev.Default, st.Trackers, m.ID); !can {
 		desc += "🚫 They cannot be bought."
 	} else if _, can := s.BribePriceUnder(ev, ev.Default, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws); !can {
@@ -781,9 +778,15 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 		if st.Laws.Has(game.LawBribery) {
 			desc += quote("⚖️ Bribery is a crime. It costs more, and if it comes out, it will cost you your good name.") + "\n"
 		}
+		if paid {
+			desc += "🔒 Someone has already paid them for this matter. A bigger purse will change their mind; the other briber gets their gold back.\n"
+		}
 		desc += fmt.Sprintf("You have %s. Pick the vote you're paying for:", goldText(c.Wealth))
 		for _, o := range ev.Options {
 			price, _ := s.BribePriceUnder(ev, o.Key, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws)
+			if paid {
+				price = max(price, game.OutbidPrice(br.Amount))
+			}
 			btns = append(btns, button(fmt.Sprintf("%s: %d gold", o.Label, price),
 				fmt.Sprintf("senate:pay:%d:%d:%s", m.ID, s.ID, o.Key), discordgo.SuccessButton, price > c.Wealth))
 		}
@@ -819,6 +822,11 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 		return
 	}
 	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, game.Regard(ops[s.ID], c.Renown), st.Laws)
+	if bribes, err := b.store.Bribes(ctx, m.ID); err == nil {
+		if br, paid := bribes[s.ID]; paid && br.CharacterID != c.ID {
+			price = max(price, game.OutbidPrice(br.Amount))
+		}
+	}
 	if !can {
 		b.update(i, &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{{Title: "💰 Senator " + s.Name, Description: "🚫 " + s.Name + " won't take your gold.", Color: colorMuted}},
@@ -827,9 +835,10 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	}
 	var text string
 	color := colorMuted
-	switch err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, game.BribeOpinion(s), time.Now()); {
+	outbid, err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, game.BribeOpinion(s), time.Now())
+	switch {
 	case errors.Is(err, store.ErrBought):
-		text = "Someone got to " + s.Name + " first."
+		text = "Someone paid " + s.Name + " more while you were counting your coins. Look again."
 	case errors.Is(err, store.ErrEnded):
 		text = "Voting on this matter has closed."
 	case err != nil:
@@ -840,6 +849,10 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 			s.Name, strings.ToLower(optionLabel(ev, opt)), price, game.OpinionNum(game.BribeOpinion(s)))
 		text += b.bribeExposure(ctx, c, s, sen, st.Laws)
 		defer b.leak(ctx, c, game.SecretBribe(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), price))
+		if outbid.CharacterID != 0 {
+			text += "\n\n" + quote("You bought them out from under someone else, who has had their gold back.")
+			b.tellOutbid(ctx, outbid, s, ev)
+		}
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "💰 Senator " + s.Name, Description: text, Color: color}},
@@ -896,4 +909,17 @@ func signedNum(v float64) string {
 		return "+" + game.Num(v)
 	}
 	return game.Num(v)
+}
+
+// tellOutbid tells a briber that someone paid their senator more, and that
+// their gold has come back. It never says who.
+func (b *Bot) tellOutbid(ctx context.Context, br store.Bribe, s game.Senator, ev game.MatterEvent) {
+	who, err := b.store.CharacterNames(ctx, []int64{br.CharacterID})
+	if err != nil {
+		return
+	}
+	if n, ok := who[br.CharacterID]; ok {
+		b.dmNote(n.UserID, "💰 Outbid", fmt.Sprintf("Someone paid Senator **%s** more to vote on *%s*. Your **%d gold** has come back to you. "+
+			"You can still pay them more, if they're worth it.", s.Name, ev.Title, br.Amount), colorNotice)
+	}
 }

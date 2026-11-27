@@ -372,3 +372,29 @@ CREATE TABLE IF NOT EXISTS titles (
     UNIQUE (character_id, key, season)
 );
 CREATE INDEX IF NOT EXISTS titles_character ON titles (character_id);
+
+-- What a conspiracy's leader offered each player they invited (game.PlotTerms).
+CREATE TABLE IF NOT EXISTS conspiracy_terms (
+    activity_id INTEGER NOT NULL REFERENCES activities(id),
+    member_id   INTEGER NOT NULL REFERENCES characters(id),
+    gold        INTEGER NOT NULL DEFAULT 0, -- paid by the leader on joining
+    share       INTEGER NOT NULL DEFAULT 0, -- percent of the haul, on success
+    PRIMARY KEY (activity_id, member_id)
+);
+
+-- Sabotage: a holding that gives nothing until it's repaired, and a stake
+-- that earns less until ends_at.
+CREATE TABLE IF NOT EXISTS damaged_items (
+    holding_id  INTEGER PRIMARY KEY REFERENCES estate_items(id),
+    repair_cost INTEGER NOT NULL,
+    damaged_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS venture_damage (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    sector       TEXT NOT NULL,
+    factor       REAL NOT NULL, -- share of income still earned
+    ends_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS venture_damage_guild ON venture_damage (guild_id, ends_at);

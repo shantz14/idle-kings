@@ -378,6 +378,14 @@ func TestEstateViewsFitDiscord(t *testing.T) {
 	}
 	poor := store.Character{ID: 2, Name: "C", FamilyName: "D", Crest: game.Crest{Color: "red", Symbol: "lion"}, Stats: game.Stats{},
 		Holdings: []store.Holding{{ID: 999, Key: "rented_room"}}, Items: []string{"rented_room"}, ResidenceID: 999}
+	broken := rich
+	broken.Holdings = append([]store.Holding(nil), rich.Holdings...)
+	for n := range broken.Holdings {
+		if n%2 == 0 {
+			broken.Holdings[n].Repair = 1234
+		}
+	}
+	checkLimits(t, "estate (half of it sabotaged)", estateView(broken, true, "a note"))
 	checkLimits(t, "estate (everything)", estateView(rich, true, "a note"))
 	checkLimits(t, "estate (one room)", estateView(poor, false, ""))
 	for _, h := range rich.Holdings {
@@ -599,10 +607,12 @@ func TestConspiracyViewsFitDiscord(t *testing.T) {
 		checkLimits(t, "conspiracy member "+sc.Key, memberView(pv, store.MemberJoined, "a note"))
 		checkLimits(t, "conspiracy invited "+sc.Key, memberView(pv, store.MemberInvited, ""))
 		checkLimits(t, "conspiracy invite DM "+sc.Key, &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{inviteEmbed(pv)}, Components: []discordgo.MessageComponent{inviteButtons(pv.K.ID)},
+			Embeds: []*discordgo.MessageEmbed{inviteEmbed(pv, game.PlotTerms{Gold: 250, Share: 50})}, Components: []discordgo.MessageComponent{inviteButtons(pv.K.ID)},
 		})
 	}
 	checkLimits(t, "conspiracy steal", stealView(tgt))
+	checkLimits(t, "conspiracy terms", termsView(c, tgt, game.PlotTerms{Gold: 50, Share: 25}, "a note"))
+	checkLimits(t, "conspiracy terms, poor", termsView(store.Character{Name: long, FamilyName: long}, tgt, game.PlotTerms{}, ""))
 	checkLimits(t, "conspiracy ask senator", askSenatorView(c, senators[0], -40, "a note"))
 }
 
@@ -637,5 +647,40 @@ func TestTitleViewsFitDiscord(t *testing.T) {
 		Title: "x", Fields: []*discordgo.MessageEmbedField{titlesField(all)}}}})
 	if titlesField(nil) != nil {
 		t.Fatal("no titles, no field")
+	}
+}
+
+func TestSabotageViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	busy := "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 100}
+	t2 := store.Character{ID: 999999999, Name: long, FamilyName: long, Ventures: map[game.SectorKey]store.Venture{}}
+	for _, d := range game.SectorDefs {
+		t2.Ventures[d.Key] = store.Venture{Stake: 100, Share: 0.5}
+	}
+	for n, it := range game.Items {
+		if it.IsProperty() {
+			t2.Holdings = append(t2.Holdings, store.Holding{ID: int64(n + 1), Key: it.Key})
+			t2.Items = append(t2.Items, it.Key)
+		}
+	}
+	for _, d := range []time.Duration{game.DefaultSabotageDuration, game.FastSabotageDuration} {
+		checkLimits(t, "sabotage", sabotageView(d, "", "a note"))
+		checkLimits(t, "sabotage busy", sabotageView(d, busy, ""))
+		checkLimits(t, "smear", smearView(d, "", "a note"))
+		checkLimits(t, "smear busy", smearView(d, busy, ""))
+	}
+	checkLimits(t, "sabotage what", sabotageWhatView(t2, "a note"))
+	checkLimits(t, "sabotage nothing", sabotageWhatView(store.Character{Name: long, FamilyName: long}, ""))
+	checkLimits(t, "sabotage purse", sabotagePurseView(c, t2, "v:trade", "Trade", "a note"))
+	checkLimits(t, "smear purse", smearPurseView(c, t2, "a note"))
+	if opts := sabotageTargets(t2); len(opts) > 25 {
+		t.Fatalf("%d targets", len(opts))
+	} else {
+		for _, o := range opts {
+			if o.Value == "v:"+string(game.SectorBlackMarket) {
+				t.Fatal("the Black Market can't be sabotaged")
+			}
+		}
 	}
 }

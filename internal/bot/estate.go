@@ -21,6 +21,7 @@ func init() {
 //   estate:movein:<holding>   move into a property just bought
 //   estate:sell               (select) pick something to sell to the shop
 //   estate:sellok:<holding>   sale confirmed
+//   estate:repair             (select) pay to repair a sabotaged property
 
 func (b *Bot) onEstate(ctx context.Context, i *discordgo.InteractionCreate, parts []string) {
 	c, ok := b.myCharacter(ctx, i)
@@ -44,6 +45,22 @@ func (b *Bot) onEstate(ctx context.Context, i *discordgo.InteractionCreate, part
 		b.update(i, sellConfirm(c, atoi(vals()[0])))
 	case parts[0] == "sellok" && len(parts) > 1:
 		b.sellToShop(ctx, i, c, atoi(parts[1]))
+	case parts[0] == "repair" && len(vals()) > 0:
+		h, ok := c.Holding(atoi(vals()[0]))
+		it, _ := h.Item()
+		cost, err := b.store.RepairItem(ctx, c.ID, h.ID)
+		if !ok || err != nil {
+			note := "There's nothing to repair."
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				note = err.Error()
+			}
+			b.update(i, b.estatePageNote(c, note))
+			return
+		}
+		if fresh, err := b.store.GetCharacterByID(ctx, c.ID); err == nil {
+			c = fresh
+		}
+		b.update(i, b.estatePageNote(c, fmt.Sprintf("🔨 Builders put **%s** to rights. (-%d gold)", it.Name, cost)))
 	}
 }
 
@@ -208,7 +225,7 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 
 	home, _ := c.Residence()
 	byKind := map[game.ItemKind][]string{}
-	var moveOpts, sellOpts []discordgo.SelectMenuOption
+	var moveOpts, sellOpts, repairOpts []discordgo.SelectMenuOption
 	for _, h := range c.Holdings {
 		it, ok := h.Item()
 		if !ok {
@@ -217,6 +234,13 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 		line := itemLine(it)
 		if h.ID == home.ID {
 			line = "🏡" + strings.TrimPrefix(line, game.KindByKey(it.Kind).Emoji) + " · *your home*"
+		}
+		if h.Repair > 0 {
+			line += fmt.Sprintf("\n> 🔥 *Sabotaged: it gives you nothing until it's repaired (%d gold).*", h.Repair)
+			if len(repairOpts) < 25 {
+				repairOpts = append(repairOpts, discordgo.SelectMenuOption{Label: truncate("Repair "+it.Name, 100), Value: fmt.Sprint(h.ID),
+					Emoji: &discordgo.ComponentEmoji{Name: "🔨"}, Description: fmt.Sprintf("%d gold", h.Repair)})
+			}
 		}
 		byKind[it.Kind] = append(byKind[it.Kind], line)
 		if h.ID == home.ID {
@@ -260,6 +284,10 @@ func estateView(c store.Character, back bool, note string) *discordgo.Interactio
 	if len(sellOpts) > 0 {
 		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "estate:sell",
 			Placeholder: "Sell something to the shop…", Options: sellOpts}))
+	}
+	if len(repairOpts) > 0 {
+		comps = append(comps, row(discordgo.SelectMenu{MenuType: discordgo.StringSelectMenu, CustomID: "estate:repair",
+			Placeholder: "🔨 Repair what saboteurs damaged…", Options: repairOpts}))
 	}
 	btns := []discordgo.MessageComponent{
 		withEmoji(button("Shop", "shop:open:"+shopProps, discordgo.PrimaryButton, false), emojiShop),

@@ -40,7 +40,7 @@ func (s *Store) GuildStakes(ctx context.Context, guildID string) (map[int64]game
 func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 	guilds := map[string][]*Character{}
 	for _, c := range chars {
-		c.Ventures, c.VentureIncome, c.Laws, c.RealmFallen, c.FallenReason = nil, 0, nil, false, ""
+		c.Ventures, c.VentureIncome, c.Laws, c.RealmFallen, c.FallenReason, c.Sabotaged = nil, 0, nil, false, "", nil
 		guilds[c.GuildID] = append(guilds[c.GuildID], c)
 	}
 	for g, cs := range guilds {
@@ -55,7 +55,12 @@ func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 			return err
 		}
 		by, totals := game.EffectiveStakes(st.Laws, raw)
+		hurt, err := s.ventureDamage(ctx, g, time.Now())
+		if err != nil {
+			return err
+		}
 		for _, c := range cs {
+			c.Sabotaged = hurt[c.ID]
 			c.Laws = st.Laws
 			c.RealmFallen, c.FallenReason = !st.Alive(), st.FallenReason
 			for k, stake := range raw[c.ID] {
@@ -65,6 +70,9 @@ func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 				}
 				share := game.Share(d, by[c.ID][k], totals[k])
 				v := Venture{Stake: stake, Share: share, Income: share * st.Sectors.Revenue(d, st.Trackers, st.Laws)}
+				if f, ok := c.Sabotaged[k]; ok {
+					v.Income *= f
+				}
 				if c.Ventures == nil {
 					c.Ventures = map[game.SectorKey]Venture{}
 				}

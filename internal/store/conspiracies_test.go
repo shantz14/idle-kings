@@ -196,3 +196,44 @@ func TestRushCharacter(t *testing.T) {
 		t.Errorf("the plot should move on a day: %+v", due)
 	}
 }
+
+func TestPlotTermsPaidOnJoining(t *testing.T) {
+	s, ctx := estateStore(t)
+	now := time.Unix(1_000_000, 0)
+	if err := s.CreateRealm(ctx, "g", game.StartingRealm(), game.NewSenate(rand.New(rand.NewPCG(1, 2)), game.SenateStandard), now); err != nil {
+		t.Fatal(err)
+	}
+	leader, friend, poor, victim := newChar(t, s, "lead", "merchant"), newChar(t, s, "friend", "merchant"), newChar(t, s, "poor", "merchant"), newChar(t, s, "victim", "merchant")
+	k, err := s.StartConspiracy(ctx, Activity{GuildID: "g", HostID: leader.ID, Goal: game.SchemeSteal, TargetID: victim.ID,
+		StartedAt: now, EndsAt: now.Add(5 * time.Hour)}, 0, Conspiracy{TargetKind: game.TargetPlayer, NextStepAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer := game.PlotTerms{Gold: 50, Share: 25}
+	if err := s.InvitePlayer(ctx, k.ID, friend.ID, offer, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InvitePlayer(ctx, k.ID, poor.ID, game.PlotTerms{Gold: 100000}, now); err != nil {
+		t.Fatal(err)
+	}
+	if terms, err := s.PlotTerms(ctx, k.ID); err != nil || terms[friend.ID] != offer {
+		t.Fatalf("terms %v %v", terms, err)
+	}
+	if got, err := s.JoinPlot(ctx, k.ID, friend.ID); err != nil || got != offer {
+		t.Fatalf("join: %+v %v", got, err)
+	}
+	if reload(t, s, friend).Wealth != friend.Wealth+50 || reload(t, s, leader).Wealth != leader.Wealth-50 {
+		t.Fatal("the gold up front should move from leader to member")
+	}
+	if _, err := s.JoinPlot(ctx, k.ID, friend.ID); !errors.Is(err, ErrHandled) {
+		t.Fatalf("joining twice: %v", err)
+	}
+	// A leader who can't pay leaves the invitation open.
+	if _, err := s.JoinPlot(ctx, k.ID, poor.ID); !errors.Is(err, ErrLeaderShort) {
+		t.Fatalf("unpaid join: %v", err)
+	}
+	k, _ = s.GetConspiracy(ctx, k.ID)
+	if m, _ := k.Member(MemberPlayer, poor.ID); m.Status != MemberInvited {
+		t.Fatalf("still invited: %+v", m)
+	}
+}

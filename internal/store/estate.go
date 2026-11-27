@@ -96,6 +96,9 @@ func (s *Store) SellToShop(ctx context.Context, charID, holdingID int64, payout 
 	if residence == holdingID {
 		return ErrResidence
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM damaged_items WHERE holding_id = ?`, holdingID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM estate_items WHERE id = ?`, holdingID); err != nil {
 		return err
 	}

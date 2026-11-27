@@ -112,6 +112,14 @@ var Actions = []ActionDef{
 		Description: "Plot a murder, a theft, a forgery or a senator's fall, and invite players and senators in. It ripens over days without taking your action, but every day it may be found out.",
 	},
 	{
+		Key: KindSabotage, Name: "Sabotage", Emoji: "🔥", Category: CatIntrigue, Secret: true,
+		Description: "Send agents against a rival: fire at their shipyard, a strike at their mine, vandals at their house. Takes 2 hours. Their venture earns less for days, or their property is useless until they pay to repair it.",
+	},
+	{
+		Key: KindSmear, Name: "Smear Campaign", Emoji: "🗞️", Category: CatIntrigue, Secret: true,
+		Description: "Pay printers and street-criers to spread lies about a rival. Takes 2 hours. It costs them influence and the Senate's good opinion, if it sticks and they don't catch you at it.",
+	},
+	{
 		Key: KindEmbezzle, Name: "Embezzle from the Treasury", Emoji: "🪙", Category: CatIntrigue, Secret: true,
 		Description: "Quietly move the Republic's silver into your own purse. Takes 2 hours. If you're caught, everyone will know.",
 	},

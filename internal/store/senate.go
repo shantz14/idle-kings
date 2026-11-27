@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	ErrBought   = errors.New("that senator has already been paid by someone else")
+	ErrBought   = errors.New("that senator is already yours, or someone has paid them more")
 	ErrVoteSold = errors.New("that vote has already been sold")
 	ErrHandled  = errors.New("that offer has already been answered")
 )
@@ -542,33 +542,53 @@ func (s *Store) Bribes(ctx context.Context, matterID int64) (map[int64]Bribe, er
 	return out, rows.Err()
 }
 
-// PayBribe buys a senator's vote if nobody else has and the briber can pay.
+// PayBribe buys a senator's vote. If someone has already paid them for this
+// matter, the new bribe must be at least game.OutbidPrice of theirs: the
+// senator takes the bigger purse, and the old briber gets their gold back.
+// outbid is the bribe that was displaced (zero if none). ErrBought if the
+// briber already holds this senator, or the price no longer outbids.
 // opinion is how much the senator warms to the briber.
-func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64, option string, price int, opinion float64, now time.Time) error {
+func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64, option string, price int, opinion float64, now time.Time) (outbid Bribe, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return Bribe{}, err
 	}
 	defer tx.Rollback()
 	if err := s.openMatterTx(ctx, tx, matterID, now); err != nil {
-		return err
+		return Bribe{}, err
 	}
-	res, err := tx.ExecContext(ctx,
-		`INSERT INTO bribes (matter_id, senator_id, character_id, option, amount, paid_at) VALUES (?, ?, ?, ?, ?, ?)
-		 ON CONFLICT DO NOTHING`, matterID, senatorID, charID, option, price, now.Unix())
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrBought
+	var old Bribe
+	err = tx.QueryRowContext(ctx, `SELECT senator_id, character_id, option, amount FROM bribes WHERE matter_id = ? AND senator_id = ?`,
+		matterID, senatorID).Scan(&old.SenatorID, &old.CharacterID, &old.Option, &old.Amount)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO bribes (matter_id, senator_id, character_id, option, amount, paid_at) VALUES (?, ?, ?, ?, ?, ?)`,
+			matterID, senatorID, charID, option, price, now.Unix()); err != nil {
+			return Bribe{}, err
+		}
+	case err != nil:
+		return Bribe{}, err
+	case old.CharacterID == charID || price < game.OutbidPrice(old.Amount):
+		return Bribe{}, ErrBought
+	default:
+		if err := credit(ctx, tx, old.CharacterID, old.Amount); err != nil {
+			return Bribe{}, err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE bribes SET character_id = ?, option = ?, amount = ?, paid_at = ? WHERE matter_id = ? AND senator_id = ?`,
+			charID, option, price, now.Unix(), matterID, senatorID); err != nil {
+			return Bribe{}, err
+		}
+		outbid = old
 	}
 	if err := spendOr(ctx, tx, charID, price, fmt.Sprintf("you need %d gold for that", price)); err != nil {
-		return err
+		return Bribe{}, err
 	}
 	if err := changeOpinions(ctx, tx, []game.OpinionChange{{SenatorID: senatorID, CharacterID: charID, Delta: opinion}}); err != nil {
-		return err
+		return Bribe{}, err
 	}
-	return tx.Commit()
+	return outbid, tx.Commit()
 }
 
 // MatterResolution is everything that changes when a matter is decided.

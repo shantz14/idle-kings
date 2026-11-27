@@ -46,7 +46,7 @@ func TestOpinions(t *testing.T) {
 
 	// A bribe warms the senator.
 	m, _ := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now.Add(2*time.Hour))
-	if err := s.PayBribe(ctx, m.ID, b, c.ID, "none", 1, 3, now); err != nil {
+	if _, err := s.PayBribe(ctx, m.ID, b, c.ID, "none", 1, 3, now); err != nil {
 		t.Fatal(err)
 	}
 	// Resolving decays every opinion, then applies vote changes.
