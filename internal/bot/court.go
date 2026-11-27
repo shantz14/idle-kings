@@ -16,7 +16,7 @@ import (
 func init() {
 	registerActivity(game.KindCourt, activityDef{
 		panel: func(b *Bot, ctx context.Context, c store.Character) *discordgo.InteractionResponseData {
-			return b.courtPanel(ctx, c, 0, "")
+			return b.speakPanel(ctx, c, 0, false, "")
 		},
 		resolve: (*Bot).resolveCourt,
 		busy: func(b *Bot, ctx context.Context, a store.Activity) string {
@@ -155,6 +155,7 @@ func courtView(c store.Character, sen []game.Senator, ops game.Opinions, senator
 	}
 	fmt.Fprintf(&desc, "\nYou have **%d gold**.", c.Wealth)
 	embeds = append(embeds, &discordgo.MessageEmbed{Title: "Senator " + s.Name, Description: desc.String(), Color: colorGold})
+	back = button("Back", fmt.Sprintf("speak:back:%d", s.ID), discordgo.SecondaryButton, false)
 	return &discordgo.InteractionResponseData{Embeds: embeds, Components: append(comps, row(append(btns, back)...))}
 }
 
