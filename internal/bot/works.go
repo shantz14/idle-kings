@@ -63,7 +63,7 @@ func (b *Bot) worksPanel(ctx context.Context, c store.Character, note string) *d
 
 func worksView(c store.Character, times map[string]time.Duration, building, note string) *discordgo.InteractionResponseData {
 	desc := "Pay for something the whole city will use, with your family's name carved on it. " +
-		"Once it opens, its **Senate vote weight is yours for good**, and it adds to your estate."
+		"Once it opens, it gives you **lasting influence**, and it adds to your estate."
 	e := actionEmbed(game.KindWork, withNote(busyNote(building, note), desc))
 	var btns []discordgo.MessageComponent
 	for _, w := range game.WorkDefs {

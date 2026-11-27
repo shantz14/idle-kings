@@ -409,7 +409,7 @@ var helpPages = []struct{ title, body string }{
 		"(a battle of wits: the winner takes the crowd). Senators who share your cause warm to a good speaker.\n\n" +
 		"🎪 **Bread and Circuses** (Monetary): feed and entertain the city. Lifts the people's mood and your influence; each coin helps a little less than the last.\n\n" +
 		"🏛️ **Endow a Public Work** (Monetary): a statue, road, temple or aqueduct with your name on it. It takes days to build, " +
-		"doesn't stop you doing other things, and its Senate vote weight is yours for good.\n\n" +
+		"doesn't stop you doing other things, and it gives you lasting influence.\n\n" +
 		"*The more influence you have, the less canvassing, speeches and circuses add. Public works don't shrink.*"},
 	{"Duels and hunts", "⚔️ **Challenge to a Duel** (Martial): call out a player, with or without a gold wager they must match. " +
 		"They answer by DM; refusing costs a little renown. If they accept, you fight 30 minutes later and the court can **bet**: " +

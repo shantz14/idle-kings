@@ -86,7 +86,7 @@ var Actions = []ActionDef{
 	},
 	{
 		Key: KindWork, Name: "Endow a Public Work", Emoji: "🏛️", Category: CatMonetary, Public: true,
-		Description: "Pay for a statue, road, temple or aqueduct bearing your name. Takes days to build, but its Senate vote weight is yours for good.",
+		Description: "Pay for a statue, road, temple or aqueduct bearing your name. Takes days to build, but gives you lasting influence.",
 	},
 	{
 		Key: KindInvest, Name: "Invest in a Venture", Emoji: "📈", Category: CatMonetary,
