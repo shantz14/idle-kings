@@ -596,7 +596,9 @@ func termsView(c, t store.Character, terms game.PlotTerms, note string) *discord
 		offer = "Nothing but the pleasure of it"
 	}
 	// The last part only keeps the two rows' IDs apart.
-	id := func(gold, share int, row string) string { return fmt.Sprintf("consp:offer:%d:%d:%d:%s", t.ID, gold, share, row) }
+	id := func(gold, share int, row string) string {
+		return fmt.Sprintf("consp:offer:%d:%d:%d:%s", t.ID, gold, share, row)
+	}
 	var golds, shares []discordgo.MessageComponent
 	for _, g := range game.PlotGoldOffers {
 		style := discordgo.SecondaryButton

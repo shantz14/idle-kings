@@ -429,7 +429,7 @@ var helpPages = []struct{ title, body string }{
 		"doesn't stop you doing other things, and it gives you lasting influence.\n\n" +
 		"*The more influence you have, the less canvassing, speeches and circuses add. Public works don't shrink.*"},
 	{"Duels and hunts", "⚔️ **Challenge to a Duel** (Martial): call out a player, with or without a gold wager they must match. " +
-		"They answer by DM; refusing costs a little renown. If they accept, you fight 30 minutes later and the court can **bet**: " +
+		"They answer by DM; refusing costs renown and the Hawks' respect, and a third refusal in a season is announced. If they accept, you fight 30 minutes later and the court can **bet**: " +
 		"backers of the winner split the pot.\n" +
 		"Midway you each pick a stance or yield: **attack** beats a trick, a **trick** beats a guard, a **guard** beats an attack. " +
 		"Prowess decides most fights. The winner takes renown from the loser, and a bad loss leaves you **wounded** for a few days.\n\n" +

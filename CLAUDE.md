@@ -24,6 +24,9 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  influence.go (ScaleInfluence/ScaleGain, InfluenceDecay, FreeKinds, Canvass, Bread and Circuses), speech.go,
                  renown.go (what renown does: RenownWeight, the shop's RenownNeeded; RenownRegard/Regard live in opinion.go),
                  titles.go (seasons, season titles, feats, Prestige/Wealth, Winners),
+                 plotterms.go (what a plot's leader offers members: PlotTerms, SplitHaul, EnemiesPleased),
+                 sabotage.go (Sabotage and Smear Campaign, RepairCost, SumEffectsDamaged), contracts.go (Senate contracts, the vote's leader),
+                 auction.go (auction rules and the merchant's AuctionLots),
                  works.go (public works and monuments), happenings.go (monsters and visitors abroad for a few days),
                  spies.go (spy networks, Plant/Root Out Spies, Practice), secrets.go (what spies leak), misdeeds.go (which secrets are shameful, and denouncing them),
                  votesale.go (the scandal risk of selling your vote to a senator),
@@ -35,12 +38,14 @@ internal/store   SQLite: schema.sql (applied on open, no migrations), characters
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
                  monuments (in activities.go), laws (ApplyOutcome, denunciations),
                  conspiracies (plots, members, strikes, and the deeds: deaths/heirs, thefts, new senators),
-                 titles (seasons, deeds, titles held; senateDay counts the season and fades influence)
+                 titles (seasons, deeds, titles held; senateDay counts the season and fades influence),
+                 sabotage (damaged_items, venture_damage, RepairItem), auctions (open, bid, settle; onAuction locks a holding)
 internal/bot     Discord: commands.go (registration + dispatch), admin (/admin testing tools), creator, menu, party, speak (Speak to a Senator: the senator's page, asking), court,
                  invest, duel, hunt, journey (journeys, hiring bandits), intrigue (spies), leak, senate, votetrade, estate, shop,
                  estatetrade (player deals), conspiracy (plots, invitations, the daily tick, striking, naming an heir), influence (canvass, circus, announce helpers),
                  speech, works, petition, laws (denouncing, permits, laws field), dossier (saved spy reports), charts (ownership pie charts: PNGs drawn in pure Go with
-                 golang.org/x/image's Go font, attached via `attachChart`), titles (deeds, feats, the season's end, the /players leaderboard tabs), info pages
+                 golang.org/x/image's Go font, attached via `attachChart`), titles (deeds, feats, the season's end, the /players leaderboard tabs),
+                 sabotage (Sabotage, Smear Campaign), auction (bids, the merchant's auction, your own auctions), info pages
 ```
 Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init` (`componentRoutes["hunt"] = (*Bot).onHunt`, `modalRoutes` for modals; see `routes.go`), and documents its IDs at the top. Handlers always get at least one part. `limits_test.go` fails on any tested button with no route.
 
@@ -71,6 +76,11 @@ Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init
 - The store uses a single DB connection: close `rows` before running another query (see `listCharacters`), and never call non-tx store methods inside a transaction. Use the helpers in `helpers.go`: `withTx`, `queryAll` (closes rows for you), `inList`, `spend`/`spendOr`/`credit`, `resolveOnce`. Look characters up in bulk with `CharactersByIDs`/`CharacterNames`, never in a loop. Loaded characters carry `RealmFallen`, so don't reload the realm to check it. `TestHotQueriesUseIndexes` guards the per-tick queries; add yours there.
 - Conspiracies (`conspiracy.go`): a plot is a free activity (`KindConspiracy` in `FreeKinds`, one led at a time) with its state in `conspiracies` and everyone asked in `conspiracy_members`; `conspiracyTick` steps each plot once per game day (`game.StepDay`), and the leader's `KindStrike` activity (target = the plot's id) ends both through `store.ResolveStrike`. What a plot does goes through `Outcome.Deaths` (the same character row carries on as the heir, `game.Inherit`), `Outcome.Transfers` (possessions only), `Outcome.Denunciations` and `Outcome.Senators` (a new persona in the same seat ID, `game.ReplaceSenator`). Root Out Spies also rolls `game.Uncover` on plots against you.
 - Seasons and titles (`titles.go`, store `titles`, `bot/titles.go`): a season is `game.SeasonDays` Senate days; `checkSeason` runs after each Senate day and `endSeason` crowns the `SeasonTitles` winners (`game.Winners`: ties share, zero wins nothing). A deed title counts `deeds` rows: record one with `b.addDeeds` where it happens (`game.Deed…` kinds). A feat is a `TitleDefs` entry (or a happening's `Feat`) given once with `b.awardFeat`. Wealth leaves out secret stakes; prestige counts titles. A fallen realm crowns nobody. `/admin season` and `/admin title` test them.
+- Bribes can be outbid (`store.PayBribe` returns the displaced bribe; `game.OutbidPrice`), and the outbid briber is refunded and DM'd (`tellOutbid`).
+- Conspiracy invitations carry `game.PlotTerms` (`conspiracy_terms`): `InvitePlayer`, and `JoinPlot` pays the gold up front; `plotCuts` pays shares on a successful theft.
+- Sabotage damage: a damaged holding (`Holding.Repair > 0`) gives no effects (`Character.Effects()` uses `game.SumEffectsDamaged`), but keeps its value; a sabotaged stake's income is scaled in `fillVentures` (`Character.Sabotaged`). Apply both through `Outcome.Sabotage`.
+- Senate contracts are data (`contractOptions` in `contracts.go`, "event/option" → sector); `creditVoters` in `bot/senate.go` pays them and the vote's leader before the matter is stored.
+- Auctions (`auctions` table): `Bid` holds the bid and refunds the one it beats; `settleAuctions` in the tick settles due ones. A holding in an open auction can't be sold or traded (`onAuction`, checked in `SellToShop` and `ownsAll`). The merchant's auction is the `auction` happening (no events; `openNPCAuction` when it begins).
 - Embezzling reads `store.RecentEmbezzlements` (anyone at court, the last `game.EmbezzleRecentDays` game days): each one makes the next harder and likelier to be caught.
 - `b.leak` runs in the background (`b.background`), so call it whenever it fits; the player's answer doesn't wait on it.
 - Schema is dev-only. Changing it means deleting `idle-kings.db`; say so in the README.

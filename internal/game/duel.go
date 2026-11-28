@@ -99,14 +99,14 @@ func DuelChance(challenger, defender Sheet, mod float64) int {
 
 // Placeholders to tune.
 const (
-	duelRenown          = 10  // the loser's renown that goes to the winner
-	duelUpsetRenown     = 5   // extra for beating a better fighter
-	duelDecisive        = 30  // a margin this large always wounds the loser
-	duelWoundChance     = 25  // percent, for a closer loss
-	DuelDeclineRenown   = 10  // lost by refusing a challenge
+	duelRenown        = 10 // the loser's renown that goes to the winner
+	duelUpsetRenown   = 5  // extra for beating a better fighter
+	duelDecisive      = 30 // a margin this large always wounds the loser
+	duelWoundChance   = 25 // percent, for a closer loss
+	DuelDeclineRenown = 10 // lost by refusing a challenge
 	// CowardRefusals is how many refusals in a season the court calls
 	// cowardice, out loud.
-	CowardRefusals = 3
+	CowardRefusals      = 3
 	duelHawkWinner      = 4.0 // senator opinions after the bout
 	duelHawkBraveLoser  = 1.0
 	duelRiskTakerWinner = 3.0

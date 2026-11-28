@@ -690,3 +690,35 @@ func TestSabotageViewsFitDiscord(t *testing.T) {
 		}
 	}
 }
+
+func TestAuctionViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 5000}
+	end := time.Now().Add(time.Hour)
+	for _, it := range game.AuctionLots {
+		a := store.Auction{ID: 999999, ItemKey: it.Key, Reserve: game.NPCReserve(it), EndsAt: end}
+		checkLimits(t, "auction "+it.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{auctionEmbed(a, "", "")}, Components: auctionButtons(a)})
+		checkLimits(t, "bid "+it.Key, bidView(c, a, "a note"))
+		a.SellerID, a.TopBidder, a.TopBid = 2, 3, 123456
+		checkLimits(t, "auction bid "+it.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{auctionEmbed(a, long+" "+long, long+" "+long)}})
+		a.TopBidder = c.ID
+		checkLimits(t, "bid, top "+it.Key, bidView(c, a, ""))
+		a.Settled = true
+		checkLimits(t, "bid, over "+it.Key, bidView(c, a, ""))
+	}
+	h := store.Holding{ID: 999999999, Key: game.AuctionLots[0].Key}
+	for r := range game.AuctionReserves {
+		for _, d := range game.AuctionDays {
+			checkLimits(t, "auction setup", auctionSetupView(c, h, r, d, "a note"))
+		}
+	}
+	rich := c
+	for n, it := range game.Items {
+		rich.Holdings = append(rich.Holdings, store.Holding{ID: int64(n + 1), Key: it.Key})
+	}
+	if len(auctionablePieces(rich)) > 25 {
+		t.Fatal("too many options")
+	}
+}

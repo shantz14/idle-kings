@@ -22,7 +22,7 @@ func init() {
 //   auc:bid:<auction>                     (announcement) open the bid panel
 //   auc:pay:<auction>:<gold>              bid that much
 //   auc:custom:<auction>                  name your bid → modal auc:amount:<auction>
-//   auc:setup:<holding>:<reserve>:<days>  (from /estate) the terms of your own auction
+//   auc:setup:<holding>:<reserve>:<days>:<r|d>  (from /estate) the terms of your own auction (r/d: which row)
 //   auc:start:<holding>:<reserve>:<days>  put it up for auction
 // <reserve> is an index into game.AuctionReserves.
 
@@ -281,21 +281,22 @@ func auctionSetupView(c store.Character, h store.Holding, reserve, days int, not
 	res := game.PlayerReserve(it, game.AuctionReserves[reserve])
 	desc := fmt.Sprintf("Put **%s** up for auction. Anyone at court can bid; the highest bid when time runs out takes it, and the gold is yours. "+
 		"If nobody bids your reserve, it stays with you. Until then you can't sell or trade it.", it.Name)
-	id := func(r, d int) string { return fmt.Sprintf("auc:setup:%d:%d:%d", h.ID, r, d) }
+	// The last part only keeps the two rows' IDs apart.
+	id := func(r, d int, row string) string { return fmt.Sprintf("auc:setup:%d:%d:%d:%s", h.ID, r, d, row) }
 	var reserves, lengths []discordgo.MessageComponent
 	for n, share := range game.AuctionReserves {
 		style := discordgo.SecondaryButton
 		if n == reserve {
 			style = discordgo.PrimaryButton
 		}
-		reserves = append(reserves, button(fmt.Sprintf("Reserve %d gold", game.PlayerReserve(it, share)), id(n, days), style, false))
+		reserves = append(reserves, button(fmt.Sprintf("Reserve %d gold", game.PlayerReserve(it, share)), id(n, days, "r"), style, false))
 	}
 	for _, d := range game.AuctionDays {
 		style := discordgo.SecondaryButton
 		if d == days {
 			style = discordgo.PrimaryButton
 		}
-		lengths = append(lengths, button(fmt.Sprintf("%d day%s", d, plural(d)), id(reserve, d), style, false))
+		lengths = append(lengths, button(fmt.Sprintf("%d day%s", d, plural(d)), id(reserve, d, "d"), style, false))
 	}
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "🔨 Auction " + it.Name, Description: withNote(note, desc), Color: colorPanel,
