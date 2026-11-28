@@ -203,25 +203,29 @@ func openPlot(ctx context.Context, tx *sql.Tx, id int64) error {
 // A gift (cost > 0) is paid by the plot's leader.
 func (s *Store) InviteMember(ctx context.Context, id int64, kind string, memberID int64, status string, cost int, now time.Time) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
-		if err := openPlot(ctx, tx, id); err != nil {
-			return err
-		}
-		if cost > 0 {
-			if err := spendOr(ctx, tx, leaderOf(ctx, tx, id), cost, fmt.Sprintf("you need %d gold for the gift", cost)); err != nil {
-				return err
-			}
-		}
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO conspiracy_members (activity_id, member_kind, member_id, status, invited_at) VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT DO NOTHING`, id, kind, memberID, status, now.Unix())
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return ErrInvited
-		}
-		return nil
+		return inviteMember(ctx, tx, id, kind, memberID, status, cost, now)
 	})
+}
+
+func inviteMember(ctx context.Context, tx *sql.Tx, id int64, kind string, memberID int64, status string, cost int, now time.Time) error {
+	if err := openPlot(ctx, tx, id); err != nil {
+		return err
+	}
+	if cost > 0 {
+		if err := spendOr(ctx, tx, leaderOf(ctx, tx, id), cost, fmt.Sprintf("you need %d gold for the gift", cost)); err != nil {
+			return err
+		}
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO conspiracy_members (activity_id, member_kind, member_id, status, invited_at) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT DO NOTHING`, id, kind, memberID, status, now.Unix())
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrInvited
+	}
+	return nil
 }
 
 // SetMemberStatus changes a member's answer, if the plot is still open and
@@ -567,17 +571,19 @@ func (s *Store) NameHeir(ctx context.Context, charID int64, name string) error {
 // InvitePlayer asks a player into an open plot on terms. ErrInvited if they
 // were already asked.
 func (s *Store) InvitePlayer(ctx context.Context, id, memberID int64, terms game.PlotTerms, now time.Time) error {
-	if err := s.InviteMember(ctx, id, MemberPlayer, memberID, MemberInvited, 0, now); err != nil {
+	return s.withTx(ctx, func(tx *sql.Tx) error { // the invitation and its terms together
+		if err := inviteMember(ctx, tx, id, MemberPlayer, memberID, MemberInvited, 0, now); err != nil {
+			return err
+		}
+		if terms == (game.PlotTerms{}) {
+			return nil
+		}
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO conspiracy_terms (activity_id, member_id, gold, share) VALUES (?, ?, ?, ?)
+			 ON CONFLICT (activity_id, member_id) DO UPDATE SET gold = excluded.gold, share = excluded.share`,
+			id, memberID, terms.Gold, terms.Share)
 		return err
-	}
-	if terms == (game.PlotTerms{}) {
-		return nil
-	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO conspiracy_terms (activity_id, member_id, gold, share) VALUES (?, ?, ?, ?)
-		 ON CONFLICT (activity_id, member_id) DO UPDATE SET gold = excluded.gold, share = excluded.share`,
-		id, memberID, terms.Gold, terms.Share)
-	return err
+	})
 }
 
 // ErrLeaderShort is returned when a plot's leader can't pay what they

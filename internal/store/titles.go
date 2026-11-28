@@ -96,15 +96,18 @@ func (s *Store) AddDeeds(ctx context.Context, guildID string, deeds []Deed, now 
 	if len(deeds) == 0 {
 		return nil
 	}
-	season, err := s.Season(ctx, guildID)
-	if err != nil {
-		return err
-	}
 	return s.withTx(ctx, func(tx *sql.Tx) error {
+		// The season is read in the transaction, so a season ending at the
+		// same moment can't file these deeds under the old one.
+		season := 1
+		err := tx.QueryRowContext(ctx, `SELECT season FROM seasons WHERE guild_id = ?`, guildID).Scan(&season)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		for _, d := range deeds {
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO deeds (guild_id, character_id, kind, amount, season, at) VALUES (?, ?, ?, ?, ?, ?)`,
-				guildID, d.CharacterID, d.Kind, d.Amount, season.Number, now.Unix()); err != nil {
+				guildID, d.CharacterID, d.Kind, d.Amount, season, now.Unix()); err != nil {
 				return err
 			}
 		}

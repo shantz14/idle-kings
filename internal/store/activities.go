@@ -19,15 +19,15 @@ var (
 )
 
 type Activity struct {
-	ID                int64
-	GuildID           string
-	HostID            int64
-	Kind              string
-	Goal              string
-	Spend             int   // gold the host paid up front
+	ID      int64
+	GuildID string
+	HostID  int64
+	Kind    string
+	Goal    string
+	Spend   int // gold the host paid up front
 	// Fee is gold charged with the cost when the activity starts (Martial
 	// Law's permit) but not kept in Spend: never refunded, never a budget.
-	Fee int
+	Fee               int
 	TargetID          int64 // kind-specific, e.g. the senator being courted
 	Public            bool
 	AnnounceChannelID string
