@@ -197,12 +197,13 @@ func (b *Bot) onStartCircus(ctx context.Context, i *discordgo.InteractionCreate,
 	now := time.Now()
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindCircus, Public: true, StartedAt: now, EndsAt: now.Add(b.t.Circus),
+		Fee: game.PermitFee(c.Laws),
 	}, gold, nil)
 	if err != nil {
 		b.update(i, b.circusPanel(ctx, c, err.Error()))
 		return
 	}
-	permit := b.payPermit(ctx, c)
+	permit := permitLine(a)
 	name := game.CircusName(gold)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("🎪 %s pays for a %s", c.FullName(), lowerName(name)),

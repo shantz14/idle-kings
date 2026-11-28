@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -77,7 +78,10 @@ func spend(ctx context.Context, tx *sql.Tx, charID int64, gold int) error {
 
 // spendOr is spend with the player-facing message to fail with.
 func spendOr(ctx context.Context, tx *sql.Tx, charID int64, gold int, short string) error {
-	if gold <= 0 {
+	if gold < 0 {
+		return fmt.Errorf("spend: negative amount %d", gold)
+	}
+	if gold == 0 {
 		return nil
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ? AND wealth >= ?`, gold, charID, gold)
@@ -92,8 +96,35 @@ func spendOr(ctx context.Context, tx *sql.Tx, charID int64, gold int, short stri
 
 // credit gives a character gold.
 func credit(ctx context.Context, tx *sql.Tx, charID int64, gold int) error {
+	if gold < 0 {
+		return fmt.Errorf("credit: negative amount %d", gold)
+	}
 	_, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth + ? WHERE id = ?`, gold, charID)
 	return err
+}
+
+// moveGold pays up to want gold from one character to another and returns
+// what was actually paid: never more than the payer has.
+func moveGold(ctx context.Context, tx *sql.Tx, from, to int64, want int) (int, error) {
+	if want <= 0 || from == to {
+		return 0, nil
+	}
+	var have int
+	err := tx.QueryRowContext(ctx, `SELECT wealth FROM characters WHERE id = ?`, from).Scan(&have)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	paid := min(have, want)
+	if paid <= 0 {
+		return 0, nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE characters SET wealth = wealth - ? WHERE id = ?`, paid, from); err != nil {
+		return 0, err
+	}
+	return paid, credit(ctx, tx, to, paid)
 }
 
 // resolveOnce marks an activity resolved, or returns ErrEnded if something

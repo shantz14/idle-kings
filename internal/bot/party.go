@@ -156,13 +156,13 @@ func (b *Bot) onHostParty(ctx context.Context, i *discordgo.InteractionCreate, g
 	events = b.withHappening(ctx, c.GuildID, game.MeetParty, events)
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindParty, Goal: string(goal),
-		Public: true, StartedAt: now, EndsAt: ends,
+		Public: true, StartedAt: now, EndsAt: ends, Fee: game.PermitFee(c.Laws),
 	}, spend, events)
 	if err != nil {
 		b.update(i, b.partyPanel(ctx, c, err.Error()))
 		return
 	}
-	permit := b.payPermit(ctx, c)
+	permit := permitLine(a)
 	budget := strings.ToLower(game.PartyBudgetName(spend))
 
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{

@@ -25,6 +25,9 @@ type Activity struct {
 	Kind              string
 	Goal              string
 	Spend             int   // gold the host paid up front
+	// Fee is gold charged with the cost when the activity starts (Martial
+	// Law's permit) but not kept in Spend: never refunded, never a budget.
+	Fee int
 	TargetID          int64 // kind-specific, e.g. the senator being courted
 	Public            bool
 	AnnounceChannelID string
@@ -75,6 +78,16 @@ type Outcome struct {
 	Deaths        []Death        // murdered players, and their heirs
 	Senators      []game.Senator // new senators in empty seats (by ID)
 	Sabotage      []Sabotage     // ventures and properties damaged by saboteurs
+	// GoldMoves pay gold from one character to another, after Deltas and in
+	// order. Unlike a pair of deltas they never mint gold: the payer gives
+	// what they have, up to the amount.
+	GoldMoves []GoldMove
+}
+
+// GoldMove is gold paid from one character to another.
+type GoldMove struct {
+	From, To int64
+	Gold     int
 }
 
 // NewMonument records a finished public work.
@@ -143,8 +156,11 @@ func startActivity(ctx context.Context, tx *sql.Tx, a Activity, cost int, events
 			return a, ErrBuilt
 		}
 	}
-	if cost > 0 {
-		if err := spendOr(ctx, tx, a.HostID, cost, fmt.Sprintf("you need %d gold for that", cost)); err != nil {
+	if cost < 0 || a.Fee < 0 {
+		return a, fmt.Errorf("start activity: negative cost")
+	}
+	if total := cost + a.Fee; total > 0 {
+		if err := spendOr(ctx, tx, a.HostID, total, fmt.Sprintf("you need %d gold for that", total)); err != nil {
 			return a, err
 		}
 	}
@@ -416,6 +432,11 @@ func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, 
 	}
 	for id, d := range out.Deltas {
 		if err := applyDelta(ctx, tx, id, d); err != nil {
+			return err
+		}
+	}
+	for _, m := range out.GoldMoves {
+		if _, err := moveGold(ctx, tx, m.From, m.To, m.Gold); err != nil {
 			return err
 		}
 	}

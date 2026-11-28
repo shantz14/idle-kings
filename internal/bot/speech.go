@@ -97,13 +97,13 @@ func (b *Bot) onGiveSpeech(ctx context.Context, i *discordgo.InteractionCreate, 
 	now := time.Now()
 	a, err := b.store.StartActivity(ctx, store.Activity{
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindSpeech, Goal: cause.Key, Public: true,
-		StartedAt: now, EndsAt: now.Add(b.t.Speech),
+		StartedAt: now, EndsAt: now.Add(b.t.Speech), Fee: game.PermitFee(c.Laws),
 	}, 0, nil)
 	if err != nil {
 		b.update(i, b.speechPanel(ctx, c, err.Error()))
 		return
 	}
-	permit := b.payPermit(ctx, c)
+	permit := permitLine(a)
 	where := b.announce(ctx, a, &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("📢 %s speaks in the Forum", c.FullName()),
 		Description: fmt.Sprintf("A speech for **%s**. Come to cheer, or to heckle.", cause.Name),

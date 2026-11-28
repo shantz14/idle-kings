@@ -395,6 +395,12 @@ func transferItems(ctx context.Context, tx *sql.Tx, ts []ItemTransfer) error {
 // its estate, monuments, ventures and dossier; the dead's own business ends.
 func applyDeaths(ctx context.Context, tx *sql.Tx, deaths []Death, now time.Time) error {
 	for _, d := range deaths {
+		// Gold held by the dead's open business goes back once the heir is
+		// seated (the wealth update below would overwrite it otherwise).
+		refunds, err := heldGold(ctx, tx, d.CharacterID)
+		if err != nil {
+			return err
+		}
 		h := d.Heir
 		stats, _ := json.Marshal(h.Stats)
 		steps := []struct {
@@ -421,8 +427,76 @@ func applyDeaths(ctx context.Context, tx *sql.Tx, deaths []Death, now time.Time)
 				return err
 			}
 		}
+		for _, r := range refunds {
+			if err := credit(ctx, tx, r.to, r.gold); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+type refund struct {
+	to   int64
+	gold int
+}
+
+// heldGold is the gold tied up in a character's open activities, and whose it
+// is: their own stake (not in free kinds, which others pay into), a duel's
+// matched wager, the bets on it, and bandits hired against their journey.
+func heldGold(ctx context.Context, tx *sql.Tx, charID int64) ([]refund, error) {
+	type open struct {
+		id, target int64
+		kind, goal string
+		spend      int
+	}
+	acts, err := queryAll(ctx, tx, `SELECT id, kind, goal, spend, coalesce(target_id, 0) FROM activities WHERE host_id = ? AND resolved_at IS NULL`,
+		func(r scanner) (open, error) {
+			var a open
+			return a, r.Scan(&a.id, &a.kind, &a.goal, &a.spend, &a.target)
+		}, charID)
+	if err != nil {
+		return nil, err
+	}
+	var out []refund
+	for _, a := range acts {
+		if a.spend > 0 && game.UsesSlot(a.kind) {
+			out = append(out, refund{charID, a.spend})
+		}
+		if a.kind == game.KindDuel && a.goal == game.DuelAccepted && a.spend > 0 && a.target != 0 {
+			out = append(out, refund{a.target, a.spend})
+		}
+		bets, err := queryAll(ctx, tx, `SELECT character_id, amount FROM bets WHERE activity_id = ?`,
+			func(r scanner) (refund, error) {
+				var b refund
+				return b, r.Scan(&b.to, &b.gold)
+			}, a.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, bets...)
+		hires, err := queryAll(ctx, tx, `SELECT character_id, goal FROM participants WHERE activity_id = ?`,
+			func(r scanner) (refund, error) {
+				var p refund
+				var goal string
+				if err := r.Scan(&p.to, &goal); err != nil {
+					return p, err
+				}
+				if band, ok := game.BandFromGoal(goal); ok {
+					p.gold = band.Price
+				}
+				return p, nil
+			}, a.id)
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range hires {
+			if h.gold > 0 && h.to != charID {
+				out = append(out, h)
+			}
+		}
+	}
+	return out, nil
 }
 
 // replaceSenators seats new senators in the given seats (by ID). Nobody has
