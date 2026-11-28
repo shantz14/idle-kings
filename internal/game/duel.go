@@ -217,8 +217,13 @@ func ResolveDuel(r Roller, in DuelInput) DuelResult {
 	payouts := BetPayouts(in.Bets, w.ID)
 	cut := in.Laws.Rules().BetCut
 	kept := 0
+	paid := map[int64]bool{} // payouts are per character: pay each once
 	for _, b := range in.Bets {
 		got := payouts[b.CharacterID]
+		if paid[b.CharacterID] {
+			got = 0
+		}
+		paid[b.CharacterID] = true
 		if b.SideID == w.ID && cut > 0 {
 			c := int(float64(got) * cut)
 			got -= c

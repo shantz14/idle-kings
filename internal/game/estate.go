@@ -16,12 +16,13 @@ type Effects struct {
 	VoteWeight  float64 `json:"vote_weight,omitempty"`  // added to your weight in the Senate
 }
 
+// Add sums o into e. Like Delta.Merge, e's Stats map is copied rather than
+// added into, since it may be an item's own.
 func (e *Effects) Add(o Effects) {
 	if len(o.Stats) > 0 {
-		if e.Stats == nil {
-			e.Stats = Stats{}
-		}
-		e.Stats.Add(o.Stats)
+		s := e.Stats.Clone()
+		s.Add(o.Stats)
+		e.Stats = s
 	}
 	e.DailyIncome += o.DailyIncome
 	e.PartyBonus += o.PartyBonus

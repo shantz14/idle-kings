@@ -53,13 +53,13 @@ type Delta struct {
 	DailyIncome int     `json:"daily_income,omitempty"`
 }
 
-// Merge adds o into d.
+// Merge adds o into d. d's Stats map is copied first, never added into: a
+// delta copied out of a catalogue still shares the catalogue's map.
 func (d *Delta) Merge(o Delta) {
 	if len(o.Stats) > 0 {
-		if d.Stats == nil {
-			d.Stats = Stats{}
-		}
-		d.Stats.Add(o.Stats)
+		s := d.Stats.Clone()
+		s.Add(o.Stats)
+		d.Stats = s
 	}
 	d.Influence += o.Influence
 	d.Renown += o.Renown

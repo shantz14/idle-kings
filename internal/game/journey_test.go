@@ -1,6 +1,10 @@
 package game
 
-import "testing"
+import (
+	"math/rand/v2"
+	"reflect"
+	"testing"
+)
 
 func TestJourneyContentIsWellFormed(t *testing.T) {
 	seen := map[string]bool{}
@@ -115,5 +119,37 @@ func TestResolveAmbush(t *testing.T) {
 	// Nothing to take, nothing taken.
 	if res := ResolveAmbush(rolls(t, 99, 99), traveler, plain, band, 0, 0, sen); res.Loot != 0 || res.Cut != 0 {
 		t.Errorf("empty purse: %+v", res)
+	}
+}
+
+// Resolving a journey or an ambush must never change the catalogue it reads:
+// a delta copied out of JourneyDests or BanditBands shares their Stats maps.
+func TestJourneysLeaveTheCatalogueAlone(t *testing.T) {
+	snapshot := func() []Stats {
+		var out []Stats
+		for _, d := range JourneyDests {
+			out = append(out, d.Success.Stats.Clone(), d.Failure.Stats.Clone())
+		}
+		for _, b := range BanditBands {
+			out = append(out, b.Reward.Stats.Clone())
+		}
+		return out
+	}
+	before := snapshot()
+	p, hirer := duelPeople()
+	r := rand.New(rand.NewPCG(5, 6))
+	for i := 0; i < 200; i++ {
+		for _, d := range JourneyDests {
+			ResolveJourney(r, p, d, float64(i%5-2))
+		}
+		for _, b := range BanditBands {
+			ResolveAmbush(r, p, hirer, b, 100, float64(i%5-2), nil)
+		}
+	}
+	after := snapshot()
+	for i := range before {
+		if !reflect.DeepEqual(before[i], after[i]) {
+			t.Fatalf("catalogue entry %d changed: %v → %v", i, before[i], after[i])
+		}
 	}
 }

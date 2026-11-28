@@ -282,14 +282,14 @@ func (s Senator) score(v optionView, realm Realm, matterID int64) float64 {
 	score := 0.0
 	for _, t := range s.Traits {
 		ti, _ := TraitByKey(t)
-		for l, w := range ti.Likes {
-			score += w * v.leans[l]
+		for _, l := range sortedKeys(ti.Likes) { // in order: float sums depend on it
+			score += ti.Likes[l] * v.leans[l]
 		}
 	}
 	// Every senator cares a little about the realm, most about whatever is low.
-	for a, d := range v.expected {
+	for _, a := range sortedKeys(v.expected) {
 		need := (TrackerMax - realm[a]) / realmNeedScale
-		score += realmCare * d * need
+		score += realmCare * v.expected[a] * need
 	}
 	score += lawScore(s, v.opt)
 	danger, _ := s.dangerOf(v)
@@ -642,8 +642,11 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 	senVotes := map[int64]string{}
 	for _, s := range in.Senators {
 		opt := s.decide(ev, senScores[s.ID], in.Players, in.Opinions)
+		// A bribe only counts for a real option (as in SenatorIntent).
 		if b, ok := in.Bribes[s.ID]; ok {
-			opt = b
+			if _, valid := ev.Option(b); valid {
+				opt = b
+			}
 		}
 		senVotes[s.ID] = opt
 		res.Tally[opt] += s.Influence
@@ -680,6 +683,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		res.Fallen, res.FallenReason = res.Realm.Fallen()
 	}
 
+	abstain := res.Laws.Rules().AbstainInfluence
 	for _, p := range in.Players {
 		d := out.forPlayer(p)
 		if p.Vote == winner.Key {
@@ -692,7 +696,7 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 			res.Notices[p.ID] = append(res.Notices[p.ID], fmt.Sprintf("The Senate voted to **%s**. For you: %s", strings.ToLower(winner.Label), desc))
 		}
 		_, voted := ev.Option(p.Vote)
-		if abstain := res.Laws.Rules().AbstainInfluence; !voted && abstain != 0 {
+		if !voted && abstain != 0 {
 			g := Delta{Influence: ScaleInfluence(abstain, p.Sheet[AttrInfluence])}
 			res.delta(p.ID, g)
 			res.Notices[p.ID] = append(res.Notices[p.ID], "You kept out of the vote, and the court respects your restraint. ("+g.Describe()+")")
@@ -707,7 +711,9 @@ func ResolveMatter(r Roller, in MatterInput) MatterResult {
 		}
 	}
 	petitionerResult(&res, in)
-	witchHunt(r, &res, in.Players, res.Laws)
+	if in.Petitioner == 0 { // like the daily laws, the Witchcraft Act's fines come on Senate days
+		witchHunt(r, &res, in.Players, res.Laws)
+	}
 	res.queueFollowUps(r)
 	return res
 }

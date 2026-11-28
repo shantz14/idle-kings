@@ -258,7 +258,8 @@ func EffectiveStakes(laws Laws, by map[int64]Stakes) (map[int64]Stakes, Stakes) 
 			}
 		}
 	}
-	for id, st := range by {
+	for _, id := range sortedKeys(by) { // in order: the totals are float sums
+		st := by[id]
 		eff := Stakes{}
 		for k, v := range st {
 			switch {
