@@ -141,11 +141,4 @@ func ActionsFor(c Category, role string) []ActionDef {
 }
 
 // ActionByKey finds a menu action by its kind.
-func ActionByKey(key string) (ActionDef, bool) {
-	for _, a := range Actions {
-		if a.Key == key {
-			return a, true
-		}
-	}
-	return ActionDef{}, false
-}
+func ActionByKey(key string) (ActionDef, bool) { return actionIndex.get(key) }

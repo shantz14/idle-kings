@@ -106,14 +106,7 @@ var JourneyDests = []JourneyDest{
 	},
 }
 
-func JourneyDestByKey(k string) (JourneyDest, bool) {
-	for _, d := range JourneyDests {
-		if d.Key == k {
-			return d, true
-		}
-	}
-	return JourneyDest{}, false
-}
+func JourneyDestByKey(k string) (JourneyDest, bool) { return journeyIndex.get(k) }
 
 // journeyGifts are the foreign presents a great journey may bring home.
 // They aren't sold in the shop, but can be sold or traded like anything else.
@@ -211,14 +204,7 @@ func (b BanditBand) Phrase() string {
 	return string(r)
 }
 
-func BanditBandByKey(k string) (BanditBand, bool) {
-	for _, b := range BanditBands {
-		if b.Key == k {
-			return b, true
-		}
-	}
-	return BanditBand{}, false
-}
+func BanditBandByKey(k string) (BanditBand, bool) { return banditIndex.get(k) }
 
 // BanditGoal is how a hired band is stored on the journey.
 func BanditGoal(band string) string { return "bandits:" + band }

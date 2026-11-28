@@ -50,9 +50,10 @@ var WorkDefs = []WorkDef{
 var workTiers = []struct {
 	Suffix, Prefix   string
 	CostMul, DaysMul float64
+	Bigger           string // how the rebuild's description says it grows
 }{
-	{"grand", "Grand", 3, 2},
-	{"great", "Great", 9, 3},
+	{"grand", "Grand", 3, 2, "bigger"},
+	{"great", "Great", 9, 3, "bigger still"},
 }
 
 // WorkRebuilds are every work's rebuilds, keyed "<work>@<suffix>". They are
@@ -67,7 +68,7 @@ func init() {
 			r.Name = t.Prefix + " " + w.Name
 			r.Cost = int(float64(w.Cost) * t.CostMul)
 			r.Days = w.Days * t.DaysMul
-			r.Description = fmt.Sprintf("Tear it down and build it again, %s. Every bit as useful, and twice as admired.", map[int]string{1: "bigger", 2: "bigger still"}[n+1])
+			r.Description = fmt.Sprintf("Tear it down and build it again, %s. Every bit as useful, and twice as admired.", t.Bigger)
 			WorkRebuilds = append(WorkRebuilds, r)
 		}
 	}

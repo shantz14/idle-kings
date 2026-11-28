@@ -4,16 +4,14 @@ package store
 import (
 	"context"
 	"database/sql"
-	_ "embed"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
-
-//go:embed schema.sql
-var schema string
 
 var (
 	ErrNotFound = errors.New("not found")
@@ -29,16 +27,36 @@ type Court struct {
 	Status                 string
 }
 
-// Open opens (and creates) the database and applies the schema.
+// Open opens (and creates) the database and brings its schema up to date
+// with the migrations in migrations/.
 func Open(path string) (*Store, error) {
+	ms, err := loadMigrations()
+	if err != nil {
+		return nil, err
+	}
+	return open(path, ms)
+}
+
+func open(path string, ms []migration) (*Store, error) {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create database directory: %w", err)
+		}
+	}
 	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite has one writer; keeps things simple
-	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("apply schema: %w", err)
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open database %s: %w", path, err)
+	}
+	if err := migrate(ctx, db, path, ms); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return &Store{db: db}, nil
 }

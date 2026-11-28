@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -39,6 +40,7 @@ func (b *Bot) resolveActivity(ctx context.Context, a store.Activity, now time.Ti
 	d, ok := activityDefs[a.Kind]
 	if !ok || d.resolve == nil {
 		slog.Error("unknown activity kind", "kind", a.Kind, "id", a.ID)
+		b.abandon(ctx, a, now) // otherwise it's fetched and logged every tick forever
 		return
 	}
 	if !b.activityRetries.try(a.ID) {
@@ -52,6 +54,19 @@ func (b *Bot) resolveActivity(ctx context.Context, a store.Activity, now time.Ti
 		}
 	}()
 	d.resolve(b, ctx, a, now)
+}
+
+// loadFailed handles a resolver that couldn't load what it needs. Something
+// gone for good (a missing row, broken data: bad) can never resolve, so the
+// activity is abandoned and its gold refunded; anything else (a busy or
+// failing database) is retried next tick, and abandoned only after
+// maxRetries.
+func (b *Bot) loadFailed(ctx context.Context, a store.Activity, now time.Time, err error, bad bool) {
+	if err != nil && !errors.Is(err, store.ErrNotFound) && !bad {
+		slog.Warn("resolve: load failed, will retry", "kind", a.Kind, "id", a.ID, "err", err)
+		return
+	}
+	b.abandon(ctx, a, now)
 }
 
 // abandon marks an activity resolved without applying anything, for rows

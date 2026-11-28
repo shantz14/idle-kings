@@ -69,11 +69,4 @@ var Personas = []Persona{
 		[]Trait{TraitMerchant, TraitBigSpender}},
 }
 
-func PersonaByName(name string) (Persona, bool) {
-	for _, p := range Personas {
-		if p.Name == name {
-			return p, true
-		}
-	}
-	return Persona{}, false
-}
+func PersonaByName(name string) (Persona, bool) { return personaIndex.get(name) }

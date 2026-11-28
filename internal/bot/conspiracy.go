@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -1201,17 +1202,17 @@ func (b *Bot) resolveStrike(ctx context.Context, a store.Activity, now time.Time
 					haul, inGold = it.Price, false
 				}
 			}
+			// Gold moves rather than paired deltas: the store pays only what
+			// the payer still has, so a broke leader can't mint members' cuts.
 			if stolen == "" {
 				gold := game.CofferTake(t.Wealth)
-				addDelta(t.ID, game.Delta{Wealth: -gold})
-				addDelta(leaderID, game.Delta{Wealth: gold})
+				out.GoldMoves = append(out.GoldMoves, store.GoldMove{From: t.ID, To: leaderID, Gold: gold})
 				stolen = fmt.Sprintf("**%d gold**", gold)
 				haul = gold
 			}
 			cuts := b.plotCuts(ctx, pv, haul, inGold)
-			for id, g := range cuts {
-				addDelta(leaderID, game.Delta{Wealth: -g})
-				addDelta(id, game.Delta{Wealth: g})
+			for _, id := range sortedIDs(cuts) {
+				out.GoldMoves = append(out.GoldMoves, store.GoldMove{From: leaderID, To: id, Gold: cuts[id]})
 			}
 			extra = fmt.Sprintf("\n\nThey came back with %s.", stolen)
 		}
@@ -1393,4 +1394,10 @@ func (b *Bot) plotCuts(ctx context.Context, pv plotView, haul int, inGold bool) 
 		}
 	}
 	return cuts
+}
+
+// sortedIDs is a map's character IDs in order, so payouts run the same way
+// every time.
+func sortedIDs[V any](m map[int64]V) []int64 {
+	return slices.Sorted(maps.Keys(m))
 }

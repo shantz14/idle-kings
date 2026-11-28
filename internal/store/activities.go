@@ -19,12 +19,15 @@ var (
 )
 
 type Activity struct {
-	ID                int64
-	GuildID           string
-	HostID            int64
-	Kind              string
-	Goal              string
-	Spend             int   // gold the host paid up front
+	ID      int64
+	GuildID string
+	HostID  int64
+	Kind    string
+	Goal    string
+	Spend   int // gold the host paid up front
+	// Fee is gold charged with the cost when the activity starts (Martial
+	// Law's permit) but not kept in Spend: never refunded, never a budget.
+	Fee               int
 	TargetID          int64 // kind-specific, e.g. the senator being courted
 	Public            bool
 	AnnounceChannelID string
@@ -75,6 +78,16 @@ type Outcome struct {
 	Deaths        []Death        // murdered players, and their heirs
 	Senators      []game.Senator // new senators in empty seats (by ID)
 	Sabotage      []Sabotage     // ventures and properties damaged by saboteurs
+	// GoldMoves pay gold from one character to another, after Deltas and in
+	// order. Unlike a pair of deltas they never mint gold: the payer gives
+	// what they have, up to the amount.
+	GoldMoves []GoldMove
+}
+
+// GoldMove is gold paid from one character to another.
+type GoldMove struct {
+	From, To int64
+	Gold     int
 }
 
 // NewMonument records a finished public work.
@@ -87,6 +100,8 @@ type NewMonument struct {
 var (
 	ErrBuilt    = errors.New("you have already built one of those")
 	ErrBuilding = errors.New("you are already building something")
+	// ErrChallenged means the player already has a duel challenge waiting.
+	ErrChallenged = errors.New("they already have a challenge waiting for an answer")
 )
 
 // slotFilter is the SQL condition for activities that take up a
@@ -133,6 +148,19 @@ func startActivity(ctx context.Context, tx *sql.Tx, a Activity, cost int, events
 		}
 		return a, ErrBusy
 	}
+	if a.Kind == game.KindDuel && a.Goal == game.DuelPending && a.TargetID != 0 {
+		// Checked here, in the transaction, so two challengers clicking at
+		// once can't both call out the same player.
+		var waiting int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM activities WHERE kind = ? AND goal = ? AND target_id = ? AND resolved_at IS NULL`,
+			game.KindDuel, game.DuelPending, a.TargetID).Scan(&waiting); err != nil {
+			return a, err
+		}
+		if waiting > 0 {
+			return a, ErrChallenged
+		}
+	}
 	if a.Kind == game.KindWork {
 		var built int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM monuments WHERE character_id = ? AND work_key = ?`,
@@ -143,8 +171,11 @@ func startActivity(ctx context.Context, tx *sql.Tx, a Activity, cost int, events
 			return a, ErrBuilt
 		}
 	}
-	if cost > 0 {
-		if err := spendOr(ctx, tx, a.HostID, cost, fmt.Sprintf("you need %d gold for that", cost)); err != nil {
+	if cost < 0 || a.Fee < 0 {
+		return a, fmt.Errorf("start activity: negative cost")
+	}
+	if total := cost + a.Fee; total > 0 {
+		if err := spendOr(ctx, tx, a.HostID, total, fmt.Sprintf("you need %d gold for that", total)); err != nil {
 			return a, err
 		}
 	}
@@ -419,6 +450,11 @@ func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, 
 			return err
 		}
 	}
+	for _, m := range out.GoldMoves {
+		if _, err := moveGold(ctx, tx, m.From, m.To, m.Gold); err != nil {
+			return err
+		}
+	}
 	if err := changeOpinions(ctx, tx, out.Opinions); err != nil {
 		return err
 	}
@@ -540,14 +576,25 @@ func (s *Store) fillMonuments(ctx context.Context, chars []*Character) error {
 }
 
 // AbandonActivity marks an activity and its open events resolved without
-// applying anything, for rows that can never be resolved properly.
+// applying anything, for rows that can never be resolved properly. The gold
+// it held (activityRefunds) goes back to whoever paid it.
 func (s *Store) AbandonActivity(ctx context.Context, activityID int64, now time.Time) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
+		// What it held goes back: it never got to do anything with it.
+		refunds, err := activityRefunds(ctx, tx, activityID)
+		if err != nil {
+			return err
+		}
+		for _, r := range refunds {
+			if err := credit(ctx, tx, r.to, r.gold); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE activity_events SET resolved_at = ? WHERE activity_id = ? AND resolved_at IS NULL`,
 			now.Unix(), activityID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
+		_, err = tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
 		return err
 	})
 }

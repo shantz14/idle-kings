@@ -110,8 +110,30 @@ func (b *Bot) senateTick(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, m := range closed {
-		b.resolveMatter(ctx, m, now)
+		if !b.matterRetries.try(m.ID) {
+			b.abandonMatter(ctx, m, now) // it has failed every tick for too long
+			continue
+		}
+		func() {
+			defer recoverPanic("resolve matter", "id", m.ID, "event", m.EventKey)
+			b.resolveMatter(ctx, m, now)
+		}()
 	}
+}
+
+// abandonMatter closes a matter that can't be resolved, changing nothing, so
+// it stops holding up the court's Senate.
+func (b *Bot) abandonMatter(ctx context.Context, m store.Matter, now time.Time) {
+	st, err := b.store.GetRealm(ctx, m.GuildID)
+	if err != nil {
+		slog.Error("abandon matter: realm", "id", m.ID, "err", err)
+		return
+	}
+	if err := b.store.ResolveMatter(ctx, m, store.MatterResolution{Realm: st.Trackers, Before: st.Trackers, Laws: st.Laws}, now); err != nil {
+		slog.Error("abandon matter", "id", m.ID, "err", err)
+		return
+	}
+	slog.Warn("abandoned matter", "id", m.ID, "event", m.EventKey)
 }
 
 func (b *Bot) openMatter(ctx context.Context, court store.Court, st store.RealmState, now time.Time) {
@@ -203,7 +225,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		return
 	}
 	if !ok { // event removed from the catalogue; close it with no effect
-		_ = b.store.ResolveMatter(ctx, m, store.MatterResolution{Realm: st.Trackers, Laws: st.Laws}, now)
+		_ = b.store.ResolveMatter(ctx, m, store.MatterResolution{Realm: st.Trackers, Before: st.Trackers, Laws: st.Laws}, now)
 		return
 	}
 	senators, err1 := b.store.Senators(ctx, m.GuildID)
@@ -226,6 +248,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		users[c.ID] = c.UserID
 		in.Players = append(in.Players, game.Player{Person: c.Person(), Role: c.Role, Vote: votes[c.ID], Weight: c.VoteWeight(), Items: c.Items})
 	}
+	before := st.Trackers.Clone()
 	res := game.ResolveMatter(b.rng, in)
 	ventureNotices(chars, res)
 	credits := b.creditVoters(ctx, m, ev, &res, chars, senators)
@@ -236,7 +259,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	}
 	err = b.store.ResolveMatter(ctx, m, store.MatterResolution{
 		Summary: map[string]any{"winner": res.Winner.Key, "succeeded": res.Succeeded, "tally": res.Tally},
-		Realm:   res.Realm, Sectors: res.Sectors, Laws: res.Laws, Fallen: res.Fallen, FallenReason: res.FallenReason,
+		Realm:   res.Realm, Before: before, Sectors: res.Sectors, Laws: res.Laws, Fallen: res.Fallen, FallenReason: res.FallenReason,
 		Deltas: res.Deltas, FollowUps: res.FollowUps, DayLength: b.senate.Interval,
 		Opinions: res.Opinions, OpinionDecay: decay, SenateDay: decay != 0,
 	}, now)

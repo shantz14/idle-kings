@@ -203,25 +203,29 @@ func openPlot(ctx context.Context, tx *sql.Tx, id int64) error {
 // A gift (cost > 0) is paid by the plot's leader.
 func (s *Store) InviteMember(ctx context.Context, id int64, kind string, memberID int64, status string, cost int, now time.Time) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
-		if err := openPlot(ctx, tx, id); err != nil {
-			return err
-		}
-		if cost > 0 {
-			if err := spendOr(ctx, tx, leaderOf(ctx, tx, id), cost, fmt.Sprintf("you need %d gold for the gift", cost)); err != nil {
-				return err
-			}
-		}
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO conspiracy_members (activity_id, member_kind, member_id, status, invited_at) VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT DO NOTHING`, id, kind, memberID, status, now.Unix())
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return ErrInvited
-		}
-		return nil
+		return inviteMember(ctx, tx, id, kind, memberID, status, cost, now)
 	})
+}
+
+func inviteMember(ctx context.Context, tx *sql.Tx, id int64, kind string, memberID int64, status string, cost int, now time.Time) error {
+	if err := openPlot(ctx, tx, id); err != nil {
+		return err
+	}
+	if cost > 0 {
+		if err := spendOr(ctx, tx, leaderOf(ctx, tx, id), cost, fmt.Sprintf("you need %d gold for the gift", cost)); err != nil {
+			return err
+		}
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO conspiracy_members (activity_id, member_kind, member_id, status, invited_at) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT DO NOTHING`, id, kind, memberID, status, now.Unix())
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrInvited
+	}
+	return nil
 }
 
 // SetMemberStatus changes a member's answer, if the plot is still open and
@@ -395,6 +399,12 @@ func transferItems(ctx context.Context, tx *sql.Tx, ts []ItemTransfer) error {
 // its estate, monuments, ventures and dossier; the dead's own business ends.
 func applyDeaths(ctx context.Context, tx *sql.Tx, deaths []Death, now time.Time) error {
 	for _, d := range deaths {
+		// Gold held by the dead's open business goes back once the heir is
+		// seated (the wealth update below would overwrite it otherwise).
+		refunds, err := heldGold(ctx, tx, d.CharacterID)
+		if err != nil {
+			return err
+		}
 		h := d.Heir
 		stats, _ := json.Marshal(h.Stats)
 		steps := []struct {
@@ -421,8 +431,94 @@ func applyDeaths(ctx context.Context, tx *sql.Tx, deaths []Death, now time.Time)
 				return err
 			}
 		}
+		for _, r := range refunds {
+			if err := credit(ctx, tx, r.to, r.gold); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+type refund struct {
+	to   int64
+	gold int
+}
+
+// heldGold is the gold tied up in a character's open activities, and whose
+// it is (see activityRefunds).
+func heldGold(ctx context.Context, tx *sql.Tx, charID int64) ([]refund, error) {
+	ids, err := queryAll(ctx, tx, `SELECT id FROM activities WHERE host_id = ? AND resolved_at IS NULL`,
+		func(r scanner) (int64, error) {
+			var id int64
+			return id, r.Scan(&id)
+		}, charID)
+	if err != nil {
+		return nil, err
+	}
+	var out []refund
+	for _, id := range ids {
+		rs, err := activityRefunds(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rs...)
+	}
+	return out, nil
+}
+
+// activityRefunds is the gold an open activity holds, and whose it is: the
+// host's stake (not in free kinds, which others pay into), a duel's matched
+// wager, the bets on it, and bandits hired against a journey.
+func activityRefunds(ctx context.Context, tx *sql.Tx, activityID int64) ([]refund, error) {
+	var host, target int64
+	var kind, goal string
+	var spend int
+	err := tx.QueryRowContext(ctx, `SELECT host_id, kind, goal, spend, coalesce(target_id, 0) FROM activities WHERE id = ? AND resolved_at IS NULL`,
+		activityID).Scan(&host, &kind, &goal, &spend, &target)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []refund
+	if spend > 0 && game.UsesSlot(kind) {
+		out = append(out, refund{host, spend})
+	}
+	if kind == game.KindDuel && goal == game.DuelAccepted && spend > 0 && target != 0 {
+		out = append(out, refund{target, spend})
+	}
+	bets, err := queryAll(ctx, tx, `SELECT character_id, amount FROM bets WHERE activity_id = ?`,
+		func(r scanner) (refund, error) {
+			var b refund
+			return b, r.Scan(&b.to, &b.gold)
+		}, activityID)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, bets...)
+	hires, err := queryAll(ctx, tx, `SELECT character_id, goal FROM participants WHERE activity_id = ?`,
+		func(r scanner) (refund, error) {
+			var p refund
+			var goal string
+			if err := r.Scan(&p.to, &goal); err != nil {
+				return p, err
+			}
+			if band, ok := game.BandFromGoal(goal); ok {
+				p.gold = band.Price
+			}
+			return p, nil
+		}, activityID)
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range hires {
+		if h.gold > 0 && h.to != host {
+			out = append(out, h)
+		}
+	}
+	return out, nil
 }
 
 // replaceSenators seats new senators in the given seats (by ID). Nobody has
@@ -493,17 +589,19 @@ func (s *Store) NameHeir(ctx context.Context, charID int64, name string) error {
 // InvitePlayer asks a player into an open plot on terms. ErrInvited if they
 // were already asked.
 func (s *Store) InvitePlayer(ctx context.Context, id, memberID int64, terms game.PlotTerms, now time.Time) error {
-	if err := s.InviteMember(ctx, id, MemberPlayer, memberID, MemberInvited, 0, now); err != nil {
+	return s.withTx(ctx, func(tx *sql.Tx) error { // the invitation and its terms together
+		if err := inviteMember(ctx, tx, id, MemberPlayer, memberID, MemberInvited, 0, now); err != nil {
+			return err
+		}
+		if terms == (game.PlotTerms{}) {
+			return nil
+		}
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO conspiracy_terms (activity_id, member_id, gold, share) VALUES (?, ?, ?, ?)
+			 ON CONFLICT (activity_id, member_id) DO UPDATE SET gold = excluded.gold, share = excluded.share`,
+			id, memberID, terms.Gold, terms.Share)
 		return err
-	}
-	if terms == (game.PlotTerms{}) {
-		return nil
-	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO conspiracy_terms (activity_id, member_id, gold, share) VALUES (?, ?, ?, ?)
-		 ON CONFLICT (activity_id, member_id) DO UPDATE SET gold = excluded.gold, share = excluded.share`,
-		id, memberID, terms.Gold, terms.Share)
-	return err
+	})
 }
 
 // ErrLeaderShort is returned when a plot's leader can't pay what they

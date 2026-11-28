@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -79,12 +80,23 @@ func optString(i *discordgo.InteractionCreate, name string) string {
 	return v
 }
 
+// interactionTimeout bounds one interaction's work. Slow clicks are
+// deferred (autoDefer), so this only has to stop a stuck one.
+const interactionTimeout = 30 * time.Second
+
 func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if userOf(i) == nil {
 		return
 	}
+	if b.closing.Load() { // shutting down: say so rather than start work
+		b.reply(i, "⏳ The court is restarting. Try again in a minute.")
+		return
+	}
+	b.handlers.Add(1)
+	defer b.handlers.Done()
 	defer recoverPanic("interaction", "type", i.Type.String())
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer b.finish(i, b.autoDefer(i))
+	ctx, cancel := context.WithTimeout(context.Background(), interactionTimeout)
 	defer cancel()
 
 	switch i.Type {
@@ -323,15 +335,98 @@ func lockedOut(i *discordgo.InteractionCreate) (owner string, locked bool) {
 // deferUpdate acknowledges a component click at once, for handlers about
 // to do slow work (DMs, announcements) before they can answer: Discord
 // wants an answer within 3 seconds. The handler's next update or respond
-// then edits the message or posts a follow-up instead.
+// then edits the message or posts a follow-up instead. Clicks and modals
+// that haven't answered after autoDeferAfter are deferred anyway.
 func (b *Bot) deferUpdate(i *discordgo.InteractionCreate) {
-	if err := b.s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredMessageUpdate,
-	}); err != nil {
+	a := b.ackOf(i)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b.deferLocked(i, a)
+}
+
+func (b *Bot) deferLocked(i *discordgo.InteractionCreate, a *ack) {
+	if a.state != ackNone {
+		return
+	}
+	r := &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate}
+	if i.Message == nil { // a modal opened from a slash command: there's no message to update
+		r = &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral}}
+	}
+	if err := b.s.InteractionRespond(i.Interaction, r); err != nil {
 		slog.Error("defer response", "err", err)
 		return
 	}
-	b.deferred.Store(i.ID, true)
+	a.state = ackDeferred
+}
+
+// An ack is how far an interaction has been answered. Discord takes one
+// response; anything after it is an edit or a follow-up.
+type ack struct {
+	mu    sync.Mutex
+	state int
+}
+
+const (
+	ackNone = iota
+	ackResponded
+	ackDeferred
+)
+
+// autoDeferAfter is how long a click or modal may go unanswered before it is
+// deferred for the handler, safely inside Discord's 3 seconds.
+const autoDeferAfter = 2 * time.Second
+
+// ackTTL is how long an interaction's ack is kept: Discord's tokens last 15
+// minutes, and background work may still answer within them.
+const ackTTL = 15 * time.Minute
+
+// ackOf is the interaction's ack, made on first use.
+func (b *Bot) ackOf(i *discordgo.InteractionCreate) *ack {
+	if v, ok := b.acks.Load(i.ID); ok {
+		return v.(*ack)
+	}
+	v, loaded := b.acks.LoadOrStore(i.ID, &ack{})
+	if !loaded {
+		id := i.ID
+		time.AfterFunc(ackTTL, func() { b.acks.Delete(id) })
+	}
+	return v.(*ack)
+}
+
+// finish runs when a handler returns (or panics): it stops the auto-defer
+// timer, and answers a click or modal the handler left unanswered (a stale
+// button, an unknown choice), so the player never sees "interaction failed".
+func (b *Bot) finish(i *discordgo.InteractionCreate, stopTimer func() bool) {
+	stopTimer()
+	if i.Type != discordgo.InteractionMessageComponent && i.Type != discordgo.InteractionModalSubmit {
+		return
+	}
+	a := b.ackOf(i)
+	a.mu.Lock()
+	unanswered := a.state == ackNone
+	a.mu.Unlock()
+	if unanswered {
+		b.reply(i, "That didn't do anything: this screen may be out of date. Use `/court` to open a fresh one.")
+	}
+}
+
+// autoDefer defers a click or modal that its handler hasn't answered yet.
+// The returned stop ends the timer once the handler is done.
+func (b *Bot) autoDefer(i *discordgo.InteractionCreate) (stop func() bool) {
+	if i.Type != discordgo.InteractionMessageComponent && i.Type != discordgo.InteractionModalSubmit {
+		return func() bool { return false }
+	}
+	a := b.ackOf(i)
+	t := time.AfterFunc(autoDeferAfter, func() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if a.state == ackNone {
+			slog.Debug("auto-deferring a slow interaction", "id", i.ID)
+			b.deferLocked(i, a)
+		}
+	})
+	return t.Stop
 }
 
 func (b *Bot) send(i *discordgo.InteractionCreate, t discordgo.InteractionResponseType, d *discordgo.InteractionResponseData) {
@@ -347,16 +442,26 @@ func (b *Bot) send(i *discordgo.InteractionCreate, t discordgo.InteractionRespon
 	if t == discordgo.InteractionResponseUpdateMessage && d.Attachments == nil {
 		d.Attachments = &[]*discordgo.MessageAttachment{}
 	}
-	if _, ok := b.deferred.LoadAndDelete(i.ID); ok {
+	a := b.ackOf(i)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.state != ackNone {
+		if t == discordgo.InteractionResponseModal {
+			slog.Error("can't open a modal on an interaction already answered", "id", i.ID)
+			return
+		}
 		b.sendDeferred(i, t, d)
 		return
 	}
 	if err := b.s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: t, Data: d}); err != nil {
 		slog.Error("respond", "err", err)
+		return
 	}
+	a.state = ackResponded
 }
 
-// sendDeferred answers an interaction already acknowledged by deferUpdate.
+// sendDeferred answers an interaction already acknowledged (deferred, or
+// answered once): an update edits the message, anything else follows up.
 func (b *Bot) sendDeferred(i *discordgo.InteractionCreate, t discordgo.InteractionResponseType, d *discordgo.InteractionResponseData) {
 	var err error
 	if t == discordgo.InteractionResponseUpdateMessage {

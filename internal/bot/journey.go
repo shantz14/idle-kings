@@ -243,8 +243,10 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 	d, okDest := game.JourneyDestByKey(a.Goal)
 	before, okRealm := b.realmBefore(ctx, a.GuildID)
 	if err := errors.Join(err1, err2, err3, err4); err != nil || !okDest || !okRealm {
-		slog.Error("journey load", "err", err, "dest", a.Goal)
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+		if err == nil && !okRealm {
+			err = errors.New("realm not loaded")
+		}
+		b.loadFailed(ctx, a, now, err, !okDest)
 		return
 	}
 

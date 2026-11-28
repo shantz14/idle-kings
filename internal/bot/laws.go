@@ -200,18 +200,13 @@ func permitShort(c store.Character, spend int) string {
 	return ""
 }
 
-// payPermit charges Martial Law's permit fee for a gathering that has just
-// started, and returns a line saying so ("" if there is no fee).
-func (b *Bot) payPermit(ctx context.Context, c store.Character) string {
-	fee := game.PermitFee(c.Laws)
-	if fee == 0 {
+// permitLine says Martial Law's permit fee was charged with a gathering
+// (Activity.Fee, paid in the same transaction as its cost), or "".
+func permitLine(a store.Activity) string {
+	if a.Fee == 0 {
 		return ""
 	}
-	if err := b.store.ApplyOutcome(ctx, c.GuildID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: {Wealth: -fee}}}, time.Now()); err != nil {
-		slog.Error("permit fee", "err", err)
-		return ""
-	}
-	return fmt.Sprintf("\n\n🪖 The watch charged you **%d gold** for a permit.", fee)
+	return fmt.Sprintf("\n\n🪖 The watch charged you **%d gold** for a permit.", a.Fee)
 }
 
 // joinNotes joins the non-empty lines with a blank line between them.

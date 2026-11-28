@@ -237,3 +237,23 @@ func TestPlotTermsPaidOnJoining(t *testing.T) {
 		t.Fatalf("still invited: %+v", m)
 	}
 }
+
+// A resolved plot is parked at the far future, however it ended, so the
+// tick's index range never scans it again.
+func TestResolvedPlotsSleep(t *testing.T) {
+	s, ctx := estateStore(t)
+	now := time.Unix(2_000_000, 0)
+	c, other := newChar(t, s, "c", "merchant"), newChar(t, s, "o", "merchant")
+	k, err := s.StartConspiracy(ctx, Activity{GuildID: "g", HostID: c.ID, Goal: game.SchemeFrame, TargetID: other.ID, StartedAt: now,
+		EndsAt: now.Add(5 * time.Hour)}, 0, Conspiracy{TargetKind: game.TargetPlayer, Purse: "none", NextStepAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ?`, now.Unix(), k.ID); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM conspiracies WHERE next_step_at <= ?`, now.Add(1000*time.Hour).Unix()).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("resolved plot still in the tick's range (%d, %v)", n, err)
+	}
+}

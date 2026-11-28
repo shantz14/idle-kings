@@ -19,8 +19,8 @@ const (
 // mod is an extra situational bonus or penalty in percent.
 func (c Check) Chance(s Sheet, mod float64) int {
 	f := c.Base - c.Difficulty + mod
-	for a, w := range c.Weights {
-		f += w * s[a]
+	for _, a := range sortedKeys(c.Weights) { // in order: float sums depend on it
+		f += c.Weights[a] * s[a]
 	}
 	n := int(f)
 	if n < MinChance {

@@ -595,6 +595,10 @@ func (s *Store) PayBribe(ctx context.Context, matterID, senatorID, charID int64,
 type MatterResolution struct {
 	Summary any // stored as JSON for the record
 	Realm   game.Realm
+	// Before is the trackers Realm was worked out from. When set, only the
+	// change (Realm − Before) is applied to the realm as it is now, so aid,
+	// happenings or deeds that landed in between aren't lost.
+	Before game.Realm
 	// Sectors replaces the realm's sectors (nil = unchanged). It must be
 	// built from a fresh GetRealm: investments resolve in the same tick,
 	// before matters, so nothing else writes sectors in between.
@@ -628,10 +632,14 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrEnded
 	}
-	tr, _ := json.Marshal(r.Realm)
+	final, fallen, why, err := mergeRealm(ctx, tx, m.GuildID, r)
+	if err != nil {
+		return err
+	}
+	tr, _ := json.Marshal(final)
 	status, reason := realmAlive, any(nil)
-	if r.Fallen {
-		status, reason = realmFallen, r.FallenReason
+	if fallen {
+		status, reason = realmFallen, why
 	}
 	laws, _ := json.Marshal(r.Laws)
 	if r.Laws == nil {
@@ -647,7 +655,7 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 		string(tr), status, reason, string(laws), sectors, m.GuildID); err != nil {
 		return err
 	}
-	if r.Fallen {
+	if fallen {
 		if _, err := tx.ExecContext(ctx, `UPDATE courts SET status = ? WHERE guild_id = ?`, courtFallen, m.GuildID); err != nil {
 			return err
 		}
@@ -682,6 +690,44 @@ func (s *Store) ResolveMatter(ctx context.Context, m Matter, r MatterResolution,
 		}
 	}
 	return tx.Commit()
+}
+
+// mergeRealm works out the trackers and fall a resolution leaves, against the
+// realm as it is now: a realm that has fallen stays fallen, and with Before
+// set, only the resolution's change is applied on top of the current trackers.
+func mergeRealm(ctx context.Context, tx *sql.Tx, guildID string, r MatterResolution) (game.Realm, bool, string, error) {
+	var raw, status string
+	var reason sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT trackers, status, fallen_reason FROM realms WHERE guild_id = ?`, guildID).Scan(&raw, &status, &reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r.Realm, r.Fallen, r.FallenReason, nil
+	}
+	if err != nil {
+		return nil, false, "", err
+	}
+	cur := game.Realm{}
+	if err := json.Unmarshal([]byte(raw), &cur); err != nil {
+		return nil, false, "", err
+	}
+	if status == realmFallen { // nothing a vote decides brings a realm back
+		return cur, true, reason.String, nil
+	}
+	final := r.Realm
+	if r.Before != nil {
+		diff := game.Realm{}
+		for k, v := range r.Realm {
+			if d := v - r.Before[k]; d != 0 {
+				diff[k] = d
+			}
+		}
+		final = cur.Clone()
+		final.Apply(diff)
+	}
+	fallen, why := r.Fallen, r.FallenReason
+	if !fallen {
+		fallen, why = final.Fallen()
+	}
+	return final, fallen, why, nil
 }
 
 // Decision is a resolved matter, for history pages.

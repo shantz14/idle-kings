@@ -10,9 +10,19 @@ type keyIndex[K comparable, V any] struct {
 	list *[]V
 	key  func(V) K
 
-	mu  sync.RWMutex
-	n   int // len(*list) when indexed
-	pos map[K]int
+	mu    sync.RWMutex
+	n     int // len(*list) when indexed
+	first *V  // &(*list)[0] when indexed: a swapped-in catalogue reindexes
+	pos   map[K]int
+}
+
+// staleLocked reports whether the catalogue changed since it was indexed.
+func (x *keyIndex[K, V]) staleLocked() bool {
+	list := *x.list
+	if x.n != len(list) {
+		return true
+	}
+	return len(list) > 0 && x.first != &list[0]
 }
 
 func newIndex[K comparable, V any](list *[]V, key func(V) K) *keyIndex[K, V] {
@@ -22,7 +32,7 @@ func newIndex[K comparable, V any](list *[]V, key func(V) K) *keyIndex[K, V] {
 func (x *keyIndex[K, V]) get(k K) (V, bool) {
 	x.mu.RLock()
 	i, ok := x.pos[k]
-	stale := x.n != len(*x.list)
+	stale := x.pos == nil || x.staleLocked()
 	x.mu.RUnlock()
 	if stale || (ok && (i >= len(*x.list) || x.key((*x.list)[i]) != k)) {
 		x.rebuild()
@@ -49,6 +59,10 @@ func (x *keyIndex[K, V]) rebuild() {
 		}
 	}
 	x.n = len(list)
+	x.first = nil
+	if len(list) > 0 {
+		x.first = &list[0]
+	}
 }
 
 var (
@@ -64,4 +78,16 @@ var (
 	sectorIndex    = newIndex(&SectorDefs, func(d SectorDef) SectorKey { return d.Key })
 	arcIndex       = newIndex(&Arcs, func(a ArcDef) string { return a.Key })
 	titleIndex     = newIndex(&TitleDefs, func(t TitleDef) string { return t.Key })
+	actionIndex    = newIndex(&Actions, func(a ActionDef) string { return a.Key })
+	journeyIndex   = newIndex(&JourneyDests, func(d JourneyDest) string { return d.Key })
+	banditIndex    = newIndex(&BanditBands, func(b BanditBand) string { return b.Key })
+	approachIndex  = newIndex(&Approaches, func(a Approach) string { return a.Key })
+	personaIndex   = newIndex(&Personas, func(p Persona) string { return p.Name })
+	// Every DM event list, searched in this order by EventByKey.
+	eventIndexes = []*keyIndex[string, PartyEvent]{
+		newIndex(&PartyEvents, eventKey), newIndex(&HuntEvents, eventKey), newIndex(&DuelEvents, eventKey),
+		newIndex(&JourneyEvents, eventKey), newIndex(&JourneyAbroadEvents, eventKey), newIndex(&happeningEvents, eventKey),
+	}
 )
+
+func eventKey(e PartyEvent) string { return e.Key }

@@ -241,14 +241,7 @@ var Approaches = []Approach{
 	},
 }
 
-func ApproachByKey(k string) (Approach, bool) {
-	for _, a := range Approaches {
-		if a.Key == k {
-			return a, true
-		}
-	}
-	return Approach{}, false
-}
+func ApproachByKey(k string) (Approach, bool) { return approachIndex.get(k) }
 
 // GiftCost is what a gift for this senator costs: they expect more the more
 // a bribe would cost.

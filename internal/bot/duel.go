@@ -196,10 +196,15 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 		GuildID: c.GuildID, HostID: c.ID, Kind: game.KindDuel, Goal: game.DuelPending, TargetID: t.ID,
 		Public: true, StartedAt: now, EndsAt: now.Add(b.t.Duel.Answer),
 	}, wager, nil)
+	if errors.Is(err, store.ErrChallenged) {
+		b.update(i, b.wagerPanel(ctx, c, t.ID, t.FullName()+" already has a challenge waiting for an answer."))
+		return
+	}
 	if err != nil {
 		b.update(i, b.wagerPanel(ctx, c, t.ID, err.Error()))
 		return
 	}
+	b.deferUpdate(i) // the law's cost, the DM and the announcement come before the answer
 	// Under the Ban on Dueling, issuing a challenge is itself an offense.
 	lawNote := ""
 	if sen, err := b.store.Senators(ctx, c.GuildID); err == nil {
@@ -223,7 +228,6 @@ func (b *Bot) onChallenge(ctx context.Context, i *discordgo.InteractionCreate, c
 	case c.Laws.Has(game.LawHonor):
 		refusing = "Under the Code of Honor, refusing, or not answering, is a disgrace."
 	}
-	b.deferUpdate(i) // the DM and the announcement come before the answer
 	_, dmErr := b.dm(t.UserID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
 			Title:       "⚔️ You have been challenged to a duel",

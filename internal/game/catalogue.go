@@ -309,8 +309,9 @@ const MarketPerSection = 2
 
 // MarketPeriod is which rotation now falls in, and when it ends.
 func MarketPeriod(now time.Time, rotation time.Duration) (int64, time.Time) {
-	p := now.Unix() / int64(rotation.Seconds())
-	return p, time.Unix((p+1)*int64(rotation.Seconds()), 0)
+	secs := max(int64(rotation.Seconds()), 1) // a zero rotation would divide by zero
+	p := now.Unix() / secs
+	return p, time.Unix((p+1)*secs, 0)
 }
 
 // Market is the rotating market's stock for a court in a period. It depends
