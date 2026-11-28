@@ -230,14 +230,19 @@ func (b *Bot) resolveSabotage(ctx context.Context, a store.Activity, now time.Ti
 	sen, err3 := b.store.Senators(ctx, a.GuildID)
 	parts := strings.Split(a.Goal, ":")
 	if err := errors.Join(err1, err2, err3); err != nil || len(parts) != 3 {
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+		b.loadFailed(ctx, a, now, err, len(parts) != 3)
 		return
 	}
 	what := parts[0] + ":" + parts[1]
 	p, _ := game.PurseByKey(parts[2])
 	kind, name, ok := sabotageWhat(t, what)
 	if !ok { // sold, or no longer theirs: the agents come home
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: {Wealth: a.Spend}}}, now)
+		if err := b.store.ApplyResult(ctx, a.ID, store.Outcome{Deltas: map[int64]game.Delta{c.ID: {Wealth: a.Spend}}}, now); err != nil {
+			if !errors.Is(err, store.ErrEnded) {
+				slog.Error("refund sabotage", "err", err) // retried next tick
+			}
+			return
+		}
 		b.dmNote(c.UserID, "🔥 Sabotage called off", fmt.Sprintf("By the time your agents arrived, it was no longer **%s**'s. They bring your gold back.", t.FullName()), colorMuted)
 		return
 	}
@@ -364,7 +369,7 @@ func (b *Bot) resolveSmear(ctx context.Context, a store.Activity, now time.Time)
 	c, err1 := b.store.GetCharacterByID(ctx, a.HostID)
 	t, err2 := b.store.GetCharacterByID(ctx, a.TargetID)
 	if err := errors.Join(err1, err2); err != nil {
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+		b.loadFailed(ctx, a, now, err, false)
 		return
 	}
 	p, _ := game.PurseByKey(a.Goal)

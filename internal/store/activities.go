@@ -100,6 +100,8 @@ type NewMonument struct {
 var (
 	ErrBuilt    = errors.New("you have already built one of those")
 	ErrBuilding = errors.New("you are already building something")
+	// ErrChallenged means the player already has a duel challenge waiting.
+	ErrChallenged = errors.New("they already have a challenge waiting for an answer")
 )
 
 // slotFilter is the SQL condition for activities that take up a
@@ -145,6 +147,19 @@ func startActivity(ctx context.Context, tx *sql.Tx, a Activity, cost int, events
 			return a, ErrBuilding
 		}
 		return a, ErrBusy
+	}
+	if a.Kind == game.KindDuel && a.Goal == game.DuelPending && a.TargetID != 0 {
+		// Checked here, in the transaction, so two challengers clicking at
+		// once can't both call out the same player.
+		var waiting int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM activities WHERE kind = ? AND goal = ? AND target_id = ? AND resolved_at IS NULL`,
+			game.KindDuel, game.DuelPending, a.TargetID).Scan(&waiting); err != nil {
+			return a, err
+		}
+		if waiting > 0 {
+			return a, ErrChallenged
+		}
 	}
 	if a.Kind == game.KindWork {
 		var built int
@@ -561,14 +576,25 @@ func (s *Store) fillMonuments(ctx context.Context, chars []*Character) error {
 }
 
 // AbandonActivity marks an activity and its open events resolved without
-// applying anything, for rows that can never be resolved properly.
+// applying anything, for rows that can never be resolved properly. The gold
+// it held (activityRefunds) goes back to whoever paid it.
 func (s *Store) AbandonActivity(ctx context.Context, activityID int64, now time.Time) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
+		// What it held goes back: it never got to do anything with it.
+		refunds, err := activityRefunds(ctx, tx, activityID)
+		if err != nil {
+			return err
+		}
+		for _, r := range refunds {
+			if err := credit(ctx, tx, r.to, r.gold); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE activity_events SET resolved_at = ? WHERE activity_id = ? AND resolved_at IS NULL`,
 			now.Unix(), activityID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
+		_, err = tx.ExecContext(ctx, `UPDATE activities SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL`, now.Unix(), activityID)
 		return err
 	})
 }

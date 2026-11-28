@@ -89,7 +89,10 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 	before, ok := b.realmBefore(ctx, a.GuildID)
 	size, okSize := game.EmbezzleSizeByKey(a.Goal)
 	if err := errors.Join(err1, err2); err != nil || !ok || !okSize {
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+		if err == nil && !ok {
+			err = errors.New("realm not loaded")
+		}
+		b.loadFailed(ctx, a, now, err, !okSize)
 		return
 	}
 	recent, err := b.store.RecentEmbezzlements(ctx, a.GuildID, now.Add(-game.EmbezzleRecentDays*b.t.Day))

@@ -445,59 +445,77 @@ type refund struct {
 	gold int
 }
 
-// heldGold is the gold tied up in a character's open activities, and whose it
-// is: their own stake (not in free kinds, which others pay into), a duel's
-// matched wager, the bets on it, and bandits hired against their journey.
+// heldGold is the gold tied up in a character's open activities, and whose
+// it is (see activityRefunds).
 func heldGold(ctx context.Context, tx *sql.Tx, charID int64) ([]refund, error) {
-	type open struct {
-		id, target int64
-		kind, goal string
-		spend      int
-	}
-	acts, err := queryAll(ctx, tx, `SELECT id, kind, goal, spend, coalesce(target_id, 0) FROM activities WHERE host_id = ? AND resolved_at IS NULL`,
-		func(r scanner) (open, error) {
-			var a open
-			return a, r.Scan(&a.id, &a.kind, &a.goal, &a.spend, &a.target)
+	ids, err := queryAll(ctx, tx, `SELECT id FROM activities WHERE host_id = ? AND resolved_at IS NULL`,
+		func(r scanner) (int64, error) {
+			var id int64
+			return id, r.Scan(&id)
 		}, charID)
 	if err != nil {
 		return nil, err
 	}
 	var out []refund
-	for _, a := range acts {
-		if a.spend > 0 && game.UsesSlot(a.kind) {
-			out = append(out, refund{charID, a.spend})
-		}
-		if a.kind == game.KindDuel && a.goal == game.DuelAccepted && a.spend > 0 && a.target != 0 {
-			out = append(out, refund{a.target, a.spend})
-		}
-		bets, err := queryAll(ctx, tx, `SELECT character_id, amount FROM bets WHERE activity_id = ?`,
-			func(r scanner) (refund, error) {
-				var b refund
-				return b, r.Scan(&b.to, &b.gold)
-			}, a.id)
+	for _, id := range ids {
+		rs, err := activityRefunds(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, bets...)
-		hires, err := queryAll(ctx, tx, `SELECT character_id, goal FROM participants WHERE activity_id = ?`,
-			func(r scanner) (refund, error) {
-				var p refund
-				var goal string
-				if err := r.Scan(&p.to, &goal); err != nil {
-					return p, err
-				}
-				if band, ok := game.BandFromGoal(goal); ok {
-					p.gold = band.Price
-				}
-				return p, nil
-			}, a.id)
-		if err != nil {
-			return nil, err
-		}
-		for _, h := range hires {
-			if h.gold > 0 && h.to != charID {
-				out = append(out, h)
+		out = append(out, rs...)
+	}
+	return out, nil
+}
+
+// activityRefunds is the gold an open activity holds, and whose it is: the
+// host's stake (not in free kinds, which others pay into), a duel's matched
+// wager, the bets on it, and bandits hired against a journey.
+func activityRefunds(ctx context.Context, tx *sql.Tx, activityID int64) ([]refund, error) {
+	var host, target int64
+	var kind, goal string
+	var spend int
+	err := tx.QueryRowContext(ctx, `SELECT host_id, kind, goal, spend, coalesce(target_id, 0) FROM activities WHERE id = ? AND resolved_at IS NULL`,
+		activityID).Scan(&host, &kind, &goal, &spend, &target)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []refund
+	if spend > 0 && game.UsesSlot(kind) {
+		out = append(out, refund{host, spend})
+	}
+	if kind == game.KindDuel && goal == game.DuelAccepted && spend > 0 && target != 0 {
+		out = append(out, refund{target, spend})
+	}
+	bets, err := queryAll(ctx, tx, `SELECT character_id, amount FROM bets WHERE activity_id = ?`,
+		func(r scanner) (refund, error) {
+			var b refund
+			return b, r.Scan(&b.to, &b.gold)
+		}, activityID)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, bets...)
+	hires, err := queryAll(ctx, tx, `SELECT character_id, goal FROM participants WHERE activity_id = ?`,
+		func(r scanner) (refund, error) {
+			var p refund
+			var goal string
+			if err := r.Scan(&p.to, &goal); err != nil {
+				return p, err
 			}
+			if band, ok := game.BandFromGoal(goal); ok {
+				p.gold = band.Price
+			}
+			return p, nil
+		}, activityID)
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range hires {
+		if h.gold > 0 && h.to != host {
+			out = append(out, h)
 		}
 	}
 	return out, nil

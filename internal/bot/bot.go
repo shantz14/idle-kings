@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -27,9 +28,12 @@ type Bot struct {
 	deals     dealDrafts        // estate offers being put together
 	dmChans   sync.Map          // user ID → DM channel ID, so each DM is one call
 	bg        sync.WaitGroup    // background work (see background)
-	deferred  sync.Map          // interaction IDs acknowledged by deferUpdate
+	handlers  sync.WaitGroup    // interactions being handled
+	acks      sync.Map          // interaction ID → *ack (see send)
+	closing   atomic.Bool       // set on shutdown: new interactions are turned away
+	lastTick  atomic.Int64      // unix time the last tick finished, for Healthy
 	// Retry counts for rows the tick keeps failing to resolve.
-	activityRetries, eventRetries retryGuard
+	activityRetries, eventRetries, matterRetries retryGuard
 }
 
 // lockedRand makes one RNG safe for concurrent handlers.
@@ -51,6 +55,7 @@ func New(token string, st *store.Store, t game.Timings) (*Bot, error) {
 		return nil, err
 	}
 	s.Identify.Intents = discordgo.IntentsGuilds
+	s.Client.Timeout = restTimeout // so one stuck REST call can't hold up a tick
 	b := &Bot{
 		s: s, store: st, t: t, timing: t.Party, senate: t.Senate, courtFor: t.Court, investFor: t.Invest,
 		rng: &lockedRand{r: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))},
@@ -59,29 +64,68 @@ func New(token string, st *store.Store, t game.Timings) (*Bot, error) {
 	return b, nil
 }
 
+// restTimeout bounds each Discord REST call.
+const restTimeout = 20 * time.Second
+
+// tickEvery is how often the game loop runs.
+const tickEvery = 15 * time.Second
+
 // Run connects, registers commands, and runs the game loop until ctx ends.
+// On the way out it stops taking interactions, closes the gateway, and
+// waits for handlers and background work, so the store can close after it.
 func (b *Bot) Run(ctx context.Context) error {
 	if err := b.s.Open(); err != nil {
 		return fmt.Errorf("open discord session: %w", err)
 	}
-	defer b.s.Close()
-	defer b.bg.Wait() // let background DMs finish before the session closes
-
-	// Global so they also work in DMs with the bot.
-	if _, err := b.s.ApplicationCommandBulkOverwrite(b.s.State.User.ID, "", commands()); err != nil {
-		return fmt.Errorf("register commands: %w", err)
-	}
+	defer func() {
+		b.closing.Store(true)
+		_ = b.s.Close() // the gateway; REST calls still work for what's in flight
+		b.handlers.Wait()
+		b.bg.Wait()
+	}()
+	b.lastTick.Store(time.Now().Unix())
+	go b.registerCommands(ctx)
 	slog.Info("bot online", "user", b.s.State.User.Username)
 
-	t := time.NewTicker(15 * time.Second)
+	t := time.NewTicker(tickEvery)
 	defer t.Stop()
 	for {
-		b.tick(ctx)
+		// A tick runs to the end even if a shutdown starts during it: it
+		// stops between ticks, never halfway through resolving something.
+		b.tick(context.WithoutCancel(ctx))
+		b.lastTick.Store(time.Now().Unix())
 		select {
 		case <-ctx.Done():
+			slog.Info("shutting down")
 			return nil
 		case <-t.C:
 		}
+	}
+}
+
+// Healthy reports whether the game loop finished a tick within maxAge.
+func (b *Bot) Healthy(maxAge time.Duration) bool {
+	return time.Since(time.Unix(b.lastTick.Load(), 0)) <= maxAge
+}
+
+// registerCommands publishes the slash commands, retrying with backoff: a
+// Discord hiccup at boot shouldn't stop the game from running.
+func (b *Bot) registerCommands(ctx context.Context) {
+	wait := 5 * time.Second
+	for {
+		// Global so they also work in DMs with the bot.
+		_, err := b.s.ApplicationCommandBulkOverwrite(b.s.State.User.ID, "", commands())
+		if err == nil {
+			slog.Info("commands registered")
+			return
+		}
+		slog.Error("register commands; retrying", "err", err, "in", wait)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, 5*time.Minute)
 	}
 }
 
@@ -94,6 +138,7 @@ func (b *Bot) tick(parent context.Context) {
 	defer recoverPanic("tick")
 	defer b.activityRetries.endTick()
 	defer b.eventRetries.endTick()
+	defer b.matterRetries.endTick()
 	now := time.Now()
 	if due, err := b.store.DueEvents(ctx, now); err != nil {
 		slog.Error("due events", "err", err)
@@ -135,11 +180,21 @@ func (b *Bot) tick(parent context.Context) {
 		defer recoverPanic("conspiracy tick")
 		b.conspiracyTick(ctx, now)
 	}()
-	b.fadeHappenings(ctx, now)
-	b.settleAuctions(ctx, now)
-	if err := b.store.PayIncome(ctx, now); err != nil {
-		slog.Error("pay income", "err", err)
-	}
+	// Each job on its own, so one that panics can't stop the rest (income).
+	func() {
+		defer recoverPanic("fade happenings")
+		b.fadeHappenings(ctx, now)
+	}()
+	func() {
+		defer recoverPanic("settle auctions")
+		b.settleAuctions(ctx, now)
+	}()
+	func() {
+		defer recoverPanic("pay income")
+		if err := b.store.PayIncome(ctx, now); err != nil {
+			slog.Error("pay income", "err", err)
+		}
+	}()
 }
 
 // dm sends a private message; players with closed DMs just miss it.

@@ -243,8 +243,8 @@ func (b *Bot) resolvePlant(ctx context.Context, a store.Activity, now time.Time)
 	c, err1 := b.store.GetCharacterByID(ctx, a.HostID)
 	t, err2 := b.store.GetCharacterByID(ctx, a.TargetID)
 	p, ok := game.PurseByKey(a.Goal)
-	if err1 != nil || err2 != nil || !ok {
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+	if err := errors.Join(err1, err2); err != nil || !ok {
+		b.loadFailed(ctx, a, now, err, !ok)
 		return
 	}
 	before, err := b.store.SpyLevel(ctx, c.ID, t.ID)
@@ -346,7 +346,7 @@ func (b *Bot) onRootOutGo(ctx context.Context, i *discordgo.InteractionCreate, c
 func (b *Bot) resolveRootOut(ctx context.Context, a store.Activity, now time.Time) {
 	c, err := b.store.GetCharacterByID(ctx, a.HostID)
 	if err != nil {
-		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
+		b.loadFailed(ctx, a, now, err, false)
 		return
 	}
 	nets, err := b.store.SpyNetworksOn(ctx, c.ID)
