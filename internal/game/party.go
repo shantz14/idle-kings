@@ -286,23 +286,14 @@ func forRole(roles []string, role string) bool {
 	return false
 }
 
-func PartyEventByKey(key string) (PartyEvent, bool) {
-	for _, e := range PartyEvents {
-		if e.Key == key {
-			return e, true
-		}
-	}
-	return PartyEvent{}, false
-}
+func PartyEventByKey(key string) (PartyEvent, bool) { return eventIndexes[0].get(key) }
 
 // EventByKey finds an event in any activity's catalogue: parties, hunts
 // and duels share the same DM event machinery.
 func EventByKey(key string) (PartyEvent, bool) {
-	for _, list := range [][]PartyEvent{PartyEvents, HuntEvents, DuelEvents, JourneyEvents, JourneyAbroadEvents, happeningEvents} {
-		for _, e := range list {
-			if e.Key == key {
-				return e, true
-			}
+	for _, x := range eventIndexes {
+		if e, ok := x.get(key); ok {
+			return e, true
 		}
 	}
 	return PartyEvent{}, false

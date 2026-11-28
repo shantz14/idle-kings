@@ -56,21 +56,28 @@ type SchemeDef struct {
 	Crime string
 	// Pious and Dove senators balk at murder.
 	Bloody bool
+	// Action is what the plot does to its target ("murder", "rob"), and
+	// Success the leader's news when it works, with %s for the target.
+	Action, Success string
 }
 
 var SchemeDefs = []SchemeDef{
 	{Key: SchemeAssassinate, Name: "Assassinate", Emoji: "🗡️",
 		Desc:    "Have a rival or a senator killed.",
-		Targets: []TargetKind{TargetPlayer, TargetSenator}, Stat: Prowess, Base: 20, Crime: SecretKindMurder, Bloody: true},
+		Targets: []TargetKind{TargetPlayer, TargetSenator}, Stat: Prowess, Base: 20, Crime: SecretKindMurder, Bloody: true,
+		Action: "murder", Success: "It is done. %s is dead, and nobody saw the hand that did it."},
 	{Key: SchemeFrame, Name: "Frame a Rival", Emoji: "🖋️",
 		Desc:    "Forge the evidence of a crime they never did. It goes in your dossier, as good as real, to denounce when it suits you.",
-		Targets: []TargetKind{TargetPlayer}, Stat: Diplomacy, Base: 30, Crime: SecretKindForgery},
+		Targets: []TargetKind{TargetPlayer}, Stat: Diplomacy, Base: 30, Crime: SecretKindForgery,
+		Action: "frame", Success: "The letters are forged, the seals are perfect, and the witnesses are paid. You hold the proof that %s is a criminal."},
 	{Key: SchemeSteal, Name: "Steal a Treasure", Emoji: "💰",
 		Desc:    "Break into their house for one of their treasures, or for the gold in their coffers. Houses and lands can't be carried off.",
-		Targets: []TargetKind{TargetPlayer}, Stat: Stewardship, Base: 25, Crime: SecretKindTheft},
+		Targets: []TargetKind{TargetPlayer}, Stat: Stewardship, Base: 25, Crime: SecretKindTheft,
+		Action: "rob", Success: "Your burglars were in and out of %s's house before the dogs woke."},
 	{Key: SchemeDisgrace, Name: "Disgrace a Senator", Emoji: "📜",
 		Desc:    "Bury a senator in scandal until the Senate strips them of their seat, and someone new sits in it.",
-		Targets: []TargetKind{TargetSenator}, Stat: Diplomacy, Base: 25, Crime: SecretKindConspiracy},
+		Targets: []TargetKind{TargetSenator}, Stat: Diplomacy, Base: 25, Crime: SecretKindConspiracy,
+		Action: "disgrace", Success: "The scandal broke this morning. %s has been stripped of their seat."},
 }
 
 func SchemeByKey(k string) (SchemeDef, bool) { return schemeIndex.get(k) }
@@ -464,7 +471,7 @@ func ResolveStrike(r Roller, p Plot, d Defender, senators []Senator) StrikeResul
 	name := d.Name()
 	switch {
 	case res.Success:
-		res.Text = successText(p.Scheme.Key, name)
+		res.Text = p.Scheme.SuccessText(name)
 	case m > strikeExposed:
 		res.Text = fmt.Sprintf("It came to nothing. %s slipped through your fingers, and the plot is spent. At least nobody knows it was you.", name)
 		res.Wounded = p.Scheme.Key == SchemeAssassinate && d.Player != nil && m <= strikeWound
@@ -482,33 +489,20 @@ func ResolveStrike(r Roller, p Plot, d Defender, senators []Senator) StrikeResul
 	return res
 }
 
-func successText(key, name string) string {
-	switch key {
-	case SchemeAssassinate:
-		return fmt.Sprintf("It is done. %s is dead, and nobody saw the hand that did it.", name)
-	case SchemeFrame:
-		return fmt.Sprintf("The letters are forged, the seals are perfect, and the witnesses are paid. You hold the proof that %s is a criminal.", name)
-	case SchemeSteal:
-		return fmt.Sprintf("Your burglars were in and out of %s's house before the dogs woke.", name)
-	case SchemeDisgrace:
-		return fmt.Sprintf("The scandal broke this morning. %s has been stripped of their seat.", name)
+// SuccessText is the leader's news when the plot works.
+func (s SchemeDef) SuccessText(target string) string {
+	if s.Success == "" {
+		return "It is done."
 	}
-	return "It is done."
+	return fmt.Sprintf(s.Success, target)
 }
 
 // Verb is what the plot does to its target: "murder", "rob"…
 func (s SchemeDef) Verb() string {
-	switch s.Key {
-	case SchemeAssassinate:
-		return "murder"
-	case SchemeFrame:
-		return "frame"
-	case SchemeSteal:
-		return "rob"
-	case SchemeDisgrace:
-		return "disgrace"
+	if s.Action == "" {
+		return "ruin"
 	}
-	return "ruin"
+	return s.Action
 }
 
 // DisgraceReward is what bringing a senator down does for the leader.
