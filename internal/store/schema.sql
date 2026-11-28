@@ -339,3 +339,83 @@ CREATE TABLE IF NOT EXISTS happenings (
 );
 CREATE INDEX IF NOT EXISTS happenings_open ON happenings (ended_at, ends_at);
 CREATE INDEX IF NOT EXISTS happenings_guild ON happenings (guild_id, ended_at);
+CREATE INDEX IF NOT EXISTS activities_guild_kind ON activities (guild_id, kind, resolved_at);
+
+-- Seasons: SeasonDays Senate days each. senate_days counts this season's.
+CREATE TABLE IF NOT EXISTS seasons (
+    guild_id    TEXT PRIMARY KEY REFERENCES courts(guild_id),
+    season      INTEGER NOT NULL DEFAULT 1,
+    senate_days INTEGER NOT NULL DEFAULT 0
+);
+
+-- What the season's deed titles count (game.Deed…): duels won, votes on the
+-- winning side, gold given to a realm in danger.
+CREATE TABLE IF NOT EXISTS deeds (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL REFERENCES courts(guild_id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    kind         TEXT NOT NULL,
+    amount       REAL NOT NULL,
+    season       INTEGER NOT NULL,
+    at           INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS deeds_season ON deeds (guild_id, season, kind);
+
+-- Titles held (game.TitleDefs). season is 0 for a feat, earned once.
+CREATE TABLE IF NOT EXISTS titles (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL REFERENCES courts(guild_id),
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    key          TEXT NOT NULL,
+    season       INTEGER NOT NULL,
+    earned_at    INTEGER NOT NULL,
+    UNIQUE (character_id, key, season)
+);
+CREATE INDEX IF NOT EXISTS titles_character ON titles (character_id);
+
+-- What a conspiracy's leader offered each player they invited (game.PlotTerms).
+CREATE TABLE IF NOT EXISTS conspiracy_terms (
+    activity_id INTEGER NOT NULL REFERENCES activities(id),
+    member_id   INTEGER NOT NULL REFERENCES characters(id),
+    gold        INTEGER NOT NULL DEFAULT 0, -- paid by the leader on joining
+    share       INTEGER NOT NULL DEFAULT 0, -- percent of the haul, on success
+    PRIMARY KEY (activity_id, member_id)
+);
+
+-- Sabotage: a holding that gives nothing until it's repaired, and a stake
+-- that earns less until ends_at.
+CREATE TABLE IF NOT EXISTS damaged_items (
+    holding_id  INTEGER PRIMARY KEY REFERENCES estate_items(id),
+    repair_cost INTEGER NOT NULL,
+    damaged_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS venture_damage (
+    id           INTEGER PRIMARY KEY,
+    guild_id     TEXT NOT NULL,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    sector       TEXT NOT NULL,
+    factor       REAL NOT NULL, -- share of income still earned
+    ends_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS venture_damage_guild ON venture_damage (guild_id, ends_at);
+
+-- Auctions (game/auction.go): one unique piece each. seller_id 0 is a
+-- merchant (an NPC auction, with no holding yet); a player's auction locks
+-- their holding until it's settled. The top bid is held from the bidder.
+CREATE TABLE IF NOT EXISTS auctions (
+    id          INTEGER PRIMARY KEY,
+    guild_id    TEXT NOT NULL REFERENCES courts(guild_id),
+    item_key    TEXT NOT NULL,
+    seller_id   INTEGER NOT NULL DEFAULT 0,
+    holding_id  INTEGER NOT NULL DEFAULT 0,
+    reserve     INTEGER NOT NULL,
+    top_bid     INTEGER NOT NULL DEFAULT 0,
+    top_bidder  INTEGER NOT NULL DEFAULT 0,
+    started_at  INTEGER NOT NULL,
+    ends_at     INTEGER NOT NULL,
+    settled_at  INTEGER,
+    channel_id  TEXT,
+    message_id  TEXT
+);
+CREATE INDEX IF NOT EXISTS auctions_due ON auctions (settled_at, ends_at);
+CREATE INDEX IF NOT EXISTS auctions_holding ON auctions (holding_id, settled_at);

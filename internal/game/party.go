@@ -87,11 +87,11 @@ type GoalInfo struct {
 var (
 	HostGoals = []GoalInfo{
 		{GoalMakeFriends, "Make Friends", "A successful party grows your influence even more."},
-		{GoalTalkBusiness, "Talk Business", "Work the room for deals. Can raise your stewardship and daily income."},
+		{GoalTalkBusiness, "Talk Business", "Work the room for deals. Can raise your stewardship, and win you a good word for your next investment."},
 	}
 	AttendeeGoals = []GoalInfo{
 		{GoalMakeFriends, "Make Friends", "Mingle and win allies. Grows your influence."},
-		{GoalTalkBusiness, "Talk Business", "Strike deals with the other guests. Can raise your stewardship and daily income."},
+		{GoalTalkBusiness, "Talk Business", "Strike deals with the other guests. Can raise your stewardship, and win you a friendly word for your next investment."},
 		{GoalSpreadRumors, "Spread Rumors", "Whisper about another player. Costs them influence if it works."},
 	}
 )
@@ -109,7 +109,7 @@ func GoalName(g Goal) string {
 
 var (
 	// Host success: influence > estate > diplomacy > renown.
-	partyCheck = Check{Base: 5, Weights: map[Attr]float64{AttrInfluence: 2.0, AttrEstate: 1.5, AttrDiplomacy: 1.0, AttrRenown: 0.5}}
+	partyCheck = Check{Base: 5, Weights: map[Attr]float64{AttrInfluence: 2.0, AttrEstate: 1.5, AttrDiplomacy: 1.0, AttrRenown: 0.9}}
 
 	businessCheck = Check{Base: 20, Weights: map[Attr]float64{AttrStewardship: 6}}
 	friendsCheck  = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
@@ -120,10 +120,10 @@ var (
 	hostSuccess   = Delta{Influence: 2, Renown: 1, Stats: Stats{Diplomacy: 1.5}}
 	hostFailure   = Delta{Renown: -2}
 	hostFriends   = Delta{Influence: 2}
-	hostBusiness  = Delta{DailyIncome: 2, Stats: Stats{Stewardship: 2.5}}
+	hostBusiness  = Delta{Stats: Stats{Stewardship: 2.5}} // and A Good Word (CondGoodWord)
 	guestFriends  = Delta{Influence: 1}
-	guestBusiness = Delta{DailyIncome: 1, Stats: Stats{Stewardship: 1.25}}
-	rumorDamage   = 2.0 // influence lost by the target
+	guestBusiness = Delta{Stats: Stats{Stewardship: 1.25}} // and A Friendly Word
+	rumorDamage   = 2.0                                    // influence lost by the target
 
 	// Guests do better at a good party.
 	guestModGoodParty = 15.0
@@ -414,9 +414,11 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		case GoalTalkBusiness:
 			if ok, _ := businessCheck.Roll(r, host.Sheet, 0, Normal); ok {
 				hd.Merge(hostBusiness)
+				res.Conditions = append(res.Conditions, ConditionChange{CharacterID: host.ID, Key: CondGoodWord})
+				res.notice(host.ID, "The merchants you charmed will put in a good word: your next investment's deal will be easier.")
 			}
 		}
-		hd = hd.Scale(PartyRewardScale(in.Spend))
+		hd = ScaleGain(hd.Scale(PartyRewardScale(in.Spend)), host.Sheet[AttrInfluence])
 		res.notice(host.ID, "%s", withEffects("Your party was a success.", hd))
 		res.Public = fmt.Sprintf("**%s**'s party was the talk of the court.", host.Name)
 		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: host.ID, Delta: OpinionPartySuccess})
@@ -439,15 +441,17 @@ func ResolveParty(r Roller, in PartyInput) PartyResult {
 		switch a.Goal {
 		case GoalMakeFriends:
 			if ok, _ := friendsCheck.Roll(r, a.Sheet, mod, Normal); ok {
-				res.delta(a.ID, guestFriends)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends at %s's party.", host.Name), guestFriends))
+				g := ScaleGain(guestFriends, a.Sheet[AttrInfluence])
+				res.delta(a.ID, g)
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends at %s's party.", host.Name), g))
 			} else {
 				res.notice(a.ID, "You mingled at %s's party, but made no new friends.", host.Name)
 			}
 		case GoalTalkBusiness:
 			if ok, _ := businessCheck.Roll(r, a.Sheet, mod, Normal); ok {
 				res.delta(a.ID, guestBusiness)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You struck a deal at %s's party.", host.Name), guestBusiness))
+				res.Conditions = append(res.Conditions, ConditionChange{CharacterID: a.ID, Key: CondGoodWordLesser})
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made a useful friend at %s's party: your next investment's deal will be a little easier.", host.Name), guestBusiness))
 			} else {
 				res.notice(a.ID, "No one at %s's party wanted to do business.", host.Name)
 			}

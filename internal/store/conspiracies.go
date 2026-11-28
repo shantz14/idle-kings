@@ -489,3 +489,79 @@ func (s *Store) NameHeir(ctx context.Context, charID int64, name string) error {
 	}
 	return nil
 }
+
+// InvitePlayer asks a player into an open plot on terms. ErrInvited if they
+// were already asked.
+func (s *Store) InvitePlayer(ctx context.Context, id, memberID int64, terms game.PlotTerms, now time.Time) error {
+	if err := s.InviteMember(ctx, id, MemberPlayer, memberID, MemberInvited, 0, now); err != nil {
+		return err
+	}
+	if terms == (game.PlotTerms{}) {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO conspiracy_terms (activity_id, member_id, gold, share) VALUES (?, ?, ?, ?)
+		 ON CONFLICT (activity_id, member_id) DO UPDATE SET gold = excluded.gold, share = excluded.share`,
+		id, memberID, terms.Gold, terms.Share)
+	return err
+}
+
+// ErrLeaderShort is returned when a plot's leader can't pay what they
+// promised a joining member.
+var ErrLeaderShort = errors.New("the leader can't pay what they promised")
+
+// JoinPlot has an invited player join, and pays them the leader's gold up
+// front, together. ErrHandled if they'd already answered; ErrLeaderShort if
+// the leader can't pay (the invitation stays open).
+func (s *Store) JoinPlot(ctx context.Context, id, memberID int64) (game.PlotTerms, error) {
+	var terms game.PlotTerms
+	err := s.withTx(ctx, func(tx *sql.Tx) error {
+		if err := openPlot(ctx, tx, id); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE conspiracy_members SET status = ? WHERE activity_id = ? AND member_kind = ? AND member_id = ? AND status = ?`,
+			MemberJoined, id, MemberPlayer, memberID, MemberInvited)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrHandled
+		}
+		err = tx.QueryRowContext(ctx, `SELECT gold, share FROM conspiracy_terms WHERE activity_id = ? AND member_id = ?`, id, memberID).
+			Scan(&terms.Gold, &terms.Share)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if terms.Gold > 0 {
+			if err := spend(ctx, tx, leaderOf(ctx, tx, id), terms.Gold); err != nil {
+				return ErrLeaderShort
+			}
+			return credit(ctx, tx, memberID, terms.Gold)
+		}
+		return nil
+	})
+	return terms, err
+}
+
+// PlotTerms is what a plot's leader offered each player, by character.
+func (s *Store) PlotTerms(ctx context.Context, id int64) (map[int64]game.PlotTerms, error) {
+	type row struct {
+		id int64
+		t  game.PlotTerms
+	}
+	rows, err := queryAll(ctx, s.db, `SELECT member_id, gold, share FROM conspiracy_terms WHERE activity_id = ?`,
+		func(r scanner) (row, error) {
+			var x row
+			err := r.Scan(&x.id, &x.t.Gold, &x.t.Share)
+			return x, err
+		}, id)
+	out := make(map[int64]game.PlotTerms, len(rows))
+	for _, x := range rows {
+		out[x.id] = x.t
+	}
+	return out, err
+}

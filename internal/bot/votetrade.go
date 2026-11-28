@@ -111,7 +111,7 @@ func (b *Bot) onSellPanel(ctx context.Context, i *discordgo.InteractionCreate, m
 		b.fail(i, err)
 		return
 	}
-	offers := game.BestVoteOffers(ev, sen, c.VoteWeight(), st.Trackers, m.ID, ops)
+	offers := game.BestVoteOffers(ev, sen, c.VoteWeight(), st.Trackers, m.ID, ops, c.Renown)
 	var sb strings.Builder
 	if st.Laws.Rules().SecretBallot {
 		// Nobody can check a secret vote: senators won't pay for one, and
@@ -166,7 +166,7 @@ func (b *Bot) onSellToSenator(ctx context.Context, i *discordgo.InteractionCreat
 	if !ok {
 		return
 	}
-	opt, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, ops[s.ID])
+	opt, gold, ok := s.VoteOfferFor(ev, c.VoteWeight(), st.Trackers, m.ID, game.Regard(ops[s.ID], c.Renown))
 	if !ok || st.Laws.Rules().SecretBallot {
 		b.update(i, noteView(s.Name+" isn't buying.", colorMuted))
 		return

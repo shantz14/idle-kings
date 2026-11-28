@@ -47,7 +47,7 @@ func TestPartyWeightOrder(t *testing.T) {
 func TestPartyHostSuccessGoals(t *testing.T) {
 	host := person(1, Sheet{AttrInfluence: 10, AttrStewardship: 5})
 	res := ResolveParty(rolls(t, 0), PartyInput{Host: host, Goal: GoalMakeFriends})
-	if !res.Success || res.Deltas[1].Influence != hostSuccess.Influence+hostFriends.Influence {
+	if !res.Success || !near(res.Deltas[1].Influence, ScaleInfluence(hostSuccess.Influence+hostFriends.Influence, 10)) {
 		t.Fatalf("make friends: %+v", res)
 	}
 	res = ResolveParty(rolls(t, 0, 0), PartyInput{Host: host, Goal: GoalTalkBusiness})
@@ -66,7 +66,7 @@ func TestGuestBoostedByParty(t *testing.T) {
 	// Roll 50: succeeds at a good party (60%), fails at a bad one (35%).
 	good := ResolveParty(rolls(t, 0, 50), PartyInput{Host: host, Goal: GoalMakeFriends, Quality: 100, Attendees: []Attendee{guest}})
 	bad := ResolveParty(rolls(t, 99, 50), PartyInput{Host: host, Goal: GoalMakeFriends, Attendees: []Attendee{guest}})
-	if good.Deltas[2].Influence != guestFriends.Influence || bad.Deltas[2].Influence != 0 {
+	if !near(good.Deltas[2].Influence, ScaleInfluence(guestFriends.Influence, 5)) || bad.Deltas[2].Influence != 0 {
 		t.Fatalf("good %+v bad %+v", good.Deltas[2], bad.Deltas[2])
 	}
 }
@@ -145,8 +145,8 @@ func TestPartySpend(t *testing.T) {
 		t.Fatal("cheap party should fail")
 	}
 	res := ResolveParty(rolls(t, 30), PartyInput{Host: host, Goal: GoalMakeFriends, Spend: 120})
-	want := (hostSuccess.Influence + hostFriends.Influence) * 2 // two doublings
-	if !res.Success || res.Deltas[1].Influence != want {
+	want := ScaleInfluence((hostSuccess.Influence+hostFriends.Influence)*2, host.Sheet[AttrInfluence]) // two doublings
+	if !res.Success || !near(res.Deltas[1].Influence, want) {
 		t.Fatalf("lavish party: %+v, want influence %v", res.Deltas[1], want)
 	}
 

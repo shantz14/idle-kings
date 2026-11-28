@@ -65,6 +65,7 @@ const (
 	SecretKindTheft       = "theft"
 	SecretKindForgery     = "forgery"
 	SecretKindBetrayal    = "betrayal"
+	SecretKindSabotage    = "sabotage"
 )
 
 // LeakChance is the percent chance that a network at this level reports a
@@ -229,6 +230,28 @@ func SecretPlant(actor string, victim int64, victimName string) Secret {
 		Vague:   fmt.Sprintf("%s met with some unsavoury characters in the lower city.", actor),
 		Partial: fmt.Sprintf("%s is trying to plant spies in another player's court.", actor),
 		Full:    fmt.Sprintf("%s is trying to plant spies in **%s**'s court.", actor, victimName),
+	}
+}
+
+// SecretSmear is a smear campaign; like a party rumor, the victim isn't told
+// this way.
+func SecretSmear(actor string, victim int64, victimName string) Secret {
+	return Secret{
+		Kind: SecretKindRumor, Skip: []int64{victim},
+		Vague:   fmt.Sprintf("%s has been paying printers and street-criers.", actor),
+		Partial: fmt.Sprintf("%s is spreading lies about another house.", actor),
+		Full:    fmt.Sprintf("%s is paying criers to spread lies about **%s**.", actor, victimName),
+	}
+}
+
+// SecretSabotage is sending agents against another house's venture or
+// property.
+func SecretSabotage(actor string, victimName, what string) Secret {
+	return Secret{
+		Kind:    SecretKindSabotage,
+		Vague:   fmt.Sprintf("%s has been seen with men who smell of smoke.", actor),
+		Partial: fmt.Sprintf("%s is sending saboteurs against another house.", actor),
+		Full:    fmt.Sprintf("%s is sending saboteurs against **%s**: %s.", actor, victimName, what),
 	}
 }
 

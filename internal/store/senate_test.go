@@ -55,13 +55,13 @@ func TestSenateLifecycle(t *testing.T) {
 	if v, _ := s.Votes(ctx, m.ID); v[c.ID] != "none" {
 		t.Fatalf("votes: %v", v)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "none", 30, 3, now); err != nil {
+	if _, err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "none", 30, 3, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "lavish", 30, 3, now); !errors.Is(err, ErrBought) {
-		t.Fatalf("double bribe: %v", err)
+	if _, err := s.PayBribe(ctx, m.ID, got[0].ID, c.ID, "lavish", 60, 3, now); !errors.Is(err, ErrBought) {
+		t.Fatalf("outbidding yourself: %v", err)
 	}
-	if err := s.PayBribe(ctx, m.ID, got[1].ID, c.ID, "none", 100000, 3, now); err == nil {
+	if _, err := s.PayBribe(ctx, m.ID, got[1].ID, c.ID, "none", 100000, 3, now); err == nil {
 		t.Fatal("bribe beyond means should fail")
 	}
 	if b, _ := s.Bribes(ctx, m.ID); len(b) != 1 {
@@ -190,5 +190,70 @@ func TestRecentDecisions(t *testing.T) {
 	ds, err := s.RecentDecisions(ctx, "g", 5)
 	if err != nil || len(ds) != 1 || ds[0].Winner != "lavish" || !ds[0].Succeeded {
 		t.Fatalf("decisions: %v %+v", err, ds)
+	}
+}
+
+func TestOutbidBribe(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	now := time.Now()
+	if err := s.CreateRealm(ctx, "g", game.StartingRealm(), game.GenerateSenate(rand.New(rand.NewPCG(1, 2)), game.SenateSize), now); err != nil {
+		t.Fatal(err)
+	}
+	a := newChar(t, s, "a", "merchant")
+	b := newChar(t, s, "b", "merchant")
+	sen, _ := s.Senators(ctx, "g")
+	m, err := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PayBribe(ctx, m.ID, sen[0].ID, a.ID, "none", 40, 3, now); err != nil {
+		t.Fatal(err)
+	}
+	// Too little doesn't outbid, and costs nothing.
+	if _, err := s.PayBribe(ctx, m.ID, sen[0].ID, b.ID, "lavish", 41, 3, now); !errors.Is(err, ErrBought) {
+		t.Fatalf("underbid: %v", err)
+	}
+	old, err := s.PayBribe(ctx, m.ID, sen[0].ID, b.ID, "lavish", game.OutbidPrice(40), 3, now)
+	if err != nil || old.CharacterID != a.ID || old.Amount != 40 {
+		t.Fatalf("outbid: %+v %v", old, err)
+	}
+	br, _ := s.Bribes(ctx, m.ID)
+	if got := br[sen[0].ID]; got.CharacterID != b.ID || got.Option != "lavish" || got.Amount != game.OutbidPrice(40) {
+		t.Fatalf("standing bribe %+v", got)
+	}
+	if w := wealth(t, s, a.ID); w != a.Wealth {
+		t.Fatalf("outbid briber should be refunded: %d, had %d", w, a.Wealth)
+	}
+	if w := wealth(t, s, b.ID); w != b.Wealth-game.OutbidPrice(40) {
+		t.Fatalf("new briber paid %d", b.Wealth-w)
+	}
+}
+
+func TestFirstVoter(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	now := time.Now()
+	if err := s.CreateRealm(ctx, "g", game.StartingRealm(), game.GenerateSenate(rand.New(rand.NewPCG(1, 2)), game.SenateSize), now); err != nil {
+		t.Fatal(err)
+	}
+	a, b := newChar(t, s, "a", "merchant"), newChar(t, s, "b", "merchant")
+	m, err := s.CreateMatter(ctx, "g", "grand_games", 0, now, now.Add(time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.FirstVoter(ctx, m.ID, "lavish"); ok {
+		t.Fatal("nobody voted yet")
+	}
+	_ = s.CastVote(ctx, m.ID, a.ID, "lavish", now)
+	_ = s.CastVote(ctx, m.ID, b.ID, "lavish", now.Add(time.Minute))
+	if id, ok, err := s.FirstVoter(ctx, m.ID, "lavish"); err != nil || !ok || id != a.ID {
+		t.Fatalf("first %d %v %v", id, ok, err)
+	}
+	// Changing your vote counts from then.
+	_ = s.CastVote(ctx, m.ID, a.ID, "none", now.Add(2*time.Minute))
+	_ = s.CastVote(ctx, m.ID, a.ID, "lavish", now.Add(3*time.Minute))
+	if id, _, _ := s.FirstVoter(ctx, m.ID, "lavish"); id != b.ID {
+		t.Fatalf("first after a change of heart: %d", id)
 	}
 }

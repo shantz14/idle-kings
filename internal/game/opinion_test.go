@@ -139,3 +139,16 @@ func TestPartyMovesOpinion(t *testing.T) {
 		t.Fatalf("party opinion %v, want %v", res.Opinions[0].Delta, want)
 	}
 }
+
+func TestRenownRegard(t *testing.T) {
+	if RenownRegard(0) != 0 || RenownRegard(100) != 10 || RenownRegard(1000) != regardMax || RenownRegard(-50) != 0 {
+		t.Fatal("regard scale")
+	}
+	if Regard(95, 300) != OpinionMax {
+		t.Fatal("regard should clamp")
+	}
+	// A famous house pays less for the same bribe.
+	if OpinionPriceFactor(Regard(0, 200)) >= OpinionPriceFactor(0) {
+		t.Fatal("renown should cheapen bribes")
+	}
+}

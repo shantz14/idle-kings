@@ -56,6 +56,14 @@ const (
 	embezzleOutraged      = -15.0 // Incorruptible and Economical senators
 )
 
+// Every embezzlement at court in the last EmbezzleRecentDays game days puts
+// the clerks more on their guard: the next one is harder, and likelier to
+// be caught (being caught is a bad enough miss).
+const (
+	EmbezzleRecentDays    = 3
+	embezzleRecentPenalty = 6.0 // percent per recent embezzlement
+)
+
 type EmbezzleResult struct {
 	Success  bool
 	Caught   bool
@@ -67,9 +75,10 @@ type EmbezzleResult struct {
 }
 
 // ResolveEmbezzle decides how a theft went. The treasury can't give what it
-// doesn't have.
-func ResolveEmbezzle(r Roller, p Person, size EmbezzleSize, treasury float64, senators []Senator) EmbezzleResult {
-	ok, margin := embezzleCheck.Roll(r, p.Sheet, -size.Penalty, Normal)
+// doesn't have. recent is how many embezzlements anyone at court made in the
+// last EmbezzleRecentDays game days.
+func ResolveEmbezzle(r Roller, p Person, size EmbezzleSize, treasury float64, recent int, senators []Senator) EmbezzleResult {
+	ok, margin := embezzleCheck.Roll(r, p.Sheet, -size.Penalty-embezzleRecentPenalty*float64(max(recent, 0)), Normal)
 	res := EmbezzleResult{Success: ok}
 	switch {
 	case ok:

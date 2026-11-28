@@ -201,6 +201,11 @@ func itemView(c store.Character, st shopState, key, note string) *discordgo.Inte
 		warn = append(warn, "🧙 Under the Witchcraft Act, owning it may cost you fines.")
 	}
 	owner := st.ownerNote(it, c.ID)
+	need := game.RenownNeeded(it)
+	famous := c.Renown >= need
+	if !famous {
+		warn = append(warn, fmt.Sprintf("👑 A house like this only sells to a family of renown. You need **%s renown** to buy it.", game.Num(need)))
+	}
 	if owner != "" {
 		warn = append(warn, fmt.Sprintf("🔒 This piece is %s.", owner))
 	} else if !inStock {
@@ -223,7 +228,7 @@ func itemView(c store.Character, st shopState, key, note string) *discordgo.Inte
 		fields = append(fields, &discordgo.MessageEmbedField{Name: "✨ Effects", Value: v})
 	}
 	fields = append(fields, fact("Your purse", fmt.Sprintf("%d gold", c.Wealth)))
-	buyable := owner == "" && inStock && c.Wealth >= price
+	buyable := owner == "" && inStock && famous && c.Wealth >= price
 	return &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: game.KindByKey(it.Kind).Emoji + " " + it.Name, Description: withNote(note, desc), Color: colorPanel, Fields: fields}},
 		Components: []discordgo.MessageComponent{row(
@@ -238,6 +243,10 @@ func (b *Bot) onBuy(ctx context.Context, i *discordgo.InteractionCreate, c store
 	period, _ := game.MarketPeriod(time.Now(), b.t.Shop)
 	if !ok || !game.InStock(key, c.GuildID, period) {
 		b.update(i, b.itemPanel(ctx, c, key, "That's no longer for sale."))
+		return
+	}
+	if need := game.RenownNeeded(it); c.Renown < need {
+		b.update(i, b.itemPanel(ctx, c, key, fmt.Sprintf("The sellers won't deal with a family of so little renown. You need %s.", game.Num(need))))
 		return
 	}
 	price := it.PriceUnder(c.Laws)

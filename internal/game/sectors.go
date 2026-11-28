@@ -41,7 +41,7 @@ type SectorDef struct {
 	Description string
 	BaseRevenue float64 // starting capacity, gold/day
 	HouseStake  float64 // stake held by NPC houses
-	Growth      float64 // capacity added per gold invested
+	Growth      float64 // capacity added per gold invested, until the sector outgrows its start (Grow)
 	Deal        Check   // the investor's hidden roll for how good a deal they get
 	// Secret sectors are hidden from public profiles, and a badly failed
 	// deal exposes the investor.
@@ -279,6 +279,25 @@ func EffectiveStakes(laws Laws, by map[int64]Stakes) (map[int64]Stakes, Stakes) 
 // ---- investing ----
 
 // DealTier is how good a deal an investor struck.
+// Grow is the sector's capacity after gold is invested at capacity. Up to
+// the sector's starting size each gold adds Growth; past it, growth per gold
+// shrinks as Growth × base / capacity, so a sector twice its old size grows
+// half as fast. It's integrated exactly, so splitting a sum into smaller
+// investments gives the same result.
+func (d SectorDef) Grow(capacity float64, gold int) float64 {
+	g := float64(gold) * d.Growth
+	if g <= 0 {
+		return capacity
+	}
+	if room := d.BaseRevenue - capacity; room > 0 {
+		if g <= room {
+			return capacity + g
+		}
+		capacity, g = d.BaseRevenue, g-room
+	}
+	return math.Sqrt(capacity*capacity + 2*d.BaseRevenue*g)
+}
+
 type DealTier int
 
 const (
@@ -301,7 +320,6 @@ var ExposedDelta = Delta{Renown: -10}
 type InvestResult struct {
 	Tier     DealTier
 	Stake    float64 // stake gained
-	Capacity float64 // capacity the gold added to the sector
 	Exposed  bool    // secret sector, and the deal went badly wrong
 	Practice Delta   // Stewardship practice (Intrigue in a secret sector)
 	Text     string  // what the investor is told; never shows the roll
@@ -309,9 +327,10 @@ type InvestResult struct {
 
 // Invest rolls the deal. The gold is spent and the sector grows whatever the
 // roll; the roll decides how much of it the investor ends up owning.
-func Invest(r Roller, investor Sheet, d SectorDef, gold int) InvestResult {
-	_, m := d.Deal.Roll(r, investor, 0, Normal)
-	res := InvestResult{Tier: DealBad, Capacity: float64(gold) * d.Growth}
+// bonus is added to the deal roll (A Good Word).
+func Invest(r Roller, investor Sheet, d SectorDef, gold int, bonus float64) InvestResult {
+	_, m := d.Deal.Roll(r, investor, bonus, Normal)
+	res := InvestResult{Tier: DealBad}
 	switch {
 	case m >= dealGreatMargin:
 		res.Tier = DealGreat

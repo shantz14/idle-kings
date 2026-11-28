@@ -35,6 +35,9 @@ type Character struct {
 	// sectors; see fillVentures.
 	Ventures      map[game.SectorKey]Venture
 	VentureIncome float64 // gold/day from all ventures
+	// Sabotaged is each venture's income factor while saboteurs' damage
+	// lasts (venture_damage); missing means whole.
+	Sabotaged map[game.SectorKey]float64
 	// Conditions are active temporary states, like a wound; see fillConditions.
 	Conditions []game.Condition
 	// Monuments are finished public works (game.WorkDefs keys); see fillMonuments.
@@ -52,6 +55,9 @@ type Holding struct {
 	ID        int64 // estate_items.id
 	Key       string
 	PricePaid int
+	// Repair is what it costs to repair this piece after sabotage (0 = not
+	// damaged). A damaged piece gives none of its effects until repaired.
+	Repair int
 }
 
 func (h Holding) Item() (game.Item, bool) { return game.ItemByKey(h.Key) }
@@ -100,10 +106,24 @@ func (c Character) House() string { return c.Crest.Emoji() + " House " + c.Famil
 
 // Effects are estate item effects plus active conditions and monuments.
 func (c Character) Effects() game.Effects {
-	e := game.SumEffects(c.Items)
+	e := game.SumEffectsDamaged(c.Items, c.damaged())
 	e.Add(game.ConditionEffects(c.Conditions))
 	e.Add(game.MonumentEffects(c.Monuments))
 	return e
+}
+
+// damaged is which of Items are damaged, by position, or nil.
+func (c Character) damaged() map[int]bool {
+	var out map[int]bool
+	for n, h := range c.Holdings {
+		if h.Repair > 0 {
+			if out == nil {
+				out = map[int]bool{}
+			}
+			out[n] = true
+		}
+	}
+	return out
 }
 
 // Effective is the stats the rules use: base plus estate item bonuses.
@@ -120,9 +140,10 @@ func (c Character) EstateValue() float64 {
 	return game.EstateValue(c.Items) + game.MonumentValue(c.Monuments)
 }
 
-// VoteWeight is how much this character's vote counts in the Senate.
+// VoteWeight is how much this character's vote counts in the Senate:
+// influence, items and monuments, the Landed Franchise, and renown.
 func (c Character) VoteWeight() float64 {
-	return c.Influence + c.Effects().VoteWeight + game.FranchiseWeight(c.EstateValue(), c.Laws)
+	return c.Influence + c.Effects().VoteWeight + game.FranchiseWeight(c.EstateValue(), c.Laws) + game.RenownWeight(c.Renown)
 }
 
 // TotalIncome is gold per day: base income, estate items and ventures,
@@ -270,8 +291,9 @@ func (s *Store) fillItems(ctx context.Context, chars []*Character) error {
 		c.Items, c.Holdings, c.ResidenceID = nil, nil, 0
 		args = append(args, c.ID)
 	}
-	q := `SELECT e.character_id, e.id, e.item_key, e.price_paid, COALESCE(c.residence_id, 0)
+	q := `SELECT e.character_id, e.id, e.item_key, e.price_paid, COALESCE(c.residence_id, 0), COALESCE(d.repair_cost, 0)
 	      FROM estate_items e JOIN characters c ON c.id = e.character_id
+	      LEFT JOIN damaged_items d ON d.holding_id = e.id
 	      WHERE e.character_id IN (?` + strings.Repeat(",?", len(args)-1) + `)
 	      ORDER BY e.character_id, (e.id = c.residence_id) DESC, e.id`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -282,7 +304,7 @@ func (s *Store) fillItems(ctx context.Context, chars []*Character) error {
 	for rows.Next() {
 		var cid, res int64
 		var h Holding
-		if err := rows.Scan(&cid, &h.ID, &h.Key, &h.PricePaid, &res); err != nil {
+		if err := rows.Scan(&cid, &h.ID, &h.Key, &h.PricePaid, &res, &h.Repair); err != nil {
 			return err
 		}
 		c := byID[cid]

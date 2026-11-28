@@ -263,6 +263,7 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 	var notes []hirerNote
 	var publics []string
 	robbed, beaten := 0, 0
+	unrobbed := false // drove off the dearest band, for the feat
 	for _, p := range parts {
 		band, ok := game.BandFromGoal(p.Goal)
 		if !ok {
@@ -288,6 +289,9 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 		} else {
 			beaten++
 		}
+		if band.Key == game.UnrobbedBand && (am.Outcome == game.AmbushDrivenOff || am.Outcome == game.AmbushNamed) {
+			unrobbed = true
+		}
 	}
 	out.Deltas[c.ID] = td
 	out.Conditions = b.newConditions(conds, now)
@@ -296,6 +300,9 @@ func (b *Bot) resolveJourney(ctx context.Context, a store.Activity, now time.Tim
 			slog.Error("apply journey", "err", err)
 		}
 		return
+	}
+	if unrobbed {
+		defer b.awardFeat(ctx, c, game.FeatUnrobbed)
 	}
 	if res.Gift != "" {
 		if it, ok := game.ItemByKey(res.Gift); ok {

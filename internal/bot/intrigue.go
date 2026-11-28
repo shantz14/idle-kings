@@ -263,6 +263,17 @@ func (b *Bot) resolvePlant(ctx context.Context, a store.Activity, now time.Time)
 		}
 		return
 	}
+	if res.Delta > 0 {
+		if nets, err := b.store.SpyNetworksBy(ctx, c.ID); err == nil {
+			levels := make([]float64, len(nets))
+			for n, net := range nets {
+				levels[n] = net.Value
+			}
+			if game.WhispersEarned(levels) {
+				defer b.awardFeat(ctx, c, game.FeatWhispers)
+			}
+		}
+	}
 	after := game.SpyTierOf(game.ClampSpy(before + res.Delta))
 	color := colorPanel
 	switch {

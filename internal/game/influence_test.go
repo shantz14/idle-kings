@@ -115,3 +115,13 @@ func TestWorks(t *testing.T) {
 		t.Fatalf("complete: %+v", res)
 	}
 }
+
+func TestScaleGainShrinksOnlyGains(t *testing.T) {
+	d := ScaleGain(Delta{Influence: 4, Renown: 3, Wealth: 10}, 30)
+	if !near(d.Influence, 2) || d.Renown != 3 || d.Wealth != 10 {
+		t.Fatalf("gain: %+v", d)
+	}
+	if d := ScaleGain(Delta{Influence: -2}, 60); d.Influence != -2 {
+		t.Fatalf("loss scaled: %+v", d)
+	}
+}

@@ -99,7 +99,7 @@ func (b *Bot) aidAmountPanel(ctx context.Context, c store.Character, key, note s
 func aidAmountView(c store.Character, t game.AidTarget, current float64, note string) *discordgo.InteractionResponseData {
 	desc := fmt.Sprintf("The realm's %s stands at **%s**.", strings.ToLower(trackerLabel(t.Tracker)), game.Num(current))
 	if current < game.AidCrisis {
-		desc += " ⚠️ It's in trouble: a gift now will be remembered."
+		desc += " ⚠️ It's in trouble: a gift now will be remembered, and the court will count you among its saviours."
 	}
 	desc = withNote(note, desc+"\n\nHow much will you give?")
 	var btns []discordgo.MessageComponent
@@ -144,6 +144,9 @@ func (b *Bot) onAidGive(ctx context.Context, i *discordgo.InteractionCreate, c s
 	case err != nil:
 		b.update(i, b.aidAmountPanel(ctx, c, key, err.Error()))
 		return
+	}
+	if res.Crisis { // Saviour of the Realm counts gifts to a realm in danger
+		b.addDeeds(ctx, c.GuildID, store.Deed{CharacterID: c.ID, Kind: game.DeedCrisisAid, Amount: float64(gold)})
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds:     []*discordgo.MessageEmbed{{Title: "🤲 " + t.Name, Description: withDelta(res.Text, res.Delta), Color: colorGood}},

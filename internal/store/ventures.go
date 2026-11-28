@@ -40,7 +40,7 @@ func (s *Store) GuildStakes(ctx context.Context, guildID string) (map[int64]game
 func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 	guilds := map[string][]*Character{}
 	for _, c := range chars {
-		c.Ventures, c.VentureIncome, c.Laws, c.RealmFallen, c.FallenReason = nil, 0, nil, false, ""
+		c.Ventures, c.VentureIncome, c.Laws, c.RealmFallen, c.FallenReason, c.Sabotaged = nil, 0, nil, false, "", nil
 		guilds[c.GuildID] = append(guilds[c.GuildID], c)
 	}
 	for g, cs := range guilds {
@@ -55,7 +55,12 @@ func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 			return err
 		}
 		by, totals := game.EffectiveStakes(st.Laws, raw)
+		hurt, err := s.ventureDamage(ctx, g, time.Now())
+		if err != nil {
+			return err
+		}
 		for _, c := range cs {
+			c.Sabotaged = hurt[c.ID]
 			c.Laws = st.Laws
 			c.RealmFallen, c.FallenReason = !st.Alive(), st.FallenReason
 			for k, stake := range raw[c.ID] {
@@ -65,6 +70,9 @@ func (s *Store) fillVentures(ctx context.Context, chars []*Character) error {
 				}
 				share := game.Share(d, by[c.ID][k], totals[k])
 				v := Venture{Stake: stake, Share: share, Income: share * st.Sectors.Revenue(d, st.Trackers, st.Laws)}
+				if f, ok := c.Sabotaged[k]; ok {
+					v.Income *= f
+				}
 				if c.Ventures == nil {
 					c.Ventures = map[game.SectorKey]Venture{}
 				}
@@ -97,7 +105,8 @@ type Investment struct {
 	GuildID     string
 	Sector      game.SectorKey
 	Stake       float64    // stake gained
-	Capacity    float64    // capacity added to the sector
+	Gold        int        // gold invested: grows the sector (SectorDef.Grow)
+	UseUp       string     // a condition the deal used up (A Good Word), or ""
 	Delta       game.Delta // e.g. renown lost to exposure
 }
 
@@ -127,13 +136,21 @@ func (s *Store) ApplyInvestment(ctx context.Context, inv Investment, now time.Ti
 		return err
 	}
 	sec = sec.Fill()
-	sec.Apply(map[game.SectorKey]game.SectorChange{inv.Sector: {Capacity: inv.Capacity}})
+	if d, ok := game.SectorByKey(inv.Sector); ok {
+		cur := sec[inv.Sector]
+		sec.Apply(map[game.SectorKey]game.SectorChange{inv.Sector: {Capacity: d.Grow(cur.Capacity, inv.Gold) - cur.Capacity}})
+	}
 	b, _ := json.Marshal(sec)
 	if _, err := tx.ExecContext(ctx, `UPDATE realms SET sectors = ? WHERE guild_id = ?`, string(b), inv.GuildID); err != nil {
 		return err
 	}
 	if !isZero(inv.Delta) {
 		if err := applyDelta(ctx, tx, inv.CharacterID, inv.Delta); err != nil {
+			return err
+		}
+	}
+	if inv.UseUp != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM conditions WHERE character_id = ? AND key = ?`, inv.CharacterID, inv.UseUp); err != nil {
 			return err
 		}
 	}

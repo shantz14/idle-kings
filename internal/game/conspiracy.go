@@ -87,13 +87,18 @@ func (s SchemeDef) Aims(k TargetKind) bool {
 
 // StealCoffers is the "item" key for stealing gold instead of a treasure.
 const (
-	StealCofferShare = 0.3
-	StealCofferMax   = 400
+	StealCofferShare    = 0.3
+	StealCofferMax      = 400
+	StealCofferRich     = 0.1
+	StealCofferRichFrom = 1000
 )
 
 // CofferTake is how much gold a theft from someone's coffers takes.
+// The cap grows with the target's wealth: StealCofferMax, plus
+// StealCofferRich of whatever they hold above StealCofferRichFrom.
 func CofferTake(wealth int) int {
-	return min(StealCofferMax, int(float64(wealth)*StealCofferShare))
+	limit := StealCofferMax + int(float64(max(wealth-StealCofferRichFrom, 0))*StealCofferRich)
+	return min(limit, int(float64(wealth)*StealCofferShare))
 }
 
 // ConspiracyPurse is gold spent on cutthroats, forgers and burglars.

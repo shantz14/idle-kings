@@ -35,6 +35,7 @@ var MisdeedDefs = map[string]MisdeedDef{
 	SecretKindTheft:      {Word: "burgling another house", Severity: 0.9, Offended: []Trait{TraitStern}, AlwaysCrime: true},
 	SecretKindForgery:    {Word: "forging evidence against another house", Severity: 0.8, Offended: []Trait{TraitStern, TraitIncorruptible}, AlwaysCrime: true},
 	SecretKindConspiracy: {Word: "conspiring against another house", Severity: 0.7, Offended: []Trait{TraitStern}, AlwaysCrime: true},
+	SecretKindSabotage:   {Word: "sabotaging another house", Severity: 0.7, Offended: []Trait{TraitStern}, AlwaysCrime: true},
 	SecretKindMagic:      {Word: "dealing in enchanted goods", Severity: 0.6, Offended: []Trait{TraitPious, TraitConservative}, Needs: LawWitchcraftAct},
 }
 

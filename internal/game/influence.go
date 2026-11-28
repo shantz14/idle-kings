@@ -21,6 +21,17 @@ func ScaleInfluence(gain, current float64) float64 {
 	return gain * influenceHalf / (influenceHalf + math.Max(current, 0))
 }
 
+// InfluenceDecay is the share of influence everyone keeps each Senate day:
+// influence fades if you rest on it, like opinion and spy networks.
+const InfluenceDecay = 0.98
+
+// ScaleGain is d with its influence gain (not a loss) shrunk by
+// ScaleInfluence. Every influence reward goes through it or ScaleInfluence.
+func ScaleGain(d Delta, current float64) Delta {
+	d.Influence = ScaleInfluence(d.Influence, current)
+	return d
+}
+
 // FreeKinds are activities that don't take up the character's one action:
 // a public work is built by others while you get on with things, and a
 // conspiracy ripens in the dark. Each kind is one at a time.
@@ -46,7 +57,7 @@ var (
 )
 
 // Placeholders to tune.
-var canvassCheck = Check{Base: 30, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrRenown: 0.5}}
+var canvassCheck = Check{Base: 30, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrRenown: 1.5}}
 
 const (
 	canvassGreatMargin = 30

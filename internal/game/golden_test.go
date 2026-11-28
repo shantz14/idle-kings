@@ -232,7 +232,7 @@ func goldenCases() map[string]any {
 				opt, gold, ok := s.VoteOfferFor(ev, 20, realm, int64(i), 10)
 				offers = append(offers, []any{s.Preferred(ev, realm, int64(i)), opt, gold, ok})
 			}
-			offers = append(offers, BestVoteOffers(ev, sen, 20, realm, int64(i), Opinions{sen[0].ID: 50}))
+			offers = append(offers, BestVoteOffers(ev, sen, 20, realm, int64(i), Opinions{sen[0].ID: 50}, 0))
 		}
 		out["offers/"+lname] = offers
 	}
@@ -269,7 +269,7 @@ func goldenCases() map[string]any {
 		out[k("circus")] = ResolveCircus(sr(), a, 150, sen)
 		out[k("canvass")] = ResolveCanvass(sr(), a)
 		for _, sz := range EmbezzleSizes {
-			out[k("embezzle/"+sz.Key)] = ResolveEmbezzle(sr(), b, sz, 40, sen)
+			out[k("embezzle/"+sz.Key)] = ResolveEmbezzle(sr(), b, sz, 40, 0, sen)
 		}
 		for _, band := range BanditBands {
 			out[k("ambush/"+band.Key)] = ResolveAmbush(sr(), a, b, band, 80, 1, sen)

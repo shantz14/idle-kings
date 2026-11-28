@@ -21,6 +21,11 @@ type WorkDef struct {
 	Value       float64 // adds to estate value
 	Realm       Realm   // applied once, when it opens
 	Pleases     []Trait
+	// A rebuild of a finished work (WorkRebuilds): its Base work's key, how
+	// many times it has been rebuilt (1 = Grand, 2 = Great), and the word.
+	Base   string
+	Tier   int
+	Prefix string
 }
 
 // Placeholders to tune.
@@ -39,12 +44,69 @@ var WorkDefs = []WorkDef{
 		Realm:       Realm{AttrPopularity: 5}, Pleases: []Trait{TraitPopulist}},
 }
 
-func WorkByKey(k string) (WorkDef, bool) {
-	return workIndex.get(k)
+// A finished work can be rebuilt grander, twice: each rebuild costs more,
+// takes longer, and adds the work's vote weight and value again. Placeholder
+// numbers — tune freely.
+var workTiers = []struct {
+	Suffix, Prefix   string
+	CostMul, DaysMul float64
+}{
+	{"grand", "Grand", 3, 2},
+	{"great", "Great", 9, 3},
 }
 
-// WorkTitle is the monument's name: "The Vane Aqueduct".
+// WorkRebuilds are every work's rebuilds, keyed "<work>@<suffix>". They are
+// monuments like the works themselves.
+var WorkRebuilds []WorkDef
+
+func init() {
+	for _, w := range WorkDefs {
+		for n, t := range workTiers {
+			r := w
+			r.Key, r.Base, r.Tier, r.Prefix = w.Key+"@"+t.Suffix, w.Key, n+1, t.Prefix
+			r.Name = t.Prefix + " " + w.Name
+			r.Cost = int(float64(w.Cost) * t.CostMul)
+			r.Days = w.Days * t.DaysMul
+			r.Description = fmt.Sprintf("Tear it down and build it again, %s. Every bit as useful, and twice as admired.", map[int]string{1: "bigger", 2: "bigger still"}[n+1])
+			WorkRebuilds = append(WorkRebuilds, r)
+		}
+	}
+}
+
+func WorkByKey(k string) (WorkDef, bool) {
+	if w, ok := workIndex.get(k); ok {
+		return w, true
+	}
+	return rebuildIndex.get(k)
+}
+
+// NextWork is what a character can build next of a base work: the work
+// itself, then its rebuilds in order. ok is false once it's as great as it
+// gets.
+func NextWork(base string, monuments []string) (WorkDef, bool) {
+	w, ok := workIndex.get(base)
+	if !ok {
+		return WorkDef{}, false
+	}
+	if !contains(monuments, w.Key) {
+		return w, true
+	}
+	for _, t := range workTiers {
+		k := base + "@" + t.Suffix
+		if !contains(monuments, k) {
+			return rebuildIndex.get(k)
+		}
+	}
+	return WorkDef{}, false
+}
+
+// WorkTitle is the monument's name: "The Vane Aqueduct", "The Grand Vane
+// Aqueduct".
 func WorkTitle(family string, w WorkDef) string {
+	if w.Tier > 0 {
+		base, _ := workIndex.get(w.Base)
+		return fmt.Sprintf("The %s %s %s", w.Prefix, family, base.Name)
+	}
 	return fmt.Sprintf("The %s %s", family, w.Name)
 }
 

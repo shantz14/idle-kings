@@ -97,6 +97,31 @@ func TestSectorHealthClampAndDrift(t *testing.T) {
 	}
 }
 
+func TestSectorGrowthDiminishes(t *testing.T) {
+	agri := mustSector(t, SectorAgriculture)
+	base := agri.BaseRevenue
+	// Below its starting size, a sector grows linearly back up to it.
+	if got := agri.Grow(base-10, 100); !near(got, base-10+100*agri.Growth) {
+		t.Fatalf("below base: %v", got)
+	}
+	// At its start, the first gold grows it at the full rate...
+	if got := agri.Grow(base, 1) - base; math.Abs(got-agri.Growth) > 1e-3 {
+		t.Fatalf("first gold adds %v", got)
+	}
+	// ...and at twice its start, at about half the rate.
+	if got := agri.Grow(2*base, 1) - 2*base; math.Abs(got-agri.Growth/2) > 1e-3 {
+		t.Fatalf("at 2x adds %v", got)
+	}
+	// Splitting a sum gives the same result, across the base too.
+	for _, start := range []float64{base - 3, base, 3 * base} {
+		whole := agri.Grow(start, 1000)
+		split := agri.Grow(agri.Grow(agri.Grow(start, 250), 250), 500)
+		if math.Abs(whole-split) > 1e-9 {
+			t.Fatalf("from %v: whole %v, split %v", start, whole, split)
+		}
+	}
+}
+
 func TestInvestTiers(t *testing.T) {
 	agri := mustSector(t, SectorAgriculture)
 	steward := Sheet{AttrStewardship: 5} // deal chance 60
@@ -105,20 +130,20 @@ func TestInvestTiers(t *testing.T) {
 		tier DealTier
 	}{{10, DealGreat}, {40, DealFair}, {70, DealBad}}
 	for _, c := range cases {
-		res := Invest(rolls(t, c.roll), steward, agri, 100)
-		if res.Tier != c.tier || !near(res.Stake, 100*dealStake[c.tier]) || !near(res.Capacity, 100*agri.Growth) || res.Exposed {
+		res := Invest(rolls(t, c.roll), steward, agri, 100, 0)
+		if res.Tier != c.tier || !near(res.Stake, 100*dealStake[c.tier]) || res.Exposed {
 			t.Errorf("roll %d: %+v", c.roll, res)
 		}
 	}
 	// Only the Black Market exposes, and only on a bad miss.
-	if Invest(rolls(t, 99), Sheet{}, agri, 100).Exposed {
+	if Invest(rolls(t, 99), Sheet{}, agri, 100, 0).Exposed {
 		t.Fatal("agriculture exposed")
 	}
 	shadow := mustSector(t, SectorBlackMarket) // intrigue 0: chance 30
-	if !Invest(rolls(t, 80), Sheet{}, shadow, 100).Exposed {
+	if !Invest(rolls(t, 80), Sheet{}, shadow, 100, 0).Exposed {
 		t.Fatal("shadow should expose at margin -50")
 	}
-	if Invest(rolls(t, 50), Sheet{}, shadow, 100).Exposed {
+	if Invest(rolls(t, 50), Sheet{}, shadow, 100, 0).Exposed {
 		t.Fatal("shadow exposed at margin -20")
 	}
 }

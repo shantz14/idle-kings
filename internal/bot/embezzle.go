@@ -53,12 +53,21 @@ func (b *Bot) onEmbezzle(ctx context.Context, i *discordgo.InteractionCreate, pa
 }
 
 func (b *Bot) embezzlePanel(ctx context.Context, c store.Character, note string) *discordgo.InteractionResponseData {
-	return embezzleView(b.t.Embezzle, b.spyBusy(ctx, c), note)
+	recent, err := b.store.RecentEmbezzlements(ctx, c.GuildID, time.Now().Add(-game.EmbezzleRecentDays*b.t.Day))
+	if err != nil {
+		slog.Error("recent embezzlements", "err", err)
+	}
+	return embezzleView(b.t.Embezzle, b.spyBusy(ctx, c), note, recent > 0)
 }
 
-func embezzleView(d time.Duration, busy, note string) *discordgo.InteractionResponseData {
+// embezzleView is the panel; watchful is true when the treasury has been
+// robbed lately and the clerks are on their guard.
+func embezzleView(d time.Duration, busy, note string, watchful bool) *discordgo.InteractionResponseData {
 	desc := "Move some of the Republic's silver into your own purse. Stewardship and Intrigue keep the ledgers straight. " +
 		"The more you take, the likelier you are to be caught: then the silver goes back, the whole court hears of it, and the Senate turns against you."
+	if watchful {
+		desc += "\n\n" + quote("👀 The treasury has been robbed lately, and the clerks are on their guard. The more it's robbed, the harder it gets.")
+	}
 	var btns []discordgo.MessageComponent
 	for _, s := range game.EmbezzleSizes {
 		btns = append(btns, button(fmt.Sprintf("%s (~%d gold)", s.Name, s.Gold()), "embezzle:go:"+s.Key, discordgo.DangerButton, busy != ""))
@@ -83,7 +92,11 @@ func (b *Bot) resolveEmbezzle(ctx context.Context, a store.Activity, now time.Ti
 		_ = b.store.ApplyResult(ctx, a.ID, store.Outcome{}, now)
 		return
 	}
-	res := game.ResolveEmbezzle(b.rng, c.Person(), size, before.Trackers[game.AttrTreasury], sen)
+	recent, err := b.store.RecentEmbezzlements(ctx, a.GuildID, now.Add(-game.EmbezzleRecentDays*b.t.Day))
+	if err != nil {
+		slog.Error("recent embezzlements", "err", err)
+	}
+	res := game.ResolveEmbezzle(b.rng, c.Person(), size, before.Trackers[game.AttrTreasury], recent, sen)
 	out := store.Outcome{Deltas: map[int64]game.Delta{c.ID: res.Delta}, Opinions: res.Opinions}
 	if res.Treasury != 0 {
 		out.Realm = game.Realm{game.AttrTreasury: res.Treasury}

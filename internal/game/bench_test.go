@@ -34,6 +34,6 @@ func BenchmarkBestVoteOffers(b *testing.B) {
 	sen, _, realm, _ := benchCourt()
 	for n := 0; n < b.N; n++ {
 		ev := MatterEvents[n%len(MatterEvents)]
-		BestVoteOffers(ev, sen, 20, realm, int64(n), nil)
+		BestVoteOffers(ev, sen, 20, realm, int64(n), nil, 0)
 	}
 }

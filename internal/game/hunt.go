@@ -43,7 +43,7 @@ func HuntGoalName(g Goal) string {
 
 var (
 	// Host success: prowess > martial > renown = estate (horses and hounds).
-	huntCheck = Check{Base: 15, Weights: map[Attr]float64{AttrProwess: 2.0, AttrMartial: 1.5, AttrRenown: 0.5, AttrEstate: 0.5}}
+	huntCheck = Check{Base: 15, Weights: map[Attr]float64{AttrProwess: 2.0, AttrMartial: 1.5, AttrRenown: 1.0, AttrEstate: 0.5}}
 
 	huntGloryCheck   = Check{Base: 20, Weights: map[Attr]float64{AttrProwess: 5}}
 	huntFriendsCheck = Check{Base: 20, Weights: map[Attr]float64{AttrDiplomacy: 5, AttrInfluence: 1}}
@@ -58,6 +58,9 @@ var (
 
 	accidentRenown     = 3.0 // the victim, thrown in front of everyone
 	accidentCaught     = 5.0 // the culprit, once named
+	accidentDays       = 5.0 // a wound from an arranged fall lasts longer than most
+	accidentInfluence  = 1.0 // the victim, carried home in front of everyone
+	accidentDamages    = 25  // gold a named culprit pays the victim, as much as they have
 	accidentCaughtOpin = -2.0
 
 	huntHawkOpinion         = 3.0
@@ -180,6 +183,7 @@ func ResolveHunt(r Roller, in HuntInput) PartyResult {
 		case GoalSaddleTalk:
 			hd.Merge(huntHostSaddle)
 		}
+		hd = ScaleGain(hd, host.Sheet[AttrInfluence])
 		res.notice(host.ID, "%s", withEffects("Your hunt was a triumph.", hd))
 		res.Public = fmt.Sprintf("**%s**'s hunt rode home with a cart full of game.", host.Name)
 		res.Opinions = append(res.Opinions, TraitReactions(in.Senators, host.ID,
@@ -210,8 +214,9 @@ func ResolveHunt(r Roller, in HuntInput) PartyResult {
 			}
 		case GoalRideFriends:
 			if ok, _ := huntFriendsCheck.Roll(r, a.Sheet, mod, Normal); ok {
-				res.delta(a.ID, huntGuestFriends)
-				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends on %s's hunt.", host.Name), huntGuestFriends))
+				g := ScaleGain(huntGuestFriends, a.Sheet[AttrInfluence])
+				res.delta(a.ID, g)
+				res.notice(a.ID, "%s", withEffects(fmt.Sprintf("You made friends on %s's hunt.", host.Name), g))
 			} else {
 				res.notice(a.ID, "You rode alongside the others on %s's hunt, but nobody had much to say.", host.Name)
 			}
@@ -268,8 +273,8 @@ func resolveAccident(r Roller, res *PartyResult, host Person, a HuntRider) {
 	case cancelled:
 		res.notice(a.ID, "Your accident for %s was spotted and undone before it happened.", t.Name)
 	default:
-		res.delta(t.ID, Delta{Renown: -accidentRenown})
-		res.Conditions = append(res.Conditions, ConditionChange{CharacterID: t.ID, Key: CondWounded})
+		res.delta(t.ID, Delta{Renown: -accidentRenown, Influence: -accidentInfluence})
+		res.Conditions = append(res.Conditions, ConditionChange{CharacterID: t.ID, Key: CondWounded, Days: accidentDays})
 		if named {
 			res.notice(a.ID, "On %s's hunt, %s took a bad fall.", host.Name, t.Name)
 		} else {
@@ -280,6 +285,12 @@ func resolveAccident(r Roller, res *PartyResult, host Person, a HuntRider) {
 		res.delta(a.ID, Delta{Renown: -accidentCaught})
 		res.Opinions = append(res.Opinions, OpinionChange{CharacterID: a.ID, Delta: accidentCaughtOpin})
 		res.notice(a.ID, "You were seen. Word of what you tried is getting around. (-%s renown, and the Senate thinks less of you)", Num(accidentCaught))
+		if pay := min(accidentDamages, max(int(a.Sheet[AttrWealth]), 0)); pay > 0 {
+			res.delta(a.ID, Delta{Wealth: -pay})
+			res.delta(t.ID, Delta{Wealth: pay})
+			res.notice(a.ID, "%s's family demands satisfaction, and you pay. (-%d gold)", t.Name, pay)
+			res.notice(t.ID, "%s pays your family for the harm they meant you. (+%d gold)", a.Name, pay)
+		}
 	}
 }
 

@@ -228,6 +228,7 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	}
 	res := game.ResolveMatter(b.rng, in)
 	ventureNotices(chars, res)
+	credits := b.creditVoters(ctx, m, ev, &res, chars, senators)
 
 	decay := game.OpinionDecay
 	if ev.Auto || m.PetitionerID != 0 { // not a Senate day
@@ -237,13 +238,26 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 		Summary: map[string]any{"winner": res.Winner.Key, "succeeded": res.Succeeded, "tally": res.Tally},
 		Realm:   res.Realm, Sectors: res.Sectors, Laws: res.Laws, Fallen: res.Fallen, FallenReason: res.FallenReason,
 		Deltas: res.Deltas, FollowUps: res.FollowUps, DayLength: b.senate.Interval,
-		Opinions: res.Opinions, OpinionDecay: decay,
+		Opinions: res.Opinions, OpinionDecay: decay, SenateDay: decay != 0,
 	}, now)
 	if err != nil {
 		if !errors.Is(err, store.ErrEnded) {
 			slog.Error("resolve matter", "err", err)
 		}
 		return
+	}
+
+	if !ev.Auto { // Kingmaker counts every vote on the winning side
+		var deeds []store.Deed
+		for id, opt := range votes {
+			if opt == res.Winner.Key {
+				deeds = append(deeds, store.Deed{CharacterID: id, Kind: game.DeedWinningVote, Amount: 1})
+			}
+		}
+		b.addDeeds(ctx, m.GuildID, deeds...)
+	}
+	if decay != 0 && !res.Fallen { // a Senate day: after the posts, the season may be over
+		defer b.checkSeason(ctx, m.GuildID)
 	}
 
 	for id, lines := range res.Notices {
@@ -266,6 +280,8 @@ func (b *Bot) resolveMatter(ctx context.Context, m store.Matter, now time.Time) 
 	result := decisionEmbed(ev, res)
 	if ev.Auto {
 		result = billEmbed(ev, res)
+	} else if len(credits) > 0 {
+		result.Description += "\n\n" + strings.Join(credits, "\n")
 	}
 	_, _ = b.s.ChannelMessageSendEmbed(channel, result)
 	if m.MessageID != "" {
@@ -408,6 +424,9 @@ func optionFields(ev game.MatterEvent, winner string) []*discordgo.MessageEmbedF
 	var out []*discordgo.MessageEmbedField
 	for n, o := range ev.Options {
 		val := o.Hint
+		if k, ok := game.Contract(ev.Key, o.Key); ok {
+			val += "\n" + game.ContractHint(k)
+		}
 		if s := game.DescribeArrows(game.SectorPreview(o)); s != "" {
 			val += "\n*" + s + "*"
 		}
@@ -687,7 +706,7 @@ func senatorSelect(m store.Matter, senators []game.Senator, bribes map[int64]sto
 	for _, s := range senators {
 		desc := fmt.Sprintf("Opinion %s · %s · influence %s", game.OpinionNum(ops[s.ID]), s.TraitNames(), game.Num(s.Influence))
 		if _, paid := bribes[s.ID]; paid {
-			desc += " · already paid"
+			desc += " · already paid (can be outbid)"
 		}
 		opts = append(opts, discordgo.SelectMenuOption{Label: s.Name, Value: fmt.Sprint(s.ID), Description: truncate(desc, 100)})
 	}
@@ -754,23 +773,26 @@ func (b *Bot) onBribeWho(ctx context.Context, i *discordgo.InteractionCreate, ma
 
 	desc := fmt.Sprintf("*%s* · influence %s\n**Their opinion of you**\n%s\n", s.TraitNames(), game.Num(s.Influence), opinionBlock(op))
 	var btns []discordgo.MessageComponent
-	if br, paid := bribes[s.ID]; paid {
-		if br.CharacterID == c.ID {
-			desc += fmt.Sprintf("✅ You've already paid them to vote to **%s**.", strings.ToLower(optionLabel(ev, br.Option)))
-		} else {
-			desc += "🔒 Someone has already paid them for this matter."
-		}
+	br, paid := bribes[s.ID]
+	if paid && br.CharacterID == c.ID {
+		desc += fmt.Sprintf("✅ You've already paid them to vote to **%s**. Someone could still outbid you.", strings.ToLower(optionLabel(ev, br.Option)))
 	} else if _, can := s.BribePrice(ev, ev.Default, st.Trackers, m.ID); !can {
 		desc += "🚫 They cannot be bought."
-	} else if _, can := s.BribePriceUnder(ev, ev.Default, st.Trackers, m.ID, op, st.Laws); !can {
+	} else if _, can := s.BribePriceUnder(ev, ev.Default, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws); !can {
 		desc += "🚫 They won't take your gold. They don't think highly enough of you."
 	} else {
 		if st.Laws.Has(game.LawBribery) {
 			desc += quote("⚖️ Bribery is a crime. It costs more, and if it comes out, it will cost you your good name.") + "\n"
 		}
+		if paid {
+			desc += "🔒 Someone has already paid them for this matter. A bigger purse will change their mind; the other briber gets their gold back.\n"
+		}
 		desc += fmt.Sprintf("You have %s. Pick the vote you're paying for:", goldText(c.Wealth))
 		for _, o := range ev.Options {
-			price, _ := s.BribePriceUnder(ev, o.Key, st.Trackers, m.ID, op, st.Laws)
+			price, _ := s.BribePriceUnder(ev, o.Key, st.Trackers, m.ID, game.Regard(op, c.Renown), st.Laws)
+			if paid {
+				price = max(price, game.OutbidPrice(br.Amount))
+			}
 			btns = append(btns, button(fmt.Sprintf("%s: %d gold", o.Label, price),
 				fmt.Sprintf("senate:pay:%d:%d:%s", m.ID, s.ID, o.Key), discordgo.SuccessButton, price > c.Wealth))
 		}
@@ -805,7 +827,12 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	if _, ok := ev.Option(opt); !ok {
 		return
 	}
-	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, ops[s.ID], st.Laws)
+	price, can := s.BribePriceUnder(ev, opt, st.Trackers, m.ID, game.Regard(ops[s.ID], c.Renown), st.Laws)
+	if bribes, err := b.store.Bribes(ctx, m.ID); err == nil {
+		if br, paid := bribes[s.ID]; paid && br.CharacterID != c.ID {
+			price = max(price, game.OutbidPrice(br.Amount))
+		}
+	}
 	if !can {
 		b.update(i, &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{{Title: "💰 Senator " + s.Name, Description: "🚫 " + s.Name + " won't take your gold.", Color: colorMuted}},
@@ -814,9 +841,10 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 	}
 	var text string
 	color := colorMuted
-	switch err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, game.BribeOpinion(s), time.Now()); {
+	outbid, err := b.store.PayBribe(ctx, m.ID, s.ID, c.ID, opt, price, game.BribeOpinion(s), time.Now())
+	switch {
 	case errors.Is(err, store.ErrBought):
-		text = "Someone got to " + s.Name + " first."
+		text = "Someone paid " + s.Name + " more while you were counting your coins. Look again."
 	case errors.Is(err, store.ErrEnded):
 		text = "Voting on this matter has closed."
 	case err != nil:
@@ -827,6 +855,10 @@ func (b *Bot) onPay(ctx context.Context, i *discordgo.InteractionCreate, matterI
 			s.Name, strings.ToLower(optionLabel(ev, opt)), price, game.OpinionNum(game.BribeOpinion(s)))
 		text += b.bribeExposure(ctx, c, s, sen, st.Laws)
 		defer b.leak(ctx, c, game.SecretBribe(c.FullName(), s.Name, ev.Title, optionLabel(ev, opt), price))
+		if outbid.CharacterID != 0 {
+			text += "\n\n" + quote("You bought them out from under someone else, who has had their gold back.")
+			b.tellOutbid(ctx, outbid, s, ev)
+		}
 	}
 	b.update(i, &discordgo.InteractionResponseData{
 		Embeds: []*discordgo.MessageEmbed{{Title: "💰 Senator " + s.Name, Description: text, Color: color}},
@@ -883,4 +915,92 @@ func signedNum(v float64) string {
 		return "+" + game.Num(v)
 	}
 	return game.Num(v)
+}
+
+// tellOutbid tells a briber that someone paid their senator more, and that
+// their gold has come back. It never says who.
+func (b *Bot) tellOutbid(ctx context.Context, br store.Bribe, s game.Senator, ev game.MatterEvent) {
+	who, err := b.store.CharacterNames(ctx, []int64{br.CharacterID})
+	if err != nil {
+		return
+	}
+	if n, ok := who[br.CharacterID]; ok {
+		b.dmNote(n.UserID, "💰 Outbid", fmt.Sprintf("Someone paid Senator **%s** more to vote on *%s*. Your **%d gold** has come back to you. "+
+			"You can still pay them more, if they're worth it.", s.Name, ev.Title, br.Amount), colorNotice)
+	}
+}
+
+// creditVoters pays a passed option's contract to the biggest investor who
+// voted for it, and credits (or blames) the player who led the Senate to
+// the decision, into res before it's stored. It returns lines for the
+// public decision. Under the Secret Ballot nobody is named, and nobody leads.
+func (b *Bot) creditVoters(ctx context.Context, m store.Matter, ev game.MatterEvent, res *game.MatterResult, chars []store.Character, senators []game.Senator) []string {
+	if ev.Auto || res.Winner.Key == "" {
+		return nil
+	}
+	byID := make(map[int64]store.Character, len(chars))
+	for _, c := range chars {
+		byID[c.ID] = c
+	}
+	votes, err := b.store.Votes(ctx, m.ID)
+	if err != nil {
+		return nil
+	}
+	var lines []string
+	add := func(id int64, d game.Delta, note string) {
+		cur := res.Deltas[id]
+		cur.Merge(d)
+		res.Deltas[id] = cur
+		res.Notices[id] = append(res.Notices[id], note)
+	}
+	// The contract.
+	if k, ok := game.Contract(ev.Key, res.Winner.Key); ok && res.Succeeded {
+		stakes := map[int64]float64{}
+		for id, opt := range votes {
+			if opt == res.Winner.Key {
+				stakes[id] = byID[id].Ventures[k].Stake
+			}
+		}
+		if id, ok := game.ContractWinner(stakes); ok {
+			if pay := game.ContractPay(res.Outcome, k); pay > 0 {
+				d, _ := game.SectorByKey(k)
+				add(id, game.Delta{Wealth: pay}, fmt.Sprintf("📜 As the biggest investor in %s who voted for it, the contract is yours. (+%d gold)", d.Name, pay))
+				if !res.Secret {
+					lines = append(lines, fmt.Sprintf("📜 The contract went to **%s**, the biggest investor in %s %s.", byID[id].FullName(), d.Emoji, d.Name))
+				}
+			}
+		}
+	}
+	// The leader.
+	if res.Secret {
+		return lines
+	}
+	id, ok, err := b.store.FirstVoter(ctx, m.ID, res.Winner.Key)
+	if err != nil || !ok {
+		return lines
+	}
+	leader, ok := byID[id]
+	if !ok {
+		return lines
+	}
+	d, blame := game.LeaderResult(res.Succeeded, leader.Influence)
+	if res.Succeeded {
+		add(id, d, fmt.Sprintf("🏛️ You were the first to back it, and the court gives you the credit. (%s)", d.Describe()))
+		lines = append(lines, fmt.Sprintf("🏛️ **%s** led the Senate to it.", leader.FullName()))
+		return lines
+	}
+	add(id, d, fmt.Sprintf("🏛️ You were the first to back it, and now it has failed, the court blames you. (%s)", d.Describe()))
+	lines = append(lines, fmt.Sprintf("🏛️ **%s** led the Senate to it, and takes the blame.", leader.FullName()))
+	against := map[string]bool{}
+	for _, v := range res.Votes {
+		if v.AI && v.Option != res.Winner.Key {
+			against[v.Name] = true
+		}
+	}
+	for _, s := range senators {
+		if against[s.Name] {
+			res.Opinions = append(res.Opinions, game.OpinionChange{SenatorID: s.ID, CharacterID: id, Delta: blame})
+		}
+	}
+	return lines
 }

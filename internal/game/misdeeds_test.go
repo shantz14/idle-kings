@@ -12,7 +12,7 @@ func TestMisdeedsAreRealSecrets(t *testing.T) {
 		SecretCanvass("a"), SecretEmbezzle("a", 1), SecretMagic("a", "i"), SecretWhisper("a", "b", "c"),
 		SecretConspire("a", "", "rob", "t"), SecretBetrayal("a", 2, "t", "l"),
 		SecretPlotDone(SecretKindMurder, "a", "murder", "t"), SecretPlotDone(SecretKindTheft, "a", "rob", "t"),
-		SecretPlotDone(SecretKindForgery, "a", "frame", "t"),
+		SecretPlotDone(SecretKindForgery, "a", "frame", "t"), SecretSabotage("a", "b", "x"), SecretSmear("a", 2, "b"),
 	}
 	kinds := map[string]bool{}
 	for _, s := range secrets {

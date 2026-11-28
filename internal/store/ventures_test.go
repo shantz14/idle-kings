@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestInvestmentLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := s.ApplyInvestment(ctx, Investment{ActivityID: act.ID, CharacterID: c.ID, GuildID: "g", Sector: sec,
-			Stake: stake, Capacity: 4}, now); err != nil {
+			Stake: stake, Gold: gold}, now); err != nil {
 			t.Fatal(err)
 		}
 		return act
@@ -57,7 +58,8 @@ func TestInvestmentLifecycle(t *testing.T) {
 		t.Fatal("venture income should count toward total income")
 	}
 	st, _ = s.GetRealm(ctx, "g")
-	if st.Sectors[game.SectorAgriculture].Capacity != 54 {
+	agri, _ := game.SectorByKey(game.SectorAgriculture)
+	if want := agri.Grow(50, 50); math.Abs(st.Sectors[game.SectorAgriculture].Capacity-want) > 1e-9 {
 		t.Fatalf("capacity %v", st.Sectors[game.SectorAgriculture].Capacity)
 	}
 
@@ -78,7 +80,7 @@ func TestInvestmentLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	st, _ = s.GetRealm(ctx, "g")
-	if st.Sectors[game.SectorLuxury].Health != 1.15 || st.Sectors[game.SectorAgriculture].Capacity != 62 {
+	if st.Sectors[game.SectorLuxury].Health != 1.15 || math.Abs(st.Sectors[game.SectorAgriculture].Capacity-agri.Grow(50, 175)) > 1e-9 {
 		t.Fatalf("after matter: %+v", st.Sectors)
 	}
 }

@@ -351,7 +351,11 @@ func (b *Bot) newConditions(cs []game.ConditionChange, now time.Time) []store.Ne
 	var out []store.NewCondition
 	for _, c := range cs {
 		if d, ok := game.ConditionByKey(c.Key); ok {
-			out = append(out, store.NewCondition{CharacterID: c.CharacterID, Key: c.Key, EndsAt: d.Ends(now, b.t.Day)})
+			ends := d.Ends(now, b.t.Day)
+			if c.Days > 0 {
+				ends = now.Add(time.Duration(c.Days * float64(b.t.Day)))
+			}
+			out = append(out, store.NewCondition{CharacterID: c.CharacterID, Key: c.Key, EndsAt: ends})
 		}
 	}
 	return out

@@ -74,6 +74,7 @@ type Outcome struct {
 	Denunciations []Denunciation // reports filed in dossiers (forgeries, betrayals)
 	Deaths        []Death        // murdered players, and their heirs
 	Senators      []game.Senator // new senators in empty seats (by ID)
+	Sabotage      []Sabotage     // ventures and properties damaged by saboteurs
 }
 
 // NewMonument records a finished public work.
@@ -436,6 +437,11 @@ func applyOutcome(ctx context.Context, tx *sql.Tx, guildID string, out Outcome, 
 	if err := replaceSenators(ctx, tx, out.Senators, now); err != nil {
 		return err
 	}
+	for _, sb := range out.Sabotage {
+		if err := applySabotage(ctx, tx, sb, now); err != nil {
+			return err
+		}
+	}
 	return applyDeaths(ctx, tx, out.Deaths, now)
 }
 
@@ -570,4 +576,14 @@ func (s *Store) RushCharacter(ctx context.Context, charID int64, now time.Time) 
 			now.Unix(), charID, game.KindConspiracy)
 		return err
 	})
+}
+
+// RecentEmbezzlements counts the embezzlements anyone at a court finished
+// since a time, caught or not.
+func (s *Store) RecentEmbezzlements(ctx context.Context, guildID string, since time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM activities WHERE guild_id = ? AND kind = ? AND resolved_at >= ?`,
+		guildID, game.KindEmbezzle, since.Unix()).Scan(&n)
+	return n, err
 }

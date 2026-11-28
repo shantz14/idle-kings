@@ -63,6 +63,9 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 		"plots of":       `SELECT activity_id FROM conspiracy_members WHERE member_kind = 'player' AND member_id = 1`,
 		"happenings due": `SELECT id FROM happenings WHERE ended_at IS NULL AND ends_at <= 5`,
 		"happenings":     `SELECT id FROM happenings WHERE guild_id = 'g' AND ended_at IS NULL`,
+		"venture damage": `SELECT character_id FROM venture_damage WHERE guild_id = 'g' AND ends_at > 5`,
+		"damaged items":  `SELECT repair_cost FROM damaged_items WHERE holding_id = 1`,
+		"auctions due":   `SELECT id FROM auctions WHERE settled_at IS NULL AND ends_at <= 5`,
 	} {
 		rows, err := s.db.QueryContext(ctx, `EXPLAIN QUERY PLAN `+q)
 		if err != nil {
@@ -78,7 +81,7 @@ func TestHotQueriesUseIndexes(t *testing.T) {
 			plan = append(plan, detail)
 		}
 		rows.Close()
-		if p := strings.Join(plan, "; "); !strings.Contains(p, "INDEX") {
+		if p := strings.Join(plan, "; "); !strings.Contains(p, "INDEX") && !strings.Contains(p, "PRIMARY KEY") {
 			t.Errorf("%s: no index used: %s", name, p)
 		}
 	}

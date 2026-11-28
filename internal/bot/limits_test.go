@@ -378,6 +378,14 @@ func TestEstateViewsFitDiscord(t *testing.T) {
 	}
 	poor := store.Character{ID: 2, Name: "C", FamilyName: "D", Crest: game.Crest{Color: "red", Symbol: "lion"}, Stats: game.Stats{},
 		Holdings: []store.Holding{{ID: 999, Key: "rented_room"}}, Items: []string{"rented_room"}, ResidenceID: 999}
+	broken := rich
+	broken.Holdings = append([]store.Holding(nil), rich.Holdings...)
+	for n := range broken.Holdings {
+		if n%2 == 0 {
+			broken.Holdings[n].Repair = 1234
+		}
+	}
+	checkLimits(t, "estate (half of it sabotaged)", estateView(broken, true, "a note"))
 	checkLimits(t, "estate (everything)", estateView(rich, true, "a note"))
 	checkLimits(t, "estate (one room)", estateView(poor, false, ""))
 	for _, h := range rich.Holdings {
@@ -427,6 +435,12 @@ func TestInfluenceViewsFitDiscord(t *testing.T) {
 				times[w.Key] = time.Duration(w.Days * float64(24*time.Hour))
 			}
 			checkLimits(t, "works", worksView(c, times, b, "a note"))
+			for _, w := range game.WorkRebuilds {
+				times[w.Key] = time.Duration(w.Days * float64(24*time.Hour))
+			}
+			great := c
+			great.Monuments = []string{"statue", "statue@grand", "statue@great", "road", "temple", "temple@grand"}
+			checkLimits(t, "works, rebuilt", worksView(great, times, b, ""))
 		}
 		for _, cause := range game.Causes {
 			a := store.Activity{ID: 999999, Goal: cause.Key}
@@ -464,8 +478,9 @@ func TestSheetAndChronicleFitDiscord(t *testing.T) {
 
 func TestPerilViewsFitDiscord(t *testing.T) {
 	busy := "You are cooking the treasury's books. You'll be done <t:9999999999:R>."
-	checkLimits(t, "embezzle", embezzleView(2*time.Hour, "", "a note"))
-	checkLimits(t, "embezzle busy", embezzleView(2*time.Hour, busy, ""))
+	checkLimits(t, "embezzle", embezzleView(2*time.Hour, "", "a note", false))
+	checkLimits(t, "embezzle busy", embezzleView(2*time.Hour, busy, "", false))
+	checkLimits(t, "embezzle watchful", embezzleView(2*time.Hour, "", "", true))
 	st := store.RealmState{Status: "alive", Trackers: game.StartingRealm()}
 	checkLimits(t, "aid", aidView(st, "a note"))
 	checkLimits(t, "aid fallen", aidView(store.RealmState{Status: "fallen", Trackers: game.StartingRealm()}, ""))
@@ -598,9 +613,112 @@ func TestConspiracyViewsFitDiscord(t *testing.T) {
 		checkLimits(t, "conspiracy member "+sc.Key, memberView(pv, store.MemberJoined, "a note"))
 		checkLimits(t, "conspiracy invited "+sc.Key, memberView(pv, store.MemberInvited, ""))
 		checkLimits(t, "conspiracy invite DM "+sc.Key, &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{inviteEmbed(pv)}, Components: []discordgo.MessageComponent{inviteButtons(pv.K.ID)},
+			Embeds: []*discordgo.MessageEmbed{inviteEmbed(pv, game.PlotTerms{Gold: 250, Share: 50})}, Components: []discordgo.MessageComponent{inviteButtons(pv.K.ID)},
 		})
 	}
 	checkLimits(t, "conspiracy steal", stealView(tgt))
+	checkLimits(t, "conspiracy terms", termsView(c, tgt, game.PlotTerms{Gold: 50, Share: 25}, "a note"))
+	checkLimits(t, "conspiracy terms, poor", termsView(store.Character{Name: long, FamilyName: long}, tgt, game.PlotTerms{}, ""))
 	checkLimits(t, "conspiracy ask senator", askSenatorView(c, senators[0], -40, "a note"))
+}
+
+func TestTitleViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	var entries []boardEntry
+	for n := 0; n < 40; n++ { // more than a select menu holds
+		entries = append(entries, boardEntry{
+			Character: store.Character{ID: int64(n + 1), Name: long, FamilyName: long, Role: "officer", Background: "foreign_exile",
+				Crest: game.Crest{Color: "red", Symbol: "lion"}},
+			Line: "Prestige **12345** · Renown 1234 · Influence 123.4",
+		})
+	}
+	se := store.Season{Number: 12, SenateDays: 7}
+	for _, tab := range boardTabs {
+		checkLimits(t, "players "+tab.key, playersView(tab.key, entries, se, "Ranked by weight in the Senate."))
+	}
+	checkLimits(t, "players empty", playersView(boardDuels, nil, se, ""))
+
+	var awards []seasonAward
+	for _, def := range game.SeasonTitles() {
+		awards = append(awards, seasonAward{Title: def, Winners: []store.Character{entries[0].Character, entries[1].Character}})
+	}
+	checkLimits(t, "season end", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{seasonEndEmbed(12, awards)}})
+	checkLimits(t, "season end, nobody", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{seasonEndEmbed(1, nil)}})
+
+	var all []game.Title
+	for n, def := range game.TitleDefs {
+		all = append(all, game.Title{Key: def.Key, Season: n % 3})
+	}
+	checkLimits(t, "titles field", &discordgo.InteractionResponseData{Embeds: []*discordgo.MessageEmbed{{
+		Title: "x", Fields: []*discordgo.MessageEmbedField{titlesField(all)}}}})
+	if titlesField(nil) != nil {
+		t.Fatal("no titles, no field")
+	}
+}
+
+func TestSabotageViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	busy := "You are calling on Senator Wwwwwwwwwwwwww. You'll be back <t:1999999999:R>."
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 100}
+	t2 := store.Character{ID: 999999999, Name: long, FamilyName: long, Ventures: map[game.SectorKey]store.Venture{}}
+	for _, d := range game.SectorDefs {
+		t2.Ventures[d.Key] = store.Venture{Stake: 100, Share: 0.5}
+	}
+	for n, it := range game.Items {
+		if it.IsProperty() {
+			t2.Holdings = append(t2.Holdings, store.Holding{ID: int64(n + 1), Key: it.Key})
+			t2.Items = append(t2.Items, it.Key)
+		}
+	}
+	for _, d := range []time.Duration{game.DefaultSabotageDuration, game.FastSabotageDuration} {
+		checkLimits(t, "sabotage", sabotageView(d, "", "a note"))
+		checkLimits(t, "sabotage busy", sabotageView(d, busy, ""))
+		checkLimits(t, "smear", smearView(d, "", "a note"))
+		checkLimits(t, "smear busy", smearView(d, busy, ""))
+	}
+	checkLimits(t, "sabotage what", sabotageWhatView(t2, "a note"))
+	checkLimits(t, "sabotage nothing", sabotageWhatView(store.Character{Name: long, FamilyName: long}, ""))
+	checkLimits(t, "sabotage purse", sabotagePurseView(c, t2, "v:trade", "Trade", "a note"))
+	checkLimits(t, "smear purse", smearPurseView(c, t2, "a note"))
+	if opts := sabotageTargets(t2); len(opts) > 25 {
+		t.Fatalf("%d targets", len(opts))
+	} else {
+		for _, o := range opts {
+			if o.Value == "v:"+string(game.SectorBlackMarket) {
+				t.Fatal("the Black Market can't be sabotaged")
+			}
+		}
+	}
+}
+
+func TestAuctionViewsFitDiscord(t *testing.T) {
+	long := "Wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+	c := store.Character{ID: 1, Name: long, FamilyName: long, Wealth: 5000}
+	end := time.Now().Add(time.Hour)
+	for _, it := range game.AuctionLots {
+		a := store.Auction{ID: 999999, ItemKey: it.Key, Reserve: game.NPCReserve(it), EndsAt: end}
+		checkLimits(t, "auction "+it.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{auctionEmbed(a, "", "")}, Components: auctionButtons(a)})
+		checkLimits(t, "bid "+it.Key, bidView(c, a, "a note"))
+		a.SellerID, a.TopBidder, a.TopBid = 2, 3, 123456
+		checkLimits(t, "auction bid "+it.Key, &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{auctionEmbed(a, long+" "+long, long+" "+long)}})
+		a.TopBidder = c.ID
+		checkLimits(t, "bid, top "+it.Key, bidView(c, a, ""))
+		a.Settled = true
+		checkLimits(t, "bid, over "+it.Key, bidView(c, a, ""))
+	}
+	h := store.Holding{ID: 999999999, Key: game.AuctionLots[0].Key}
+	for r := range game.AuctionReserves {
+		for _, d := range game.AuctionDays {
+			checkLimits(t, "auction setup", auctionSetupView(c, h, r, d, "a note"))
+		}
+	}
+	rich := c
+	for n, it := range game.Items {
+		rich.Holdings = append(rich.Holdings, store.Holding{ID: int64(n + 1), Key: it.Key})
+	}
+	if len(auctionablePieces(rich)) > 25 {
+		t.Fatal("too many options")
+	}
 }

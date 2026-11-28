@@ -136,6 +136,7 @@ func (b *Bot) tick(parent context.Context) {
 		b.conspiracyTick(ctx, now)
 	}()
 	b.fadeHappenings(ctx, now)
+	b.settleAuctions(ctx, now)
 	if err := b.store.PayIncome(ctx, now); err != nil {
 		slog.Error("pay income", "err", err)
 	}

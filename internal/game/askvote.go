@@ -109,7 +109,7 @@ func ResolveAsk(r Roller, in AskInput) AskResult {
 		}
 		return in.reply(AskRefuse, "", Delta{})
 	}
-	ok, margin := askCheck.Roll(r, in.Player.Sheet, AskMod(s, in.Opinion), Normal)
+	ok, margin := askCheck.Roll(r, in.Player.Sheet, AskMod(s, Regard(in.Opinion, sheetRenown(in.Player.Sheet))), Normal)
 	practice := Practice(Diplomacy, ok)
 	switch {
 	case ok:
