@@ -32,7 +32,7 @@ internal/game    pure rules, no Discord/DB: stats, Check (sheet → % chance), c
                  votesale.go (the scandal risk of selling your vote to a senator),
                  conspiracy.go (Conspiracies: schemes, power, daily ripening and discovery, senators joining, the strike, forgeries, ReplaceSenator), succession.go (death and the heir),
                  laws.go (lasting laws, their motions and every rule they bend), petition.go (Petition the Senate)
-internal/store   SQLite: schema.sql (applied on open, no migrations), characters,
+internal/store   SQLite: migrations/NNNN_*.sql (applied in order on open by migrate.go), characters,
                  activities (parties, courting), speak (senator visits, vote asks), senate (realm, matters, votes, bribes, vote deals),
                  opinions, ventures (sector stakes, investments), journeys (hiring bandits: a participant with goal `bandits:<band>`), duels (accept/decline, bets),
                  conditions, spies (spy networks), estate (buying, selling, moving, estate offers),
@@ -83,7 +83,13 @@ Custom IDs are `prefix:part:part`. Each file registers its prefixes in its `init
 - Auctions (`auctions` table): `Bid` holds the bid and refunds the one it beats; `settleAuctions` in the tick settles due ones. A holding in an open auction can't be sold or traded (`onAuction`, checked in `SellToShop` and `ownsAll`). The merchant's auction is the `auction` happening (no events; `openNPCAuction` when it begins).
 - Embezzling reads `store.RecentEmbezzlements` (anyone at court, the last `game.EmbezzleRecentDays` game days): each one makes the next harder and likelier to be caught.
 - `b.leak` runs in the background (`b.background`), so call it whenever it fits; the player's answer doesn't wait on it.
-- Schema is dev-only. Changing it means deleting `idle-kings.db`; say so in the README.
+- Schema changes are migrations: add `internal/store/migrations/NNNN_name.sql` with the next number; **never edit a released migration** (0001 is the baseline). Each runs in its own transaction with `PRAGMA user_version`; `Open` backs the DB up first and refuses a DB newer than the build. SQLite's `ADD COLUMN` needs a default for `NOT NULL` and can't add UNIQUE/PK; anything bigger is a table rebuild, which starts with `-- migrate: foreign_keys=off`. Data fixes SQL can't do go in `goMigrations` (same transaction). `TestRebuildMigrationWithForeignKeysOff` shows the rebuild pattern.
+- Gold between characters moves with `Outcome.GoldMoves` (`moveGold`: the payer pays what they have), never as a −/+ pair of deltas, which mints gold when the payer's wealth clamps at 0. A fee paid when an activity starts goes in `Activity.Fee` (spent with the cost, not kept in `Spend`). `credit`/`spend` reject negative amounts. Abandoning an activity or a death refunds what it held (`activityRefunds`).
+- `MatterResolution.Before` is the trackers the vote was worked out from: the store applies only the change to the realm as it is, and never revives a fallen realm. Always set it.
+- Resolvers that can't load what they need call `b.loadFailed(ctx, a, now, err, bad)`: gone-for-good (`ErrNotFound`, bad data) abandons with refunds, anything else retries next tick.
+- Interactions: every one has an `ack` (`commands.go`). A click or modal still unanswered after `autoDeferAfter` is deferred for the handler; later answers edit or follow up; one left unanswered gets a "screen may be out of date" note. So a slow handler can't fail in Discord, but still call `deferUpdate` before known-slow work, and never open a modal after slow work. Interactions get `interactionTimeout` (30s).
+- Shutdown: `Run` stops between ticks, turns new interactions away (`closing`), closes the gateway, waits for handlers and `background` work, then `main` closes the store. Each tick job and each matter recovers from panics on its own.
+- Sum floats over maps in sorted key order (`sortedKeys` in `game/keys.go`), or results drift by an ulp between runs and `TestGolden` flakes.
 
 ## Checks
 ```sh
@@ -92,6 +98,8 @@ IDLE_KINGS_SIM=1 go test ./internal/game -run TestBalance -v   # after changing 
 ```
 `IDLE_KINGS_VIEWS=/tmp/views.txt go test ./internal/bot` writes every tested popup as text, to review wording and layout without Discord.
 `internal/bot/limits_test.go` checks every popup against Discord's component and embed limits; add new views to it.
+`TestGolden` failing after a fix: check the diff touches only what you meant to change, then `go test ./internal/game -run TestGolden -update`.
+Releases: tag `vX.Y.Z`, build and push the image as in the README, then bump the tag in the homelab repo's `kubernetes/apps/idle-kings/deployment.yaml`. Production runs one pod with its own database; never run a local bot with the production token at the same time.
 The bot can't be exercised without Isaac's token. Run it with `IDLE_KINGS_FAST=1 DISCORD_TOKEN=... go run ./cmd/idle-kings` (short timers). In Discord, `/admin` gives gold, items, stats, opinion and spies, and `/admin rush` ends a player's timers at the next tick; add a subcommand there for any new resource worth testing.
 
 ## Open questions

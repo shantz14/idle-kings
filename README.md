@@ -14,11 +14,21 @@ DISCORD_TOKEN=... go run ./cmd/idle-kings
 | --- | --- |
 | `DISCORD_TOKEN` | Bot token (required) |
 | `IDLE_KINGS_DB` | SQLite path, default `idle-kings.db` |
+| `IDLE_KINGS_HEALTH_ADDR` | Address for the `/healthz` check, e.g. `:8081` (off when unset; the image sets `:8081`) |
 | `IDLE_KINGS_FAST` | `1` for testing: parties last 4 minutes instead of 2 hours, investments 3 minutes instead of 3 hours, and a Senate "day" is 6 minutes (4 to vote) |
 
 Invite the bot with the `bot` and `applications.commands` scopes. Commands are registered globally so they also work in DMs with the bot.
 
-The schema isn't migrated yet: after pulling schema changes, delete `idle-kings.db`. (The senator opinion system added the `senator_opinions` table and `activities.target_id`, party budgets added `activities.spend`, ventures added `realms.sectors` and the `sector_stakes` table, duels and hunts added the `conditions` and `bets` tables, spies added the `spy_networks` table, public works added the `monuments` table, the Alchemy and Black Market sectors renamed sector keys in `realms.sectors`, the estate shop added `characters.residence_id`, `estate_items.guild_id`/`price_paid` and the `estate_offers` table (and dropped `realms.recent`), and laws added `realms.laws`, `matters.petitioner_id`, `realm_queue.petitioner_id` and the `denunciations` table, so older databases need deleting. Stats moved to a ×5 scale, so characters made before it need deleting too. Renown moved to a ×10 scale, so characters made before it need deleting too. Conspiracies added `characters.heir_unnamed` and the `conspiracies` and `conspiracy_members` tables, so older databases need deleting. Speak to a Senator only added the `senator_visits` and `vote_asks` tables, which older databases pick up on open.)
+The database migrates itself on start (`internal/store/migrations/`, tracked in `PRAGMA user_version`), backing itself up to `idle-kings.db.pre-vN.bak` first. A database from before migrations existed is adopted as is. A build refuses to open a database written by a newer one, so roll back the database along with the image.
+
+## Release and deploy
+
+```sh
+docker buildx build --platform linux/amd64 --build-arg VERSION=v0.1.0-alpha \
+  -t ghcr.io/shantz14/idle-kings:v0.1.0-alpha --push .
+```
+
+The image runs as `nonroot` (uid 65532) with the database at `/data/idle-kings.db`, so mount a writable volume there. It serves `GET /healthz` on `:8081`, which fails once the game loop stops ticking. Run exactly **one** instance per token: two would both answer every click. The homelab runs it from `kubernetes/apps/idle-kings` in the homelab repo (Flux), with the token in a SOPS secret.
 
 ## Admin commands (testing)
 
